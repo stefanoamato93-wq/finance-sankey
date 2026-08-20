@@ -41,6 +41,26 @@
         padding:8px 10px; opacity:0; transition:opacity .1s; z-index:20; box-shadow:0 8px 24px rgba(0,0,0,.55);}
   #mini .mt{font-size:11px; color:#fff; font-weight:700; margin-bottom:4px;}
   #mini text.mtx{fill:var(--ink); font-size:9.5px; dominant-baseline:middle;}
+  /* month-range slider */
+  #rangeBox{margin:10px 26px 0; max-width:620px;}
+  .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
+  .dual{position:relative; height:28px;}
+  .dual .track{position:absolute; top:12px; left:0; right:0; height:4px; background:var(--grid); border-radius:3px;}
+  .dual .fill{position:absolute; top:12px; height:4px; background:var(--income); border-radius:3px;}
+  .dual input[type=range]{position:absolute; top:0; left:0; width:100%; height:28px; margin:0;
+    background:none; -webkit-appearance:none; appearance:none; pointer-events:none;}
+  .dual input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; pointer-events:auto;
+    width:16px; height:16px; border-radius:50%; background:#fff; border:2px solid var(--income); cursor:grab;}
+  .dual input[type=range]::-moz-range-thumb{pointer-events:auto; width:16px; height:16px; border-radius:50%;
+    background:#fff; border:2px solid var(--income); cursor:grab;}
+  /* trend */
+  .trendhead{margin:14px 26px 0; display:flex; gap:14px; align-items:center; font-size:12.5px; color:var(--muted); flex-wrap:wrap;}
+  .trendhead .lg{display:inline-flex; gap:5px; align-items:center;}
+  .trendhead .lg i{width:10px; height:10px; border-radius:2px; display:inline-block;}
+  .trendwrap{padding:4px 20px 30px; max-width:1000px;}
+  #trend{width:100%; height:auto; overflow:visible;}
+  #trend text{fill:var(--muted); font-size:9px;}
+  #trend .axis{stroke:var(--grid); stroke-width:1;}
 </style>
 </head>
 <body>
@@ -55,6 +75,7 @@
       <option value="trailing">Trailing 12 months</option>
       <option value="month">Single month</option>
       <option value="year">Full year</option>
+      <option value="custom">Custom range (drag)</option>
       <option value="all">All time</option>
     </select>
   </label>
@@ -64,10 +85,26 @@
   <label><input type="checkbox" id="tK" checked> values in K</label>
 </div>
 
+<div id="rangeBox" style="display:none">
+  <div class="rangelabels"><span id="rLo"></span><span id="rHi"></span></div>
+  <div class="dual"><div class="track"></div><div class="fill" id="rFill"></div>
+    <input type="range" id="rangeLo"><input type="range" id="rangeHi"></div>
+</div>
+
 <div class="status" id="status">Loading data from Google Sheets…</div>
 <div class="period" id="periodLabel"></div>
 <div class="totals" id="totals"></div>
 <div class="wrap"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+
+<div class="trendhead" id="trendhead" style="display:none">
+  <span>Trend</span>
+  <select id="gran"><option value="month">Monthly</option><option value="year">Yearly</option></select>
+  <span class="lg"><i style="background:var(--income)"></i>Income</span>
+  <span class="lg"><i style="background:#d98a4a"></i>Expenses</span>
+  <span class="lg"><i style="background:var(--savings)"></i>Savings</span>
+</div>
+<div class="trendwrap"><svg id="trend" preserveAspectRatio="xMidYMid meet"></svg></div>
+
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
 
@@ -201,7 +238,7 @@ function renderMini(leaf,color){
     const rr=document.createElementNS(NSs,'rect'); rr.setAttribute('x',rightX); rr.setAttribute('y',ry);
     rr.setAttribute('width',nodeW); rr.setAttribute('height',Math.max(1,bar)); rr.setAttribute('rx',2); rr.setAttribute('fill',color); miniSvg.appendChild(rr);
     const tl=document.createElementNS(NSs,'text'); tl.setAttribute('x',rightX+nodeW+6); tl.setAttribute('y',ry+bar/2);
-    tl.setAttribute('class','mtx'); tl.textContent=`${dn}  ${fmt(v)}`; miniSvg.appendChild(tl);
+    tl.setAttribute('class','mtx'); tl.textContent=`${dn}  ${fmt(v)} · ${(v/total*100).toFixed(0)}%`; miniSvg.appendChild(tl);
     y+=slot+gap;
   });
   const lr=document.createElementNS(NSs,'rect'); lr.setAttribute('x',leftX); lr.setAttribute('y',leftY);
@@ -261,7 +298,8 @@ function render(res){
       const left=n.layer===0;
       label.setAttribute('x', left? n.x-8 : n.x+NODEW+8); label.setAttribute('text-anchor', left?'end':'start'); label.setAttribute('y',mid);
       const a=document.createElementNS(NS,'tspan'); a.textContent=n.name;
-      const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=' '+fmt(n.value);
+      const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval');
+      b.textContent=' '+fmt(n.value)+'  '+(n.value/income*100).toFixed(0)+'%';
       label.append(a,b);
     }else{
       label.setAttribute('x',n.x+NODEW/2); label.setAttribute('text-anchor','middle'); label.setAttribute('y',mid); label.setAttribute('class','mid');
@@ -271,7 +309,8 @@ function render(res){
 }
 function paintTotals(res){
   const {income,expGrp,sav}=res;
-  const cards=[["Income",income,INCOME]];
+  const totExp=["Needs","Wants","Liberality","Taxes"].reduce((a,g)=>a+(expGrp[g]||0),0);
+  const cards=[["Income",income,INCOME],["Expenses",totExp,'#d98a4a']];
   ["Needs","Wants","Liberality","Taxes"].forEach(g=>{ if(expGrp[g]>0) cards.push([g,expGrp[g],GROUPCOL[g]]); });
   if(sav>0) cards.push(["Savings",sav,GROUPCOL.Savings]);
   const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';
@@ -282,19 +321,84 @@ function paintTotals(res){
 /* ---- controls ------------------------------------------------------------ */
 const modeEl=document.getElementById('mode'), yearEl=document.getElementById('year'),
       monthEl=document.getElementById('month'), monthlyEl=document.getElementById('tMonthly'),
+      rangeBox=document.getElementById('rangeBox'), rLoI=document.getElementById('rangeLo'),
+      rHiI=document.getElementById('rangeHi'), rFill=document.getElementById('rFill'),
+      rLoL=document.getElementById('rLo'), rHiL=document.getElementById('rHi'),
+      granEl=document.getElementById('gran'), trendSvg=document.getElementById('trend'),
       MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const miLabel=mi=> MONTHS[((mi%12)+12)%12]+' '+Math.floor(mi/12);
+const maxIdx=()=> META.maxMi-META.minMi;
+function setupSlider(){
+  const N=maxIdx(); rLoI.min=0; rLoI.max=N; rHiI.min=0; rHiI.max=N;
+  rLoI.value=Math.max(0,N-11); rHiI.value=N; updateSliderUI();
+}
+function updateSliderUI(){
+  const N=maxIdx()||1; let lo=+rLoI.value, hi=+rHiI.value; if(lo>hi){ [lo,hi]=[hi,lo]; }
+  rFill.style.left=(lo/N*100)+'%'; rFill.style.width=((hi-lo)/N*100)+'%';
+  rLoL.textContent=miLabel(META.minMi+lo); rHiL.textContent=miLabel(META.minMi+hi);
+}
 function periodRange(){
   const mode=modeEl.value, y=+yearEl.value, m=+monthEl.value;
   if(mode==='all')   return [META.minMi, META.maxMi, 'All time'];
   if(mode==='year')  return [y*12, y*12+11, `Year ${y}`];
+  if(mode==='custom'){ let lo=+rLoI.value, hi=+rHiI.value; if(lo>hi)[lo,hi]=[hi,lo];
+    return [META.minMi+lo, META.minMi+hi, `${miLabel(META.minMi+lo)} — ${miLabel(META.minMi+hi)}`]; }
   const mi=y*12+(m-1);
   if(mode==='month') return [mi, mi, `${MONTHS[m-1]} ${y}`];
   return [mi-11, mi, `12 months to ${MONTHS[m-1]} ${y}`];
 }
+
+/* ---- trend chart --------------------------------------------------------- */
+function seriesData(gran){
+  const inc={}, exp={};
+  DATA.forEach(([mi,kind,grp,leaf,val])=>{ const k=gran==='year'?Math.floor(mi/12):mi;
+    if(kind==='I') inc[k]=(inc[k]||0)+val; else exp[k]=(exp[k]||0)+(-val); });
+  const keys=[];
+  if(gran==='year'){ for(let y=Math.floor(META.minMi/12); y<=Math.floor(META.maxMi/12); y++) keys.push(y); }
+  else { for(let mi=META.minMi; mi<=META.maxMi; mi++) keys.push(mi); }
+  return keys.map(k=>({k, inc:inc[k]||0, exp:exp[k]||0, sav:(inc[k]||0)-(exp[k]||0)}));
+}
+function drawTrend(){
+  const gran=granEl.value, rows=seriesData(gran);
+  const Wt=960, Ht=230, ml=48, mr=14, mt=14, mb=24, n=rows.length;
+  if(!n){ trendSvg.innerHTML=''; return; }
+  const xs=i=> ml + (n===1?0:(i/(n-1))*(Wt-ml-mr));
+  let yMax=0, yMin=0; rows.forEach(r=>{ yMax=Math.max(yMax,r.inc,r.exp,r.sav); yMin=Math.min(yMin,r.sav); });
+  yMax=yMax||1;
+  const ys=v=> mt + (1-(v-yMin)/((yMax-yMin)||1))*(Ht-mt-mb);
+  const mk=(tag,at)=>{ const e=document.createElementNS(NS,tag); for(const k in at) e.setAttribute(k,at[k]); return e; };
+  trendSvg.setAttribute('viewBox',`0 0 ${Wt} ${Ht}`); trendSvg.innerHTML='';
+  trendSvg.appendChild(mk('line',{x1:ml,y1:ys(0),x2:Wt-mr,y2:ys(0),class:'axis'}));
+  let t=mk('text',{x:ml-6,y:ys(yMax),'text-anchor':'end'}); t.textContent=fmt(yMax); trendSvg.appendChild(t);
+  t=mk('text',{x:ml-6,y:ys(0),'text-anchor':'end'}); t.textContent='0'; trendSvg.appendChild(t);
+  if(yMin<0){ t=mk('text',{x:ml-6,y:ys(yMin),'text-anchor':'end'}); t.textContent=fmt(yMin); trendSvg.appendChild(t); }
+  rows.forEach((r,i)=>{ let show=false,lab='';
+    if(gran==='year'){ show=(n<=20)||(r.k%2===0); lab=r.k; }
+    else { if((((r.k%12)+12)%12)===0){ show=true; lab=Math.floor(r.k/12); } }
+    if(show){ const tx=mk('text',{x:xs(i),y:Ht-8,'text-anchor':'middle'}); tx.textContent=lab; trendSvg.appendChild(tx);
+      trendSvg.appendChild(mk('line',{x1:xs(i),y1:mt,x2:xs(i),y2:Ht-mb,stroke:'#ffffff10','stroke-width':1})); } });
+  const idxOf=mi=> gran==='year' ? (Math.floor(mi/12)-Math.floor(META.minMi/12)) : (mi-META.minMi);
+  const a=idxOf(curMiF), b=idxOf(curMiT);
+  if(b>=a){ const x1=xs(Math.max(0,a))-4, x2=xs(Math.min(n-1,b))+4;
+    trendSvg.appendChild(mk('rect',{x:x1,y:mt,width:Math.max(2,x2-x1),height:Ht-mt-mb,fill:'#ffffff12'})); }
+  const line=(key,color)=>{ const d=rows.map((r,i)=>`${i?'L':'M'}${xs(i).toFixed(1)},${ys(r[key]).toFixed(1)}`).join(' ');
+    trendSvg.appendChild(mk('path',{d,fill:'none',stroke:color,'stroke-width':2})); };
+  line('inc',INCOME); line('exp','#d98a4a'); line('sav',GROUPCOL.Savings);
+  const guide=mk('line',{x1:0,y1:mt,x2:0,y2:Ht-mb,stroke:'#ffffff55','stroke-width':1}); guide.style.opacity=0; trendSvg.appendChild(guide);
+  const ov=mk('rect',{x:ml,y:mt,width:Wt-ml-mr,height:Ht-mt-mb,fill:'transparent'});
+  ov.addEventListener('mousemove',e=>{ const pr=trendSvg.getBoundingClientRect(); const px=(e.clientX-pr.left)/pr.width*Wt;
+    let i=Math.round((px-ml)/((Wt-ml-mr)/(n-1||1))); i=Math.max(0,Math.min(n-1,i));
+    const r=rows[i]; guide.setAttribute('x1',xs(i)); guide.setAttribute('x2',xs(i)); guide.style.opacity=1;
+    const lab=gran==='year'?r.k:miLabel(r.k);
+    showTip(e,`<b>${lab}</b><br>Income ${fmt(r.inc)}<br>Expenses ${fmt(r.exp)}<br>Savings ${fmt(r.sav)}`); });
+  ov.addEventListener('mouseleave',()=>{ guide.style.opacity=0; hideTip(); });
+  trendSvg.appendChild(ov);
+}
 function build(){
   const mode=modeEl.value;
-  yearEl.style.display = mode==='all' ? 'none':'';
+  yearEl.style.display = (mode==='all'||mode==='custom') ? 'none':'';
   monthEl.style.display = (mode==='month'||mode==='trailing') ? '':'none';
+  rangeBox.style.display = (mode==='custom') ? '' : 'none';
   const [miF,miT,label]=periodRange(); curMiF=miF; curMiT=miT;
   const res=computeLinks(miF,miT); const monthly=monthlyEl.checked; curDiv = monthly ? res.months : 1;
   let plabel=label;
@@ -304,7 +408,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res);
+  paintTotals(res); render(res); drawTrend();
 }
 
 /* ---- load ---------------------------------------------------------------- */
@@ -319,9 +423,13 @@ async function load(){
     META.years.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; yearEl.appendChild(o); });
     MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
     const maxYear=Math.floor(META.maxMi/12), maxMonth=META.maxMi%12+1; yearEl.value=maxYear; monthEl.value=maxMonth;
+    setupSlider();
     [modeEl,yearEl,monthEl,monthlyEl].forEach(el=>el.addEventListener('change',build));
-    document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); });
+    [rLoI,rHiI].forEach(el=>el.addEventListener('input',()=>{ updateSliderUI(); if(modeEl.value==='custom') build(); }));
+    granEl.addEventListener('change',drawTrend);
+    document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); drawTrend(); });
     st.style.display='none'; document.getElementById('controls').style.display='';
+    document.getElementById('trendhead').style.display='';
     build();
   }catch(err){
     st.className='status err';
