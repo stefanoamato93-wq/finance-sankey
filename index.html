@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Personal Finance — Sankey</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#151b2b; --ink:#e7ecf5; --muted:#9aa6bd;
+    --income:#3aa86a; --budget:#586a86;
+    --needs:#5b8fd0; --wants:#e08a3c; --liberality:#b57fd6; --taxes:#c85c5c; --savings:#e7c14a;
+    --grid:#243049;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink);
+       font-family:"Amazon Ember","Segoe UI",Calibri,Arial,sans-serif;}
+  header{padding:16px 26px 4px;}
+  h1{margin:0; font-size:19px; font-weight:700;}
+  .sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
+  .controls{margin:12px 26px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:12.5px;}
+  select{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 8px;}
+  .controls label{color:var(--muted); cursor:pointer;}
+  .totals{display:flex; gap:12px; margin:12px 26px 0; flex-wrap:wrap;}
+  .tot{background:var(--panel); border:1px solid var(--grid); border-radius:10px; padding:8px 12px; min-width:96px;}
+  .tot .lab{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
+  .tot .val{font-size:18px; font-weight:700; margin-top:2px;}
+  .tot .pct{font-size:11px; color:var(--muted); margin-top:1px;}
+  .period{margin:8px 26px 0; color:var(--muted); font-size:12px;}
+  .status{margin:16px 26px; color:var(--muted); font-size:13px;}
+  .status.err{color:#e58a8a;}
+  .wrap{padding:6px 20px 26px; max-width:980px;}
+  svg{width:100%; height:auto; display:block; overflow:visible;}
+  .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
+  .node .nval{fill:var(--muted); font-size:10px;}
+  text.mid{fill:#fff; font-weight:600; font-size:10.5px; paint-order:stroke; stroke:var(--bg); stroke-width:3.4px; stroke-linejoin:round;}
+  .link{fill-opacity:.36; transition:fill-opacity .15s;}
+  .link:hover{fill-opacity:.7;}
+  .tip{position:fixed; pointer-events:none; background:#0b0f18; color:#fff; border:1px solid var(--grid);
+       border-radius:6px; padding:6px 9px; font-size:12px; opacity:0; transition:opacity .1s; z-index:10; white-space:nowrap;}
+  #mini{position:fixed; pointer-events:none; background:#0b0f18; border:1px solid var(--grid); border-radius:9px;
+        padding:8px 10px; opacity:0; transition:opacity .1s; z-index:20; box-shadow:0 8px 24px rgba(0,0,0,.55);}
+  #mini .mt{font-size:11px; color:#fff; font-weight:700; margin-bottom:4px;}
+  #mini text.mtx{fill:var(--ink); font-size:9.5px; dominant-baseline:middle;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Personal Finance — money flow</h1>
+  <div class="sub">Income (work / non-work) → Budget → Needs / Wants / Liberality / Taxes / Savings → category. Live from Google Sheets.</div>
+</header>
+
+<div class="controls" id="controls" style="display:none">
+  <label>Period
+    <select id="mode">
+      <option value="trailing">Trailing 12 months</option>
+      <option value="month">Single month</option>
+      <option value="year">Full year</option>
+      <option value="all">All time</option>
+    </select>
+  </label>
+  <select id="year"></select>
+  <select id="month"></select>
+  <label><input type="checkbox" id="tMonthly"> per month (avg)</label>
+  <label><input type="checkbox" id="tK" checked> values in K</label>
+</div>
+
+<div class="status" id="status">Loading data from Google Sheets…</div>
+<div class="period" id="periodLabel"></div>
+<div class="totals" id="totals"></div>
+<div class="wrap"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+<div class="tip" id="tip"></div>
+<div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
+
+<script>
+/* ---- data source --------------------------------------------------------- */
+const SHEET_ID="1SnEHP7oBD9Fo38yQ0OvlhYESiidmY98f9fqfHNhDLnc";
+const SHEET_NAME="DB";
+const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+
+const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
+const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
+const norm=s=> s==null ? "" : String(s).trim().toUpperCase();
+
+let DATA=[], DETAIL=[], META={years:[],minMi:0,maxMi:0};
+
+/* minimal RFC4180 CSV parser */
+function parseCSV(text){
+  const rows=[]; let row=[], field="", i=0, q=false;
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"'; i++;} else q=false; }
+      else field+=c;
+    }else{
+      if(c==='"') q=true;
+      else if(c===','){ row.push(field); field=""; }
+      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=""; }
+      else if(c==='\r'){ /* skip */ }
+      else field+=c;
+    }
+    i++;
+  }
+  if(field.length||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function aggregate(rows){
+  const head=rows[0].map(h=>norm(h));
+  const ix=name=>head.indexOf(name);
+  const cY=ix("YEAR"), cM=ix("MONTH"), cV=ix("VALUE"), cL=ix("LABEL"),
+        cD=ix("DETAIL"), cT=ix("TYPE"), cC1=ix("CATEGORY1");
+  const agg=new Map(), det=new Map(), years=new Set();
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; if(!row || row[cY]===undefined || row[cY]==="") continue;
+    const year=parseInt(row[cY],10), month=parseInt(row[cM],10);
+    if(!year || !month) continue;
+    const val=parseFloat(row[cV])||0;
+    const label=row[cL], detail=row[cD], typ=norm(row[cT]), c1=norm(row[cC1]);
+    let kind,group,leaf;
+    if(typ==="INCOME"){ kind="I"; group=INCGRP[c1]||"Other income"; leaf=norm(detail); }
+    else if(typ==="EXPENSES"){ kind="E"; group=EXPGRP[c1]||"Other"; leaf=norm(label); }
+    else if(typ==="TAXES"){ if(norm(detail)==="APPRECTAXES") continue; kind="E"; group="Taxes"; leaf=norm(label); }
+    else continue;
+    if(!leaf) continue;
+    years.add(year);
+    const mi=year*12+(month-1);
+    const k=mi+"|"+kind+"|"+group+"|"+leaf;
+    agg.set(k,(agg.get(k)||0)+val);
+    if(kind==="E"){
+      const dn=(detail!=null && String(detail).trim()!=="") ? String(detail).trim() : leaf;
+      const dk=mi+"|"+leaf+"|"+dn;
+      det.set(dk,(det.get(dk)||0)+(-val));
+    }
+  }
+  DATA=[...agg.entries()].map(([k,v])=>{ const [mi,kind,group,leaf]=k.split("|"); return [+mi,kind,group,leaf,Math.round(v)]; });
+  DETAIL=[...det.entries()].map(([k,v])=>{ const [mi,leaf,dn]=k.split("|"); return [+mi,leaf,dn,Math.round(v)]; });
+  const mis=DATA.map(r=>r[0]);
+  META={years:[...years].sort((a,b)=>a-b), minMi:Math.min(...mis), maxMi:Math.max(...mis)};
+}
+
+/* ---- layout config ------------------------------------------------------- */
+const W=900, PAD_T=20, PAD_B=20, NODEW=13, GAP=6, MINSLOT=22, TARGET_H=360;
+const LEFTM=140, RIGHTM=185;
+const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--liberality'),Taxes:cssv('--taxes'),Savings:cssv('--savings')};
+const INCOME=cssv('--income'), BUDGET=cssv('--budget');
+const ORDER=["Work income","Non-work income","Budget","Needs","Wants","Liberality","Taxes","Savings"];
+const svg=document.getElementById('sankey');
+const NS="http://www.w3.org/2000/svg";
+const tip=document.getElementById('tip');
+let showK=true, curMiF=0, curMiT=0, curDiv=1;
+const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:2})+"K" : Math.round(v).toLocaleString();
+function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
+function hideTip(){ tip.style.opacity=0; }
+
+function computeLinks(miF,miT){
+  const incLeaf={}, incGrpOf={}, expLeaf={}, expGrpOf={}, monthsSeen={};
+  DATA.forEach(([mi,kind,grp,leaf,val])=>{
+    if(mi<miF||mi>miT) return; monthsSeen[mi]=1;
+    if(kind==='I'){ incLeaf[leaf]=(incLeaf[leaf]||0)+val; incGrpOf[leaf]=grp; }
+    else { expLeaf[leaf]=(expLeaf[leaf]||0)+(-val); expGrpOf[leaf]=grp; }
+  });
+  const incGrp={}, expGrp={}; let income=0, outflow=0; const links=[];
+  for(const leaf in incLeaf){ const v=incLeaf[leaf]; if(v>0){ const g=incGrpOf[leaf];
+    links.push([leaf,g,v]); incGrp[g]=(incGrp[g]||0)+v; income+=v; } }
+  for(const g in incGrp) links.push([g,'Budget',incGrp[g]]);
+  const eb=[];
+  for(const leaf in expLeaf){ const v=expLeaf[leaf]; if(v>0){ const g=expGrpOf[leaf];
+    expGrp[g]=(expGrp[g]||0)+v; outflow+=v; eb.push([g,leaf,v]); } }
+  for(const g in expGrp) links.push(['Budget',g,expGrp[g]]);
+  eb.forEach(x=>links.push(x));
+  const sav=income-outflow; if(sav>0) links.push(['Budget','Savings',sav]);
+  return {links, income, expGrp, sav, months:Object.keys(monthsSeen).length||1};
+}
+function detailFor(leaf){
+  const d={};
+  DETAIL.forEach(([mi,lf,dn,v])=>{ if(lf===leaf && mi>=curMiF && mi<=curMiT) d[dn]=(d[dn]||0)+v; });
+  return Object.entries(d).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+}
+
+/* ---- floating mini-sankey ------------------------------------------------ */
+const miniEl=document.getElementById('mini'), miniSvg=document.getElementById('miniSvg'), miniTitle=document.getElementById('miniTitle');
+let miniLeaf=null, miniH=0;
+function renderMini(leaf,color){
+  let parts=detailFor(leaf).map(([dn,v])=>[dn, v/curDiv]);
+  const CAP=12;
+  if(parts.length>CAP){ const head=parts.slice(0,CAP); head.push(['Other', parts.slice(CAP).reduce((a,[,v])=>a+v,0)]); parts=head; }
+  const total=parts.reduce((a,[,v])=>a+v,0)||1;
+  miniTitle.textContent=`${leaf} · ${fmt(total)}`;
+  const MW=380, nodeW=9, leftX=14, rightX=150, pad=8, gap=3, minSlot=15;
+  const sc=180/total, slots=parts.map(([,v])=>Math.max(v*sc,minSlot));
+  const contentH=slots.reduce((a,s)=>a+s,0)+gap*Math.max(0,parts.length-1), H=contentH+pad*2, NSs=NS;
+  miniSvg.setAttribute('viewBox',`0 0 ${MW} ${H}`); miniSvg.setAttribute('width',MW); miniSvg.setAttribute('height',H); miniSvg.innerHTML='';
+  const leftH=total*sc, leftY=pad+(contentH-leftH)/2; let y=pad, soff=0;
+  parts.forEach(([dn,v],i)=>{
+    const bar=v*sc, slot=slots[i], ry=y+(slot-bar)/2;
+    const sx=leftX+nodeW, tx=rightX, sy=leftY+soff+bar/2, ty=ry+bar/2, xm=(sx+tx)/2, t=Math.max(bar,1)/2;
+    const p=document.createElementNS(NSs,'path');
+    p.setAttribute('d',`M${sx},${sy-t} C${xm},${sy-t} ${xm},${ty-t} ${tx},${ty-t} L${tx},${ty+t} C${xm},${ty+t} ${xm},${sy+t} ${sx},${sy+t} Z`);
+    p.setAttribute('fill',color); p.setAttribute('fill-opacity','.38'); miniSvg.appendChild(p); soff+=bar;
+    const rr=document.createElementNS(NSs,'rect'); rr.setAttribute('x',rightX); rr.setAttribute('y',ry);
+    rr.setAttribute('width',nodeW); rr.setAttribute('height',Math.max(1,bar)); rr.setAttribute('rx',2); rr.setAttribute('fill',color); miniSvg.appendChild(rr);
+    const tl=document.createElementNS(NSs,'text'); tl.setAttribute('x',rightX+nodeW+6); tl.setAttribute('y',ry+bar/2);
+    tl.setAttribute('class','mtx'); tl.textContent=`${dn}  ${fmt(v)}`; miniSvg.appendChild(tl);
+    y+=slot+gap;
+  });
+  const lr=document.createElementNS(NSs,'rect'); lr.setAttribute('x',leftX); lr.setAttribute('y',leftY);
+  lr.setAttribute('width',nodeW); lr.setAttribute('height',Math.max(1,leftH)); lr.setAttribute('rx',2); lr.setAttribute('fill',color); miniSvg.appendChild(lr);
+  return H;
+}
+function showMini(e,leaf,color){
+  if(leaf!==miniLeaf){ miniH=renderMini(leaf,color); miniLeaf=leaf; miniEl.style.opacity=1; }
+  let left=e.clientX+16, top=e.clientY+16; const w=400, h=miniH+34;
+  if(left+w>window.innerWidth) left=e.clientX-w-8;
+  if(top+h>window.innerHeight) top=Math.max(8,window.innerHeight-h-8);
+  miniEl.style.left=left+'px'; miniEl.style.top=top+'px';
+}
+function hideMini(){ miniEl.style.opacity=0; miniLeaf=null; }
+
+/* ---- render -------------------------------------------------------------- */
+function render(res){
+  svg.innerHTML=''; const {links, income}=res;
+  if(!links.length || income<=0){ svg.style.display='none'; return; }
+  svg.style.display='block';
+  const nodes={};
+  const ensure=n=>{ if(!nodes[n]) nodes[n]={name:n,in:0,out:0,outLinks:[],inLinks:[]}; return nodes[n]; };
+  links.forEach(([s,t,v])=>{ const S=ensure(s),T=ensure(t),l={s,t,v,src:S,tgt:T}; S.out+=v; S.outLinks.push(l); T.in+=v; T.inLinks.push(l); });
+  const NL=Object.values(nodes); NL.forEach(n=> n.value=Math.max(n.in,n.out));
+  const layerOf=n=> n.in===0?0:1+Math.max(...n.inLinks.map(l=>layerOf(l.src)));
+  NL.forEach(n=> n.layer=layerOf(n));
+  const maxLayer=Math.max(...NL.map(n=>n.layer));
+  const band=n=> n.layer===0 ? n.outLinks[0].tgt.name : n.layer===maxLayer ? n.inLinks[0].src.name : n.name;
+  const nodeColor=n=> n.layer<=1 ? INCOME : n.name==='Budget' ? BUDGET : (GROUPCOL[band(n)]||BUDGET);
+  const linkColor=l=> l.tgt.layer<=2 ? INCOME : (GROUPCOL[l.src.name==='Budget'?l.tgt.name:l.src.name]||BUDGET);
+  const scale=TARGET_H/(nodes['Budget']?nodes['Budget'].value:income);
+  const byLayer=[]; for(let i=0;i<=maxLayer;i++) byLayer[i]=NL.filter(n=>n.layer===i);
+  byLayer.forEach(col=>col.sort((a,b)=>{ const r=ORDER.indexOf(band(a))-ORDER.indexOf(band(b)); return r!==0?r:b.value-a.value; }));
+  const used=byLayer.map(col=>col.reduce((a,n)=>a+Math.max(n.value*scale,MINSLOT),0)+(col.length-1)*GAP);
+  const contentH=Math.max(...used);
+  const xOf=L=> LEFTM + L*((W-LEFTM-RIGHTM-NODEW)/maxLayer);
+  byLayer.forEach((col,ci)=>{ let y=PAD_T+(contentH-used[ci])/2;
+    col.forEach(n=>{ const bar=n.value*scale, slot=Math.max(bar,MINSLOT); n.x=xOf(ci); n.h=bar; n.y=y+(slot-bar)/2; y+=slot+GAP; }); });
+  const H=PAD_T+contentH+PAD_B; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  NL.forEach(n=>{ n.outLinks.sort((a,b)=>a.tgt.y-b.tgt.y); n.inLinks.sort((a,b)=>a.src.y-b.src.y);
+    let so=0; n.outLinks.forEach(l=>{ l.soff=so; so+=l.v*scale; });
+    let io=0; n.inLinks.forEach(l=>{ l.ioff=io; io+=l.v*scale; }); });
+  const ribbon=l=>{ const th=l.v*scale, sx=l.src.x+NODEW, tx=l.tgt.x, sy=l.src.y+l.soff+th/2, ty=l.tgt.y+l.ioff+th/2, xm=(sx+tx)/2, t=th/2;
+    return `M${sx},${sy-t} C${xm},${sy-t} ${xm},${ty-t} ${tx},${ty-t} L${tx},${ty+t} C${xm},${ty+t} ${xm},${sy+t} ${sx},${sy+t} Z`; };
+  NL.forEach(n=> n.outLinks.forEach(l=>{ const p=document.createElementNS(NS,'path');
+    p.setAttribute('d',ribbon(l)); p.setAttribute('fill',linkColor(l)); p.setAttribute('class','link');
+    p.addEventListener('mousemove',e=>showTip(e,`${l.s} → ${l.t}: ${fmt(l.v)}`)); p.addEventListener('mouseleave',hideTip); svg.appendChild(p); }));
+  NL.forEach(n=>{ const g=document.createElementNS(NS,'g'); g.setAttribute('class','node');
+    const r=document.createElementNS(NS,'rect'); r.setAttribute('x',n.x); r.setAttribute('y',n.y);
+    r.setAttribute('width',NODEW); r.setAttribute('height',Math.max(1,n.h)); r.setAttribute('rx',2); r.setAttribute('fill',nodeColor(n));
+    const isExpLeaf = n.layer===maxLayer && detailFor(n.name).length>0;
+    r.addEventListener('mousemove',e=>{ if(isExpLeaf){ showMini(e,n.name,nodeColor(n)); }
+      else showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); });
+    r.addEventListener('mouseleave',()=>{ hideTip(); hideMini(); }); g.appendChild(r);
+    const label=document.createElementNS(NS,'text'); const mid=n.y+n.h/2;
+    if(n.layer===0 || n.layer===maxLayer){
+      const left=n.layer===0;
+      label.setAttribute('x', left? n.x-8 : n.x+NODEW+8); label.setAttribute('text-anchor', left?'end':'start'); label.setAttribute('y',mid);
+      const a=document.createElementNS(NS,'tspan'); a.textContent=n.name;
+      const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=' '+fmt(n.value);
+      label.append(a,b);
+    }else{
+      label.setAttribute('x',n.x+NODEW/2); label.setAttribute('text-anchor','middle'); label.setAttribute('y',mid); label.setAttribute('class','mid');
+      label.textContent = n.name==='Budget' ? 'Budget' : `${n.name}  ${(n.value/income*100).toFixed(0)}%`;
+    }
+    g.appendChild(label); svg.appendChild(g); });
+}
+function paintTotals(res){
+  const {income,expGrp,sav}=res;
+  const cards=[["Income",income,INCOME]];
+  ["Needs","Wants","Liberality","Taxes"].forEach(g=>{ if(expGrp[g]>0) cards.push([g,expGrp[g],GROUPCOL[g]]); });
+  if(sav>0) cards.push(["Savings",sav,GROUPCOL.Savings]);
+  const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';
+  document.getElementById('totals').innerHTML=cards.map(([lab,v,c],i)=>
+    `<div class="tot"><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${i===0?'':pct(v)}</div></div>`).join('');
+}
+
+/* ---- controls ------------------------------------------------------------ */
+const modeEl=document.getElementById('mode'), yearEl=document.getElementById('year'),
+      monthEl=document.getElementById('month'), monthlyEl=document.getElementById('tMonthly'),
+      MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function periodRange(){
+  const mode=modeEl.value, y=+yearEl.value, m=+monthEl.value;
+  if(mode==='all')   return [META.minMi, META.maxMi, 'All time'];
+  if(mode==='year')  return [y*12, y*12+11, `Year ${y}`];
+  const mi=y*12+(m-1);
+  if(mode==='month') return [mi, mi, `${MONTHS[m-1]} ${y}`];
+  return [mi-11, mi, `12 months to ${MONTHS[m-1]} ${y}`];
+}
+function build(){
+  const mode=modeEl.value;
+  yearEl.style.display = mode==='all' ? 'none':'';
+  monthEl.style.display = (mode==='month'||mode==='trailing') ? '':'none';
+  const [miF,miT,label]=periodRange(); curMiF=miF; curMiT=miT;
+  const res=computeLinks(miF,miT); const monthly=monthlyEl.checked; curDiv = monthly ? res.months : 1;
+  let plabel=label;
+  if(monthly && res.months>0){
+    res.links=res.links.map(([s,t,v])=>[s,t,v/res.months]); res.income/=res.months; res.sav/=res.months;
+    for(const g in res.expGrp) res.expGrp[g]/=res.months;
+    plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
+  }
+  document.getElementById('periodLabel').textContent=plabel;
+  paintTotals(res); render(res);
+}
+
+/* ---- load ---------------------------------------------------------------- */
+async function load(){
+  const st=document.getElementById('status');
+  try{
+    const resp=await fetch(CSV_URL,{cache:"no-store"});
+    if(!resp.ok) throw new Error("HTTP "+resp.status);
+    const text=await resp.text();
+    aggregate(parseCSV(text));
+    if(!DATA.length) throw new Error("No usable rows (check the sheet is shared as 'anyone with the link can view' and named DB).");
+    META.years.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; yearEl.appendChild(o); });
+    MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
+    const maxYear=Math.floor(META.maxMi/12), maxMonth=META.maxMi%12+1; yearEl.value=maxYear; monthEl.value=maxMonth;
+    [modeEl,yearEl,monthEl,monthlyEl].forEach(el=>el.addEventListener('change',build));
+    document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); });
+    st.style.display='none'; document.getElementById('controls').style.display='';
+    build();
+  }catch(err){
+    st.className='status err';
+    st.innerHTML=`Could not load the sheet: ${err.message}<br>Make sure the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`;
+  }
+}
+load();
+</script>
+</body>
+</html>
