@@ -53,9 +53,10 @@ and their calculations were removed (they were unreliable); the table is now a
 clean value-only view.
 
 The layout is a **pivot**, grouped and ordered like a spreadsheet pivot table:
-- **Headline block first:** the grand-total **Net worth** row, then **Total
-  assets** (sum of positive holdings) and **Total liabilities** (sum of negative
-  holdings), so the asset/liability split is explicit.
+- **Headline cards on top:** three cards above the table — a large **Net worth**
+  hero number, plus **Total assets** (sum of positive holdings, green) and
+  **Total liabilities** (sum of negative holdings, red) — so the asset/liability
+  split reads at a glance.
 - **Variability → Category → Account.** Rows are grouped by variability
   (`Variable` / `Nonvariable`), then by `CATEGORY3` within each. Each variability
   group and each category shows a **subtotal** row.

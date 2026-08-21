@@ -55,19 +55,34 @@
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
-  .nwwrap{margin:8px 26px 40px; padding:12px 14px; overflow-x:auto; max-width:940px;}
-  table.nw{border-collapse:collapse; font-size:12px; width:100%;}
-  .nw th,.nw td{border:1px solid var(--grid); padding:4px 10px; text-align:right; white-space:nowrap;}
-  .nw th{background:#1b2333; color:var(--ink); font-weight:600;}
+  /* headline cards */
+  .nwcards{display:flex; gap:14px; margin:12px 26px 0; flex-wrap:wrap; max-width:940px;}
+  .nwcard{flex:1 1 180px; background:linear-gradient(180deg,#182135,#141a28);
+          border:1px solid var(--grid); border-radius:14px; padding:14px 20px;}
+  .nwcard .lab{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px;}
+  .nwcard .big{font-size:30px; font-weight:800; line-height:1.05; margin-top:6px; color:var(--ink);
+               font-variant-numeric:tabular-nums;}
+  .nwcard.net{flex:1.4 1 220px; border-color:#3a4d78;
+              background:linear-gradient(180deg,#1c2947,#141d31); box-shadow:0 6px 22px rgba(0,0,0,.4);}
+  .nwcard.net .big{font-size:40px;}
+  .nwcard.assets .big{color:#7fd0a3;}
+  .nwcard.liab .big{color:#e58a8a;}
+  .nwwrap{margin:12px 26px 40px; padding:6px 8px; overflow-x:auto; max-width:940px;}
+  table.nw{border-collapse:collapse; font-size:12.5px; width:100%; font-variant-numeric:tabular-nums;}
+  .nw th,.nw td{padding:8px 14px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--grid);}
+  .nw th{color:var(--muted); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;}
   .nw th.grp{text-align:left;}
   .nw td.t{text-align:left; color:var(--ink);}
-  .nw td.t2{text-align:left; color:var(--ink); padding-left:24px;}
+  .nw td.t2{text-align:left; color:var(--ink); padding-left:28px;}
   .nw td.mut{text-align:left; color:var(--muted);}
-  .nw tr.cat td{background:#0f1626; font-weight:600; color:var(--muted);}
-  .nw tr.sub td{background:#12192a; font-weight:700;}
-  .nw tr.tot2 td{background:#161d2c; font-weight:700;}
-  .nw tr.tot td{background:#1b2333; font-weight:700; border-top:2px solid var(--grid); border-bottom:2px solid var(--grid); font-size:13px;}
-  .nw .val{color:var(--ink);}
+  .nw tbody tr:hover td{background:rgba(255,255,255,.035);}
+  .nw tr.sub td{background:#141d30; font-weight:700; text-transform:uppercase; font-size:11.5px;
+                letter-spacing:.5px; border-top:1px solid var(--grid);}
+  .nw tr.sub td.t{border-left:3px solid var(--budget);}
+  .nw tr.sub .val{font-size:13.5px;}
+  .nw tr.cat td{background:#0e1524; font-weight:600; color:var(--muted);}
+  .nw tr:last-child td{border-bottom:none;}
+  .nw .val{color:var(--ink); font-weight:600;}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
 </style>
 </head>
@@ -110,6 +125,7 @@
 <div class="nwhead" id="nwhead" style="display:none">
   <h2>Net worth</h2>
 </div>
+<div class="nwcards" id="nwcards"></div>
 <div class="nwwrap framed" id="nwwrap"></div>
 
 <div class="tip" id="tip"></div>
@@ -374,8 +390,8 @@ function applyPreset(){ const [f,t]=presetRange(); setSlider(f-META.minMi, t-MET
 
 /* ---- net worth table (pivot: variability -> category -> account, by value) */
 function buildNetWorth(){
-  const holds=NWHOLD; const wrap=document.getElementById('nwwrap');
-  if(!holds.length){ wrap.innerHTML=''; return; }
+  const holds=NWHOLD; const wrap=document.getElementById('nwwrap'); const cardsEl=document.getElementById('nwcards');
+  if(!holds.length){ if(cardsEl) cardsEl.innerHTML=''; wrap.innerHTML=''; return; }
   const cur=META.allMaxMi;
   const cumAt=(h,mi)=>{ let s=0; const f=h.flows; for(const k in f){ if(+k<=mi) s+=f[k]; } return s; };
   const rows=holds.map(h=>({vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v:cumAt(h,cur)}))
@@ -383,11 +399,16 @@ function buildNetWorth(){
   const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
   const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
+  const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
-  // headline: net worth, then the asset / liability split
+  // headline cards: net worth (hero), then the asset / liability split
   const gTot=sumV(rows);
   const assets=sumV(rows.filter(r=>r.v>0));
   const liab=sumV(rows.filter(r=>r.v<0));
+  cardsEl.innerHTML=
+    `<div class="nwcard net"><div class="lab">Net worth</div><div class="big">${money(gTot)}</div></div>`+
+    `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`+
+    `<div class="nwcard liab"><div class="lab">Total liabilities</div><div class="big">${money(liab)}</div></div>`;
 
   // group by variability, then by category; both ordered by subtotal value (high -> low),
   // leaf rows ordered by value (high -> low) within the same category (pivot style)
@@ -397,10 +418,6 @@ function buildNetWorth(){
   let h=`<table class="nw"><thead><tr>`+
     `<th class="grp">Variability</th><th class="grp">Category</th><th class="grp">Asset class details</th>`+
     `<th class="grp">Account</th><th>Value</th></tr></thead><tbody>`;
-  // headline block
-  h+=`<tr class="tot"><td class="t" colspan="4">Net worth</td>`+vcell(gTot)+`</tr>`;
-  h+=`<tr class="tot2"><td class="t" colspan="4">Total assets</td>`+vcell(assets)+`</tr>`;
-  h+=`<tr class="tot2"><td class="t" colspan="4">Total liabilities</td>`+vcell(liab)+`</tr>`;
   // pivot body
   varyOrder.forEach(vary=>{
     const list=varyMap[vary];
