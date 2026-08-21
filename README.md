@@ -26,8 +26,11 @@ Needs / Wants / Liberality / Taxes → category`.
   windows scale against it.
 - **Hover an expense category** to pop up a small floating Sankey of its detail
   breakdown (from the `DETAIL` column), each detail with its % of the category.
-- Totals cards on top: **Income, Expenses**, then Needs / Wants / Liberality /
-  Taxes / Savings, each with its % of income.
+- Totals cards on top: **Income, Expenses, Savings** only, each with its % of
+  income. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
+  splits still show on the Sankey and its mid-node labels.
+- The page shows the **title only** (descriptive subtitles removed from the
+  header and the net-worth section).
 
 ### Period selection
 - **Quick set** dropdown: Trailing 12 months / Single month / Full year / All time
@@ -44,18 +47,23 @@ Needs / Wants / Liberality / Taxes → category`.
 One row per **holding**, keyed by `VARIABLE` (variability) × `ASSETCLASSDETAILS`
 × `ACCOUNT` × `CATEGORY3`, showing the **current balance** (cumulative of *every*
 transaction — includes appreciation, transfers and liabilities, not just cash
-flow) plus three deltas:
+flow). Columns are ordered **Variability → Category → Asset class details →
+Account → Value**, then three deltas:
 - **Δ Month** — vs the previous month.
 - **Δ Year** — vs 12 months ago.
 - **Δ Overall** — **return on invested capital**: current value vs the total
   capital ever transferred into the investing account (baseline = sum of
   `TYPE=TRANSFER` inflows on `VARIABLE` holdings). Absolute = value − transfers in,
-  % = gain / transfers in. Shown **only for investment holdings**; blank for cash,
-  real estate, objects and liabilities (which receive no investing transfers). The
-  grand-total Overall therefore compares total net worth against total invested
-  capital.
+  % = gain / transfers in.
 
-Rows are grouped by variability (`Variable` / `Nonvariable`) with a subtotal per
+**Deltas (Month / Year / Overall) are shown only for `Variable` holdings** (the
+invested assets that move). Nonvariable rows — cash, real estate, objects,
+liabilities — show only their Value, with the delta cells left blank. The
+grand-total **Net worth** row therefore reports the full net-worth Value while its
+deltas aggregate the variable holdings only.
+
+Rows are grouped by variability (`Variable` / `Nonvariable`) and, within each
+group, sorted by Category → Asset class details → Account, with a subtotal per
 group and a grand-total **Net worth** row. Liabilities show as negative values in
 parentheses; positive deltas are green, negative red, each with its % change.
 

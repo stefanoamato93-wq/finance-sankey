@@ -71,7 +71,6 @@
 <body>
 <header>
   <h1>Personal Finance — money flow</h1>
-  <div class="sub">Income (work / non-work) → Total income → Expenses / Savings → Needs / Wants / Liberality / Taxes → category. Live from Google Sheets.</div>
 </header>
 
 <div class="controls" id="controls" style="display:none">
@@ -107,7 +106,6 @@
 
 <div class="nwhead" id="nwhead" style="display:none">
   <h2>Net worth</h2>
-  <div class="nwsub">Current balance of every holding (cumulative of all transactions incl. appreciation, transfers and liabilities). Δ Month = vs previous month, Δ Year = vs 12 months ago, Δ Overall = current value vs total capital ever transferred into the investing account (return on invested capital; shown only for investment holdings).</div>
 </div>
 <div class="nwwrap" id="nwwrap"></div>
 
@@ -329,7 +327,6 @@ function paintTotals(res){
   const {income,expGrp,sav}=res;
   const totExp=["Needs","Wants","Liberality","Taxes"].reduce((a,g)=>a+(expGrp[g]||0),0);
   const cards=[["Income",income,INCOME],["Expenses",totExp,EXPC]];
-  ["Needs","Wants","Liberality","Taxes"].forEach(g=>{ if(expGrp[g]>0) cards.push([g,expGrp[g],GROUPCOL[g]]); });
   if(sav>0) cards.push(["Savings",sav,GROUPCOL.Savings]);
   const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';
   document.getElementById('totals').innerHTML=cards.map(([lab,v,c],i)=>
@@ -387,28 +384,39 @@ function buildNetWorth(){
   const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
   const order=["VARIABLE","NONVARIABLE"];
   const rank=v=>{ const i=order.indexOf(v); return i<0?9:i; };
-  rows.sort((a,b)=>{ const r=rank(a.vary)-rank(b.vary); return r!==0?r:b.v-a.v; });
+  const alpha=(a,b)=> a===b?0:(a<b?-1:1);
+  // group by variability, then category, then asset class details, then account
+  rows.sort((a,b)=>{ let r=rank(a.vary)-rank(b.vary); if(r) return r;
+    r=alpha(a.cat,b.cat); if(r) return r;
+    r=alpha(a.acd,b.acd); if(r) return r;
+    r=alpha(a.acct,b.acct); if(r) return r;
+    return b.v-a.v; });
   const groups={}; rows.forEach(r=>{ (groups[r.vary]=groups[r.vary]||[]).push(r); });
   const dcell=(d,base)=>{ const pct=Math.abs(base)>0.5 ? d/Math.abs(base)*100 : null;
     const cls=d>=0?'pos':'neg';
     const p=pct===null?'':`<span class="dp">${d>=0?'+':''}${pct.toFixed(1)}%</span>`;
     return `<td class="${cls}">${d>=0?'+':'\u2212'}${fmt(Math.abs(d))} ${p}</td>`; };
   const ocell=(d,tin)=> tin>0.5 ? dcell(d,tin) : `<td></td>`;   // overall only for invested holdings
+  const blanks=`<td></td><td></td><td></td>`;                  // deltas only for variable holdings
   const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
   let h=`<table class="nw"><thead><tr>`+
-    `<th class="grp">Variability</th><th class="grp">Asset class details</th><th class="grp">Account</th><th class="grp">Category</th>`+
+    `<th class="grp">Variability</th><th class="grp">Category</th><th class="grp">Asset class details</th><th class="grp">Account</th>`+
     `<th>Value</th><th title="vs previous month">\u0394 Month</th><th title="vs 12 months ago">\u0394 Year</th><th title="current value vs total capital transferred into the investing account (ever)">\u0394 Overall</th></tr></thead><tbody>`;
   let gTot=0,gM=0,gY=0,gO=0,gBM=0,gBY=0,gTin=0;
   order.concat(Object.keys(groups).filter(k=>order.indexOf(k)<0)).forEach(vary=>{
     const g=groups[vary]; if(!g||!g.length) return;
+    const isVar = vary==="VARIABLE";
     let sTot=0,sM=0,sY=0,sO=0,sBM=0,sBY=0,sTin=0;
     g.forEach(r=>{
-      h+=`<tr><td class="mut">${cap(r.vary)}</td><td class="t">${r.acd}</td><td class="mut">${r.acct}</td><td class="mut">${r.cat}</td>`+
-        vcell(r.v)+dcell(r.dM,r.bM)+dcell(r.dY,r.bY)+ocell(r.dO,r.tin)+`</tr>`;
+      const deltas = isVar ? dcell(r.dM,r.bM)+dcell(r.dY,r.bY)+ocell(r.dO,r.tin) : blanks;
+      h+=`<tr><td class="mut">${cap(r.vary)}</td><td class="mut">${r.cat}</td><td class="t">${r.acd}</td><td class="mut">${r.acct}</td>`+
+        vcell(r.v)+deltas+`</tr>`;
       sTot+=r.v; sM+=r.dM; sY+=r.dY; sO+=r.dO; sBM+=r.bM; sBY+=r.bY; sTin+=r.tin;
     });
-    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)} \u2014 subtotal</td>`+vcell(sTot)+dcell(sM,sBM)+dcell(sY,sBY)+ocell(sO,sTin)+`</tr>`;
-    gTot+=sTot; gM+=sM; gY+=sY; gO+=sO; gBM+=sBM; gBY+=sBY; gTin+=sTin;
+    const subDeltas = isVar ? dcell(sM,sBM)+dcell(sY,sBY)+ocell(sO,sTin) : blanks;
+    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)} \u2014 subtotal</td>`+vcell(sTot)+subDeltas+`</tr>`;
+    gTot+=sTot;
+    if(isVar){ gM+=sM; gY+=sY; gO+=sO; gBM+=sBM; gBY+=sBY; gTin+=sTin; }
   });
   h+=`<tr class="tot"><td class="t" colspan="4">Net worth</td>`+vcell(gTot)+dcell(gM,gBM)+dcell(gY,gBY)+ocell(gO,gTin)+`</tr>`;
   h+=`</tbody></table>`;
