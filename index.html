@@ -51,31 +51,27 @@
   .dual .handle{position:absolute; top:4px; width:16px; height:16px; margin-left:-8px; border-radius:50%;
      background:#fff; border:2px solid var(--income); z-index:3; cursor:grab;}
   .hint{margin:4px 26px 0; color:var(--muted); font-size:11px;}
-  /* trend */
-  .trendhead{margin:16px 26px 0; display:flex; gap:12px; align-items:center; font-size:12.5px; color:var(--muted); flex-wrap:wrap;}
-  .trendhead .lg{display:inline-flex; gap:5px; align-items:center;}
-  .trendhead .lg i{width:10px; height:10px; border-radius:2px; display:inline-block;}
-  #trendLegend{display:flex; gap:10px; flex-wrap:wrap;}
-  .trendwrap{padding:4px 20px 10px; max-width:1000px;}
-  #trend{width:100%; height:auto; overflow:visible;}
-  #trend text{fill:var(--muted); font-size:9px;}
-  #trend .axis{stroke:var(--grid); stroke-width:1;}
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
   .nwwrap{margin:8px 26px 40px; overflow-x:auto;}
   table.nw{border-collapse:collapse; font-size:12px;}
-  .nw th,.nw td{border:1px solid var(--grid); padding:5px 10px; text-align:right; white-space:nowrap;}
+  .nw th,.nw td{border:1px solid var(--grid); padding:4px 10px; text-align:right; white-space:nowrap;}
   .nw th{background:#1b2333; color:var(--ink); font-weight:600;}
-  .nw td.y,.nw th.y{text-align:left;}
-  .nw tr:last-child td{font-weight:700;}
+  .nw th.grp{text-align:left;}
+  .nw td.t{text-align:left; color:var(--ink);}
+  .nw td.mut{text-align:left; color:var(--muted);}
+  .nw tr.sub td{background:#12192a; font-weight:700;}
+  .nw tr.tot td{background:#1b2333; font-weight:700; border-top:2px solid var(--grid);}
+  .nw .dp{font-size:10.5px; opacity:.8; margin-left:4px;}
+  .nw .val{color:var(--ink);}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
 </style>
 </head>
 <body>
 <header>
   <h1>Personal Finance — money flow</h1>
-  <div class="sub">Income (work / non-work) → Budget → Needs / Wants / Liberality / Taxes / Savings → category. Live from Google Sheets.</div>
+  <div class="sub">Income (work / non-work) → Total income → Expenses / Savings → Needs / Wants / Liberality / Taxes → category. Live from Google Sheets.</div>
 </header>
 
 <div class="controls" id="controls" style="display:none">
@@ -109,18 +105,9 @@
 <div class="totals" id="totals"></div>
 <div class="wrap"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
 
-<div class="trendhead" id="trendhead" style="display:none">
-  <h2>Trend</h2>
-  <select id="level"><option value="overview">Overview</option><option value="macro">Macro groups</option><option value="categories">Categories</option><option value="details">Details</option></select>
-  <select id="vmode"><option value="abs">Absolute</option><option value="pct">% of income</option></select>
-  <select id="gran"><option value="month">Monthly</option><option value="year">Yearly</option></select>
-  <span id="trendLegend"></span>
-</div>
-<div class="trendwrap"><svg id="trend" preserveAspectRatio="xMidYMid meet"></svg></div>
-
 <div class="nwhead" id="nwhead" style="display:none">
   <h2>Net worth</h2>
-  <div class="nwsub">Cumulative of every transaction (includes appreciation, transfers and liabilities), by asset bucket, at each year end.</div>
+  <div class="nwsub">Current balance of every holding (cumulative of all transactions incl. appreciation, transfers and liabilities). Δ Month = vs previous month, Δ Year = vs 12 months ago, Δ Overall = current value vs total capital ever transferred into the investing account (return on invested capital; shown only for investment holdings).</div>
 </div>
 <div class="nwwrap" id="nwwrap"></div>
 
@@ -135,17 +122,9 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
 
 const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
 const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
-const NWBUCKET={
-  CASH:"Cash", EMERGENCYFUND:"Cash", CREDITS:"Cash",
-  VWCE:"Investments","LON:IUSE":"Investments","AMS:IMAE":"Investments", BONDS:"Investments", CRYPTO:"Investments", PENSIONFUND:"Investments",
-  REALESTATE:"Real estate",
-  AUTOMOBILE:"Goods", IPHONE:"Goods", IPAD:"Goods", TV:"Goods", APPLEWATCH:"Goods", APPLETV:"Goods",
-  LIABILITIES:"Liabilities"
-};
-const NWORDER=["Cash","Investments","Real estate","Goods","Liabilities","Other"];
 const norm=s=> s==null ? "" : String(s).trim().toUpperCase();
 
-let DATA=[], DETAIL=[], NW=[], META={years:[],minMi:0,maxMi:0,buckets:[]};
+let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,allMaxMi:0,refMonth:1,refWindow:1};
 
 /* minimal RFC4180 CSV parser */
 function parseCSV(text){
@@ -169,18 +148,29 @@ function parseCSV(text){
 function aggregate(rows){
   const head=rows[0].map(norm), ix=n=>head.indexOf(n);
   const cY=ix("YEAR"),cM=ix("MONTH"),cV=ix("VALUE"),cL=ix("LABEL"),cD=ix("DETAIL"),
-        cACD=ix("ASSETCLASSDETAILS"),cT=ix("TYPE"),cC1=ix("CATEGORY1");
-  const agg=new Map(), det=new Map(), nw=new Map(), years=new Set(), buckets=new Set();
+        cACD=ix("ASSETCLASSDETAILS"),cT=ix("TYPE"),cC1=ix("CATEGORY1"),
+        cACC=ix("ACCOUNT"),cVAR=ix("VARIABLE"),cC3=ix("CATEGORY3");
+  const agg=new Map(), det=new Map(), years=new Set();
+  const HOLD=new Map(), incByMi={}; let allMin=Infinity, allMax=-Infinity;
   for(let r=1;r<rows.length;r++){
     const row=rows[r]; if(!row || row[cY]===undefined || row[cY]==="") continue;
     const year=parseInt(row[cY],10), month=parseInt(row[cM],10); if(!year||!month) continue;
     const val=parseFloat(row[cV])||0;
     const label=row[cL], detail=row[cD], typ=norm(row[cT]), c1=norm(row[cC1]);
-    const acd=norm(cACD>=0?row[cACD]:""); const bucket=NWBUCKET[acd]||"Other";
     const mi=year*12+(month-1); years.add(year);
-    buckets.add(bucket); const nk=mi+"|"+bucket; nw.set(nk,(nw.get(nk)||0)+val);   // net worth: ALL rows
+    if(mi<allMin) allMin=mi; if(mi>allMax) allMax=mi;
+    /* net worth holding — every row contributes to a balance (incl. appreciation/transfers/liabilities) */
+    const vary=norm(cVAR>=0?row[cVAR]:"")||"OTHER";
+    const acd=norm(cACD>=0?row[cACD]:"")||"—";
+    const acct=norm(cACC>=0?row[cACC]:"")||"—";
+    const cat=norm(cC3>=0?row[cC3]:"")||"—";
+    const hk=vary+"|"+acd+"|"+acct+"|"+cat;
+    let h=HOLD.get(hk); if(!h){ h={vary,acd,acct,cat,flows:{},tin:0}; HOLD.set(hk,h); }
+    h.flows[mi]=(h.flows[mi]||0)+val;
+    if(typ==="TRANSFER" && vary==="VARIABLE") h.tin+=val;   // capital transferred into the investing account
+    /* cash flow (income/expenses only) */
     let kind,group,leaf;
-    if(typ==="INCOME"){ kind="I"; group=INCGRP[c1]||"Other income"; leaf=norm(detail); }
+    if(typ==="INCOME"){ kind="I"; group=INCGRP[c1]||"Other income"; leaf=norm(detail); incByMi[mi]=(incByMi[mi]||0)+val; }
     else if(typ==="EXPENSES"){ kind="E"; group=EXPGRP[c1]||"Other"; leaf=norm(label); }
     else if(typ==="TAXES"){ if(norm(detail)==="APPRECTAXES") continue; kind="E"; group="Taxes"; leaf=norm(label); }
     else continue;   // TRANSFER / APPRECIATION excluded from cash flow (still in net worth)
@@ -191,10 +181,15 @@ function aggregate(rows){
   }
   DATA=[...agg.entries()].map(([k,v])=>{ const [mi,kind,group,leaf]=k.split("|"); return [+mi,kind,group,leaf,Math.round(v)]; });
   DETAIL=[...det.entries()].map(([k,v])=>{ const [mi,leaf,dn]=k.split("|"); return [+mi,leaf,dn,Math.round(v)]; });
-  NW=[...nw.entries()].map(([k,v])=>{ const [mi,b]=k.split("|"); return [+mi,b,Math.round(v)]; });
+  NWHOLD=[...HOLD.values()];
   const mis=DATA.map(r=>r[0]);
+  /* scale references (income-based) so node heights are comparable across periods */
+  let refMonth=0; for(const k in incByMi) refMonth=Math.max(refMonth, incByMi[k]);
+  let refWindow=0; const im=Object.keys(incByMi).map(Number);
+  if(im.length){ const lo=Math.min(...im), hi=Math.max(...im);
+    for(let end=lo; end<=hi; end++){ let s=0; for(let m=end-11;m<=end;m++) s+=incByMi[m]||0; refWindow=Math.max(refWindow,s); } }
   META={years:[...years].sort((a,b)=>a-b), minMi:Math.min(...mis), maxMi:Math.max(...mis),
-        buckets:NWORDER.filter(b=>buckets.has(b))};
+        allMinMi:allMin, allMaxMi:allMax, refMonth:refMonth||1, refWindow:refWindow||1};
 }
 
 /* ---- layout config ------------------------------------------------------- */
@@ -203,9 +198,9 @@ const LEFTM=140, RIGHTM=185;
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--liberality'),Taxes:cssv('--taxes'),Savings:cssv('--savings')};
 const INCOME=cssv('--income'), BUDGET=cssv('--budget'), EXPC=cssv('--exp');
-const ORDER=["Work income","Non-work income","Budget","Needs","Wants","Liberality","Taxes","Savings"];
+const ORDER=["Work income","Non-work income","Total income","Expenses","Needs","Wants","Liberality","Taxes","Savings"];
 const svg=document.getElementById('sankey'), NS="http://www.w3.org/2000/svg", tip=document.getElementById('tip');
-let showK=true, curMiF=0, curMiT=0, curDiv=1;
+let showK=true, curMiF=0, curMiT=0, curDiv=1, curScale=1;
 const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:2})+"K" : Math.round(v).toLocaleString();
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
 function hideTip(){ tip.style.opacity=0; }
@@ -221,13 +216,15 @@ function computeLinks(miF,miT){
   const incGrp={}, expGrp={}; let income=0, outflow=0; const links=[];
   for(const leaf in incLeaf){ const v=incLeaf[leaf]; if(v>0){ const g=incGrpOf[leaf];
     links.push([leaf,g,v]); incGrp[g]=(incGrp[g]||0)+v; income+=v; } }
-  for(const g in incGrp) links.push([g,'Budget',incGrp[g]]);
+  for(const g in incGrp) links.push([g,'Total income',incGrp[g]]);
   const eb=[];
   for(const leaf in expLeaf){ const v=expLeaf[leaf]; if(v>0){ const g=expGrpOf[leaf];
     expGrp[g]=(expGrp[g]||0)+v; outflow+=v; eb.push([g,leaf,v]); } }
-  for(const g in expGrp) links.push(['Budget',g,expGrp[g]]);
+  // total income -> one merged Expenses node -> macro groups -> leaves
+  if(outflow>0) links.push(['Total income','Expenses',outflow]);
+  for(const g in expGrp) links.push(['Expenses',g,expGrp[g]]);
   eb.forEach(x=>links.push(x));
-  const sav=income-outflow; if(sav>0) links.push(['Budget','Savings',sav]);
+  const sav=income-outflow; if(sav>0) links.push(['Total income','Savings',sav]);
   return {links, income, expGrp, sav, months:Object.keys(monthsSeen).length||1};
 }
 function detailFor(leaf){
@@ -288,9 +285,9 @@ function render(res){
   NL.forEach(n=> n.layer=layerOf(n));
   const maxLayer=Math.max(...NL.map(n=>n.layer));
   const band=n=> n.layer===0 ? n.outLinks[0].tgt.name : n.layer===maxLayer ? n.inLinks[0].src.name : n.name;
-  const nodeColor=n=> n.layer<=1 ? INCOME : n.name==='Budget' ? BUDGET : (GROUPCOL[band(n)]||BUDGET);
-  const linkColor=l=> l.tgt.layer<=2 ? INCOME : (GROUPCOL[l.src.name==='Budget'?l.tgt.name:l.src.name]||BUDGET);
-  const scale=TARGET_H/(nodes['Budget']?nodes['Budget'].value:income);
+  const nodeColor=n=> n.layer<=1 ? INCOME : n.name==='Total income' ? BUDGET : n.name==='Expenses' ? EXPC : n.name==='Savings' ? GROUPCOL.Savings : (GROUPCOL[band(n)]||BUDGET);
+  const linkColor=l=> l.tgt.layer<=2 ? INCOME : l.tgt.name==='Expenses' ? EXPC : l.tgt.name==='Savings' ? GROUPCOL.Savings : l.src.name==='Expenses' ? (GROUPCOL[l.tgt.name]||EXPC) : (GROUPCOL[l.src.name]||BUDGET);
+  const scale=curScale;   // fixed px-per-€ so the diagram grows/shrinks with the period's absolute size
   const byLayer=[]; for(let i=0;i<=maxLayer;i++) byLayer[i]=NL.filter(n=>n.layer===i);
   byLayer.forEach(col=>col.sort((a,b)=>{ const r=ORDER.indexOf(band(a))-ORDER.indexOf(band(b)); return r!==0?r:b.value-a.value; }));
   const used=byLayer.map(col=>col.reduce((a,n)=>a+Math.max(n.value*scale,MINSLOT),0)+(col.length-1)*GAP);
@@ -323,7 +320,8 @@ function render(res){
       label.append(a,b);
     }else{
       label.setAttribute('x',n.x+NODEW/2); label.setAttribute('text-anchor','middle'); label.setAttribute('y',mid); label.setAttribute('class','mid');
-      label.textContent = n.name==='Budget' ? 'Budget' : `${n.name}  ${(n.value/income*100).toFixed(0)}%`;
+      const pctTxt = income>0 && n.name!=='Total income' ? '  '+(n.value/income*100).toFixed(0)+'%' : '';
+      label.textContent = `${n.name}  ${fmt(n.value)}${pctTxt}`;
     }
     g.appendChild(label); svg.appendChild(g); });
 }
@@ -342,9 +340,7 @@ function paintTotals(res){
 const modeEl=document.getElementById('mode'), yearEl=document.getElementById('year'), monthEl=document.getElementById('month'),
       monthlyEl=document.getElementById('tMonthly'), dualEl=document.getElementById('dual'),
       rFill=document.getElementById('rFill'), hLo=document.getElementById('hLo'), hHi=document.getElementById('hHi'),
-      rLoL=document.getElementById('rLo'), rHiL=document.getElementById('rHi'),
-      levelEl=document.getElementById('level'), vmodeEl=document.getElementById('vmode'),
-      granEl=document.getElementById('gran'), trendSvg=document.getElementById('trend'), trendLegend=document.getElementById('trendLegend');
+      rLoL=document.getElementById('rLo'), rHiL=document.getElementById('rHi');
 const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const maxIdx=()=> META.maxMi-META.minMi;
 let loIdx=0, hiIdx=0, drag=null, dragStart=0, dragLo=0, dragHi=0;
@@ -377,107 +373,53 @@ function presetRange(){
 }
 function applyPreset(){ const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi); build(); }
 
-/* ---- trend (multi-level, abs or %) --------------------------------------- */
-const kOf=(mi,gran)=> gran==='year'?Math.floor(mi/12):mi;
-function keysFor(gran){ const ks=[];
-  if(gran==='year'){ for(let y=Math.floor(META.minMi/12); y<=Math.floor(META.maxMi/12); y++) ks.push(y); }
-  else { for(let mi=META.minMi; mi<=META.maxMi; mi++) ks.push(mi); } return ks; }
-function seriesFor(level,gran){
-  const keys=keysFor(gran), inc={}, val={}; keys.forEach(k=> val[k]={});
-  DATA.forEach(([mi,kind,g,l,v])=>{ if(kind==='I'){ const k=kOf(mi,gran); inc[k]=(inc[k]||0)+v; } });
-  const add=(k,nm,v)=>{ val[k][nm]=(val[k][nm]||0)+v; };
-  const leafGroup={}; DATA.forEach(([mi,kind,g,l])=>{ if(kind==='E') leafGroup[l]=g; });
-  let names=[], colorOf={};
-  if(level==='overview'){
-    names=['Income','Expenses','Savings']; colorOf={Income:INCOME,Expenses:EXPC,Savings:GROUPCOL.Savings};
-    DATA.forEach(([mi,kind,g,l,v])=>{ const k=kOf(mi,gran); if(kind==='I') add(k,'Income',v); else add(k,'Expenses',-v); });
-    keys.forEach(k=>{ val[k].Savings=(val[k].Income||0)-(val[k].Expenses||0); });
-  }else if(level==='macro'){
-    const groups=['Needs','Wants','Liberality','Taxes'];
-    DATA.forEach(([mi,kind,g,l,v])=>{ if(kind==='E') add(kOf(mi,gran),g,-v); });
-    keys.forEach(k=>{ let e=0; groups.forEach(g=>e+=val[k][g]||0); val[k].Savings=(inc[k]||0)-e; });
-    names=groups.filter(g=>keys.some(k=>val[k][g]>0)).concat('Savings');
-    names.forEach(nm=>colorOf[nm]=GROUPCOL[nm]||'#888');
-  }else if(level==='categories'){
-    DATA.forEach(([mi,kind,g,l,v])=>{ if(kind==='E') add(kOf(mi,gran),l,-v); });
-    const tot={}; DATA.forEach(([mi,kind,g,l,v])=>{ if(kind==='E') tot[l]=(tot[l]||0)+(-v); });
-    names=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]);
-    names.forEach(nm=>colorOf[nm]=GROUPCOL[leafGroup[nm]]||'#888');
-  }else{ // details
-    const tot={}; DETAIL.forEach(([mi,lf,dn,v])=>{ tot[dn]=(tot[dn]||0)+v; });
-    const ranked=Object.keys(tot).sort((a,b)=>tot[b]-tot[a]); const TOP=12, keep=new Set(ranked.slice(0,TOP));
-    DETAIL.forEach(([mi,lf,dn,v])=>{ add(kOf(mi,gran), keep.has(dn)?dn:'Other', v); });
-    names=ranked.slice(0,TOP).concat(ranked.length>TOP?['Other']:[]);
-    names.forEach((nm,i)=> colorOf[nm]= nm==='Other'?'#7f8aa0':`hsl(${(i*53)%360} 62% 60%)`);
-  }
-  return {keys, names, colorOf, val, inc};
-}
-function drawTrend(){
-  const gran=granEl.value, level=levelEl.value, pct=vmodeEl.value==='pct';
-  const S=seriesFor(level,gran);
-  trendLegend.innerHTML=S.names.map(nm=>`<span class="lg"><i style="background:${S.colorOf[nm]}"></i>${nm}</span>`).join('');
-  const rows=S.keys.map(k=>({k, v:Object.fromEntries(S.names.map(nm=>{ let x=S.val[k][nm]||0; if(pct){ const i=S.inc[k]||0; x=i>0?x/i*100:0; } return [nm,x]; }))}));
-  const Wt=960, Ht=240, ml=48, mr=14, mt=12, mb=24, n=rows.length;
-  if(!n){ trendSvg.innerHTML=''; return; }
-  const xs=i=> ml + (n===1?0:(i/(n-1))*(Wt-ml-mr));
-  let yMax=0, yMin=0; rows.forEach(r=> S.names.forEach(nm=>{ yMax=Math.max(yMax,r.v[nm]); yMin=Math.min(yMin,r.v[nm]); }));
-  yMax=yMax||1;
-  const ys=v=> mt + (1-(v-yMin)/((yMax-yMin)||1))*(Ht-mt-mb);
-  const mk=(tag,at)=>{ const e=document.createElementNS(NS,tag); for(const k in at) e.setAttribute(k,at[k]); return e; };
-  const fmtT=v=> pct ? v.toFixed(0)+'%' : fmt(v);
-  trendSvg.setAttribute('viewBox',`0 0 ${Wt} ${Ht}`); trendSvg.innerHTML='';
-  trendSvg.appendChild(mk('line',{x1:ml,y1:ys(0),x2:Wt-mr,y2:ys(0),class:'axis'}));
-  let t=mk('text',{x:ml-6,y:ys(yMax),'text-anchor':'end'}); t.textContent=fmtT(yMax); trendSvg.appendChild(t);
-  t=mk('text',{x:ml-6,y:ys(0),'text-anchor':'end'}); t.textContent='0'; trendSvg.appendChild(t);
-  if(yMin<0){ t=mk('text',{x:ml-6,y:ys(yMin),'text-anchor':'end'}); t.textContent=fmtT(yMin); trendSvg.appendChild(t); }
-  rows.forEach((r,i)=>{ let show=false,lab='';
-    if(gran==='year'){ show=(n<=20)||(r.k%2===0); lab=r.k; } else { if((((r.k%12)+12)%12)===0){ show=true; lab=Math.floor(r.k/12); } }
-    if(show){ const tx=mk('text',{x:xs(i),y:Ht-8,'text-anchor':'middle'}); tx.textContent=lab; trendSvg.appendChild(tx);
-      trendSvg.appendChild(mk('line',{x1:xs(i),y1:mt,x2:xs(i),y2:Ht-mb,stroke:'#ffffff10','stroke-width':1})); } });
-  const idxOf=mi=> gran==='year'?(Math.floor(mi/12)-Math.floor(META.minMi/12)):(mi-META.minMi);
-  const a=idxOf(curMiF), b=idxOf(curMiT);
-  if(b>=a){ const x1=xs(Math.max(0,a))-4, x2=xs(Math.min(n-1,b))+4;
-    trendSvg.appendChild(mk('rect',{x:x1,y:mt,width:Math.max(2,x2-x1),height:Ht-mt-mb,fill:'#ffffff12'})); }
-  S.names.forEach(nm=>{ const d=rows.map((r,i)=>`${i?'L':'M'}${xs(i).toFixed(1)},${ys(r.v[nm]).toFixed(1)}`).join(' ');
-    trendSvg.appendChild(mk('path',{d,fill:'none',stroke:S.colorOf[nm],'stroke-width':1.8,'stroke-opacity':.9})); });
-  const guide=mk('line',{x1:0,y1:mt,x2:0,y2:Ht-mb,stroke:'#ffffff55','stroke-width':1}); guide.style.opacity=0; trendSvg.appendChild(guide);
-  const ov=mk('rect',{x:ml,y:mt,width:Wt-ml-mr,height:Ht-mt-mb,fill:'transparent'});
-  ov.addEventListener('mousemove',e=>{ const pr=trendSvg.getBoundingClientRect(); const px=(e.clientX-pr.left)/pr.width*Wt;
-    let i=Math.round((px-ml)/((Wt-ml-mr)/(n-1||1))); i=Math.max(0,Math.min(n-1,i));
-    const r=rows[i]; guide.setAttribute('x1',xs(i)); guide.setAttribute('x2',xs(i)); guide.style.opacity=1;
-    const lab=gran==='year'?r.k:miLabel(r.k);
-    const top=S.names.map(nm=>[nm,r.v[nm]]).sort((x,y)=>y[1]-x[1]).slice(0,10);
-    showTip(e,`<b>${lab}</b>`+top.map(([nm,v])=>`<br><span style="color:${S.colorOf[nm]}">■</span> ${nm}: ${fmtT(v)}`).join('')); });
-  ov.addEventListener('mouseleave',()=>{ guide.style.opacity=0; hideTip(); });
-  trendSvg.appendChild(ov);
-}
-
-/* ---- net worth table ----------------------------------------------------- */
+/* ---- net worth table (holdings: value + Δ month / year / overall) -------- */
 function buildNetWorth(){
-  const classes=META.buckets; if(!classes.length){ document.getElementById('nwwrap').innerHTML=''; return; }
-  const sorted=[...NW].sort((a,b)=>a[0]-b[0]);
-  const minY=Math.floor(META.minMi/12), maxY=Math.floor(META.maxMi/12);
-  const run={}; classes.forEach(c=>run[c]=0); let p=0; const snaps=[];
-  for(let Y=minY;Y<=maxY;Y++){ const endMi=Y*12+11;
-    while(p<sorted.length && sorted[p][0]<=endMi){ run[sorted[p][1]]+=sorted[p][2]; p++; }
-    snaps.push({Y, byClass:{...run}, total:classes.reduce((a,c)=>a+run[c],0)}); }
-  const cell=(v,cls)=>`<td class="${cls||''} ${v<0?'neg':''}">${fmt(v)}</td>`;
-  let h=`<table class="nw"><thead><tr><th class="y">Year</th>`+
-    classes.map(c=>`<th>${c}</th>`).join('')+`<th>Net worth</th><th>YoY</th></tr></thead><tbody>`;
-  snaps.forEach((s,i)=>{
-    const prev=i>0?snaps[i-1].total:null;
-    const yoy = prev!==null && prev!==0 ? ((s.total-prev)/Math.abs(prev)*100) : null;
-    const yoyTxt = yoy===null ? '—' : `<span class="${yoy>=0?'pos':'neg'}">${yoy>=0?'+':''}${yoy.toFixed(0)}%</span>`;
-    h+=`<tr><td class="y">${s.Y}</td>`+classes.map(c=>cell(s.byClass[c])).join('')+cell(s.total)+`<td>${yoyTxt}</td></tr>`;
+  const holds=NWHOLD; const wrap=document.getElementById('nwwrap');
+  if(!holds.length){ wrap.innerHTML=''; return; }
+  const cur=META.allMaxMi, m1=cur-1, y1=cur-12;   // month = vs previous month, year = vs 12 months ago
+  const cumAt=(h,mi)=>{ let s=0; const f=h.flows; for(const k in f){ if(+k<=mi) s+=f[k]; } return s; };
+  const rows=holds.map(h=>{
+    const v=cumAt(h,cur), bM=cumAt(h,m1), bY=cumAt(h,y1), tin=h.tin||0;
+    // Overall = current value vs total capital ever transferred into the investing account (return on capital)
+    return {vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v, dM:v-bM,bM, dY:v-bY,bY, dO:v-tin,tin};
+  }).filter(r=> Math.abs(r.v)>0.5 || Math.abs(r.tin)>0.5);
+  const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
+  const order=["VARIABLE","NONVARIABLE"];
+  const rank=v=>{ const i=order.indexOf(v); return i<0?9:i; };
+  rows.sort((a,b)=>{ const r=rank(a.vary)-rank(b.vary); return r!==0?r:b.v-a.v; });
+  const groups={}; rows.forEach(r=>{ (groups[r.vary]=groups[r.vary]||[]).push(r); });
+  const dcell=(d,base)=>{ const pct=Math.abs(base)>0.5 ? d/Math.abs(base)*100 : null;
+    const cls=d>=0?'pos':'neg';
+    const p=pct===null?'':`<span class="dp">${d>=0?'+':''}${pct.toFixed(1)}%</span>`;
+    return `<td class="${cls}">${d>=0?'+':'\u2212'}${fmt(Math.abs(d))} ${p}</td>`; };
+  const ocell=(d,tin)=> tin>0.5 ? dcell(d,tin) : `<td></td>`;   // overall only for invested holdings
+  const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
+  let h=`<table class="nw"><thead><tr>`+
+    `<th class="grp">Variability</th><th class="grp">Asset class details</th><th class="grp">Account</th><th class="grp">Category</th>`+
+    `<th>Value</th><th title="vs previous month">\u0394 Month</th><th title="vs 12 months ago">\u0394 Year</th><th title="current value vs total capital transferred into the investing account (ever)">\u0394 Overall</th></tr></thead><tbody>`;
+  let gTot=0,gM=0,gY=0,gO=0,gBM=0,gBY=0,gTin=0;
+  order.concat(Object.keys(groups).filter(k=>order.indexOf(k)<0)).forEach(vary=>{
+    const g=groups[vary]; if(!g||!g.length) return;
+    let sTot=0,sM=0,sY=0,sO=0,sBM=0,sBY=0,sTin=0;
+    g.forEach(r=>{
+      h+=`<tr><td class="mut">${cap(r.vary)}</td><td class="t">${r.acd}</td><td class="mut">${r.acct}</td><td class="mut">${r.cat}</td>`+
+        vcell(r.v)+dcell(r.dM,r.bM)+dcell(r.dY,r.bY)+ocell(r.dO,r.tin)+`</tr>`;
+      sTot+=r.v; sM+=r.dM; sY+=r.dY; sO+=r.dO; sBM+=r.bM; sBY+=r.bY; sTin+=r.tin;
+    });
+    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)} \u2014 subtotal</td>`+vcell(sTot)+dcell(sM,sBM)+dcell(sY,sBY)+ocell(sO,sTin)+`</tr>`;
+    gTot+=sTot; gM+=sM; gY+=sY; gO+=sO; gBM+=sBM; gBY+=sBY; gTin+=sTin;
   });
+  h+=`<tr class="tot"><td class="t" colspan="4">Net worth</td>`+vcell(gTot)+dcell(gM,gBM)+dcell(gY,gBY)+ocell(gO,gTin)+`</tr>`;
   h+=`</tbody></table>`;
-  document.getElementById('nwwrap').innerHTML=h;
+  wrap.innerHTML=h;
 }
 
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
   const res=computeLinks(curMiF,curMiT); const monthly=monthlyEl.checked; curDiv=monthly?res.months:1;
+  curScale = TARGET_H / (monthly ? META.refMonth : META.refWindow);   // fixed scale => sizes comparable across periods
   let plabel=`${miLabel(curMiF)} — ${miLabel(curMiT)}`;
   if(monthly && res.months>0){
     res.links=res.links.map(([s,t,v])=>[s,t,v/res.months]); res.income/=res.months; res.sav/=res.months;
@@ -485,7 +427,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res); drawTrend();
+  paintTotals(res); render(res);
 }
 
 /* ---- load ---------------------------------------------------------------- */
@@ -501,12 +443,10 @@ async function load(){
     setSlider(maxIdx()-11, maxIdx());          // default trailing 12
     [modeEl,yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
     monthlyEl.addEventListener('change',build);
-    [levelEl,vmodeEl,granEl].forEach(el=>el.addEventListener('change',drawTrend));
     document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
     st.style.display='none';
     document.getElementById('controls').style.display='';
     document.getElementById('rangeBox').style.display='';
-    document.getElementById('trendhead').style.display='';
     document.getElementById('nwhead').style.display='';
     build(); buildNetWorth();
   }catch(err){
