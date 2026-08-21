@@ -41,7 +41,8 @@ Needs / Wants / Liberality / Taxes → category`.
 - **Per month (avg)** toggle divides every value by the number of months in the
   selected window (a partial current year divides by the elapsed months). It also
   switches the true-scale reference to a single-month basis.
-- **Values in K** toggle (applies to the Sankey and the net-worth table).
+- **Values in K** toggle (applies to the Sankey and the net-worth table). Default
+  is **off** (full values); when on, K values are shown to **one decimal**.
 
 ### Net-worth table
 One row per **holding**, keyed by `VARIABLE` (variability) × `ASSETCLASSDETAILS`
@@ -63,9 +64,10 @@ grand-total **Net worth** row therefore reports the full net-worth Value while i
 deltas aggregate the variable holdings only.
 
 Rows are grouped by variability (`Variable` / `Nonvariable`) and, within each
-group, sorted by Category → Asset class details → Account, with a subtotal per
-group and a grand-total **Net worth** row. Liabilities show as negative values in
-parentheses; positive deltas are green, negative red, each with its % change.
+group, ordered by **Value, highest to lowest**. **Totals come first**: the
+grand-total **Net worth** row, then each group's subtotal, then the individual
+holding rows. Liabilities show as negative values in parentheses; positive deltas
+are green, negative red, each with its % change.
 
 ## Data source requirements
 The Google Sheet must be shared as **“Anyone with the link → Viewer”** and have a

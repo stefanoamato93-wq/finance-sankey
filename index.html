@@ -85,7 +85,7 @@
   <select id="year"></select>
   <select id="month"></select>
   <label><input type="checkbox" id="tMonthly"> per month (avg)</label>
-  <label><input type="checkbox" id="tK" checked> values in K</label>
+  <label><input type="checkbox" id="tK"> values in K</label>
 </div>
 
 <div id="rangeBox" style="display:none">
@@ -198,8 +198,8 @@ const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--l
 const INCOME=cssv('--income'), BUDGET=cssv('--budget'), EXPC=cssv('--exp');
 const ORDER=["Work income","Non-work income","Total income","Expenses","Needs","Wants","Liberality","Taxes","Savings"];
 const svg=document.getElementById('sankey'), NS="http://www.w3.org/2000/svg", tip=document.getElementById('tip');
-let showK=true, curMiF=0, curMiT=0, curDiv=1, curScale=1;
-const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:2})+"K" : Math.round(v).toLocaleString();
+let showK=false, curMiF=0, curMiT=0, curDiv=1, curScale=1;
+const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:1})+"K" : Math.round(v).toLocaleString();
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
 function hideTip(){ tip.style.opacity=0; }
 const miLabel=mi=> ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][((mi%12)+12)%12]+' '+Math.floor(mi/12);
@@ -384,13 +384,8 @@ function buildNetWorth(){
   const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
   const order=["VARIABLE","NONVARIABLE"];
   const rank=v=>{ const i=order.indexOf(v); return i<0?9:i; };
-  const alpha=(a,b)=> a===b?0:(a<b?-1:1);
-  // group by variability, then category, then asset class details, then account
-  rows.sort((a,b)=>{ let r=rank(a.vary)-rank(b.vary); if(r) return r;
-    r=alpha(a.cat,b.cat); if(r) return r;
-    r=alpha(a.acd,b.acd); if(r) return r;
-    r=alpha(a.acct,b.acct); if(r) return r;
-    return b.v-a.v; });
+  // group by variability, rows ordered highest value to lowest
+  rows.sort((a,b)=>{ let r=rank(a.vary)-rank(b.vary); if(r) return r; return b.v-a.v; });
   const groups={}; rows.forEach(r=>{ (groups[r.vary]=groups[r.vary]||[]).push(r); });
   const dcell=(d,base)=>{ const pct=Math.abs(base)>0.5 ? d/Math.abs(base)*100 : null;
     const cls=d>=0?'pos':'neg';
@@ -402,23 +397,30 @@ function buildNetWorth(){
   let h=`<table class="nw"><thead><tr>`+
     `<th class="grp">Variability</th><th class="grp">Category</th><th class="grp">Asset class details</th><th class="grp">Account</th>`+
     `<th>Value</th><th title="vs previous month">\u0394 Month</th><th title="vs 12 months ago">\u0394 Year</th><th title="current value vs total capital transferred into the investing account (ever)">\u0394 Overall</th></tr></thead><tbody>`;
-  let gTot=0,gM=0,gY=0,gO=0,gBM=0,gBY=0,gTin=0;
-  order.concat(Object.keys(groups).filter(k=>order.indexOf(k)<0)).forEach(vary=>{
-    const g=groups[vary]; if(!g||!g.length) return;
-    const isVar = vary==="VARIABLE";
-    let sTot=0,sM=0,sY=0,sO=0,sBM=0,sBY=0,sTin=0;
-    g.forEach(r=>{
+  const varyOrder=order.concat(Object.keys(groups).filter(k=>order.indexOf(k)<0)).filter(v=>groups[v]&&groups[v].length);
+  // first pass: aggregate subtotals + grand total (deltas only from variable holdings)
+  const sub={}; let gTot=0,gM=0,gY=0,gO=0,gBM=0,gBY=0,gTin=0;
+  varyOrder.forEach(vary=>{
+    const isVar=vary==="VARIABLE"; let sTot=0,sM=0,sY=0,sO=0,sBM=0,sBY=0,sTin=0;
+    groups[vary].forEach(r=>{ sTot+=r.v; sM+=r.dM; sY+=r.dY; sO+=r.dO; sBM+=r.bM; sBY+=r.bY; sTin+=r.tin; });
+    sub[vary]={isVar,sTot,sM,sY,sO,sBM,sBY,sTin};
+    gTot+=sTot; if(isVar){ gM+=sM; gY+=sY; gO+=sO; gBM+=sBM; gBY+=sBY; gTin+=sTin; }
+  });
+  // totals at the beginning: grand total, then each group's subtotal
+  h+=`<tr class="tot"><td class="t" colspan="4">Net worth</td>`+vcell(gTot)+dcell(gM,gBM)+dcell(gY,gBY)+ocell(gO,gTin)+`</tr>`;
+  varyOrder.forEach(vary=>{ const s=sub[vary];
+    const subDeltas = s.isVar ? dcell(s.sM,s.sBM)+dcell(s.sY,s.sBY)+ocell(s.sO,s.sTin) : blanks;
+    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)} \u2014 subtotal</td>`+vcell(s.sTot)+subDeltas+`</tr>`;
+  });
+  // then the holding rows, grouped
+  varyOrder.forEach(vary=>{
+    const isVar=sub[vary].isVar;
+    groups[vary].forEach(r=>{
       const deltas = isVar ? dcell(r.dM,r.bM)+dcell(r.dY,r.bY)+ocell(r.dO,r.tin) : blanks;
       h+=`<tr><td class="mut">${cap(r.vary)}</td><td class="mut">${r.cat}</td><td class="t">${r.acd}</td><td class="mut">${r.acct}</td>`+
         vcell(r.v)+deltas+`</tr>`;
-      sTot+=r.v; sM+=r.dM; sY+=r.dY; sO+=r.dO; sBM+=r.bM; sBY+=r.bY; sTin+=r.tin;
     });
-    const subDeltas = isVar ? dcell(sM,sBM)+dcell(sY,sBY)+ocell(sO,sTin) : blanks;
-    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)} \u2014 subtotal</td>`+vcell(sTot)+subDeltas+`</tr>`;
-    gTot+=sTot;
-    if(isVar){ gM+=sM; gY+=sY; gO+=sO; gBM+=sBM; gBY+=sBY; gTin+=sTin; }
   });
-  h+=`<tr class="tot"><td class="t" colspan="4">Net worth</td>`+vcell(gTot)+dcell(gM,gBM)+dcell(gY,gBY)+ocell(gO,gTin)+`</tr>`;
   h+=`</tbody></table>`;
   wrap.innerHTML=h;
 }
