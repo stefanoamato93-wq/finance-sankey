@@ -46,28 +46,27 @@ Needs / Wants / Liberality / Taxes → category`.
 
 ### Net-worth table
 One row per **holding**, keyed by `VARIABLE` (variability) × `ASSETCLASSDETAILS`
-× `ACCOUNT` × `CATEGORY3`, showing the **current balance** (cumulative of *every*
-transaction — includes appreciation, transfers and liabilities, not just cash
-flow). Columns are ordered **Variability → Category → Asset class details →
-Account → Value**, then three deltas:
-- **Δ Month** — vs the previous month.
-- **Δ Year** — vs 12 months ago.
-- **Δ Overall** — **return on invested capital**: current value vs the total
-  capital ever transferred into the investing account (baseline = sum of
-  `TYPE=TRANSFER` inflows on `VARIABLE` holdings). Absolute = value − transfers in,
-  % = gain / transfers in.
+× `ACCOUNT` × `CATEGORY3`, showing only the **current balance** — the cumulative
+of *every* transaction up to the latest month (includes appreciation, transfers
+and liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall columns
+and their calculations were removed (they were unreliable); the table is now a
+clean value-only view.
 
-**Deltas (Month / Year / Overall) are shown only for `Variable` holdings** (the
-invested assets that move). Nonvariable rows — cash, real estate, objects,
-liabilities — show only their Value, with the delta cells left blank. The
-grand-total **Net worth** row therefore reports the full net-worth Value while its
-deltas aggregate the variable holdings only.
+The layout is a **pivot**, grouped and ordered like a spreadsheet pivot table:
+- **Headline block first:** the grand-total **Net worth** row, then **Total
+  assets** (sum of positive holdings) and **Total liabilities** (sum of negative
+  holdings), so the asset/liability split is explicit.
+- **Variability → Category → Account.** Rows are grouped by variability
+  (`Variable` / `Nonvariable`), then by `CATEGORY3` within each. Each variability
+  group and each category shows a **subtotal** row.
+- **Ordered by value, highest to lowest, within the same category.** Variability
+  groups and categories are ordered by their subtotal (high → low), and the leaf
+  account rows are ordered by value (high → low) inside their category. Leaf rows
+  show only Asset class details + Account + Value; the variability/category cells
+  are left blank because the group/category headers above name them.
 
-Rows are grouped by variability (`Variable` / `Nonvariable`) and, within each
-group, ordered by **Value, highest to lowest**. **Totals come first**: the
-grand-total **Net worth** row, then each group's subtotal, then the individual
-holding rows. Liabilities show as negative values in parentheses; positive deltas
-are green, negative red, each with its % change.
+Liabilities show as negative values in parentheses (red). Both the Sankey and the
+net-worth table are wrapped in a **framed panel** (bordered, rounded).
 
 ## Data source requirements
 The Google Sheet must be shared as **“Anyone with the link → Viewer”** and have a
