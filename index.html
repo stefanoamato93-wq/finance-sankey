@@ -30,7 +30,7 @@
   .status{margin:16px 26px; color:var(--muted); font-size:13px;}
   .status.err{color:#e58a8a;}
   .framed{border:1px solid var(--grid); background:var(--panel); border-radius:12px;}
-  .wrap{margin:10px 26px 8px; padding:12px 16px; max-width:940px;}
+  .wrap{margin:10px 26px 8px; padding:12px 16px; max-width:940px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
   svg{width:100%; height:auto; display:block; overflow:visible;}
   .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
   .node .nval{fill:var(--muted); font-size:10px;}
@@ -84,6 +84,19 @@
   .nw tr:last-child td{border-bottom:none;}
   .nw .val{color:var(--ink); font-weight:600;}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
+  /* mobile: keep the Sankey legible by rendering it wider and letting it scroll sideways,
+     with slightly larger labels; tighten page margins */
+  @media (max-width:680px){
+    header{padding:12px 16px 4px;}
+    .controls,.totals,.period,.status,#rangeBox,.hint,.nwhead,.nwcards{margin-left:14px; margin-right:14px;}
+    .wrap{margin:10px 14px 8px; padding:8px;}
+    .wrap svg{min-width:720px;}
+    .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
+    .nwwrap{margin-left:14px; margin-right:14px;}
+    .nwcard .big{font-size:26px;} .nwcard.net .big{font-size:32px;}
+    .swipehint{display:block;}
+  }
+  .swipehint{display:none; margin:4px 14px 0; color:var(--muted); font-size:11px;}
 </style>
 </head>
 <body>
@@ -120,6 +133,7 @@
 <div class="status" id="status">Loading data from Google Sheets…</div>
 <div class="period" id="periodLabel"></div>
 <div class="totals" id="totals"></div>
+<div class="swipehint" id="swipehint">Swipe the diagram sideways to see it all →</div>
 <div class="wrap framed"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
 
 <div class="nwhead" id="nwhead" style="display:none">
@@ -401,10 +415,11 @@ function buildNetWorth(){
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
-  // headline cards: net worth (hero), then the asset / liability split
+  // headline cards: net worth (hero), then the asset / liability split.
+  // Liabilities = only the LIABILITIES category (not every negative row); assets = the rest.
   const gTot=sumV(rows);
-  const assets=sumV(rows.filter(r=>r.v>0));
-  const liab=sumV(rows.filter(r=>r.v<0));
+  const liab=sumV(rows.filter(r=>r.cat==="LIABILITIES"));
+  const assets=gTot-liab;
   cardsEl.innerHTML=
     `<div class="nwcard net"><div class="lab">Net worth</div><div class="big">${money(gTot)}</div></div>`+
     `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`+

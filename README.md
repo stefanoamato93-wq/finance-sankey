@@ -31,6 +31,10 @@ Needs / Wants / Liberality / Taxes → category`.
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
   header and the net-worth section).
+- **Mobile:** on narrow screens (≤680px) the Sankey renders at a fixed wider
+  width (min 720px) inside a horizontally scrollable frame, with slightly larger
+  labels, so text stays legible instead of being squashed to fit. A "swipe the
+  diagram sideways" hint appears on mobile only.
 
 ### Period selection
 - **Quick set** dropdown: Trailing 12 months / Single month / Full year / All time
@@ -54,9 +58,11 @@ clean value-only view.
 
 The layout is a **pivot**, grouped and ordered like a spreadsheet pivot table:
 - **Headline cards on top:** three cards above the table — a large **Net worth**
-  hero number, plus **Total assets** (sum of positive holdings, green) and
-  **Total liabilities** (sum of negative holdings, red) — so the asset/liability
-  split reads at a glance.
+  hero number, plus **Total liabilities** (sum of the `LIABILITIES` category only,
+  red) and **Total assets** (everything else, i.e. Net worth − liabilities,
+  green) — so the asset/liability split reads at a glance. Note liabilities is the
+  Liabilities category, not "every negative row", so a negative cash balance
+  (e.g. a credit-card line) reduces assets rather than counting as a liability.
 - **Variability → Category → Account.** Rows are grouped by variability
   (`Variable` / `Nonvariable`), then by `CATEGORY3` within each. Each variability
   group and each category shows a **subtotal** row.
