@@ -31,10 +31,16 @@ Needs / Wants / Liberality / Taxes → category`.
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
   header and the net-worth section).
-- **Mobile:** on narrow screens (≤680px) the Sankey renders at a fixed wider
-  width (min 720px) inside a horizontally scrollable frame, with slightly larger
-  labels, so text stays legible instead of being squashed to fit. A "swipe the
-  diagram sideways" hint appears on mobile only.
+- **Mobile:** on narrow screens (≤680px) the whole page adapts, not just the
+  Sankey. The Sankey still renders at a fixed wider width (min 720px) inside its
+  own horizontally scrollable frame (with a "swipe sideways" hint) so labels stay
+  ≥12px and legible, but in addition: the period controls stack full-width with
+  ≥44px tap targets, the range-bar handles get an enlarged ~48px invisible touch
+  area and respond to touch dragging, the headline cards stack in a single column,
+  and the net-worth table scrolls inside its own frame (font floored at 12px) so
+  the page body never scrolls sideways. On touch/no-hover devices, tapping an
+  expense category opens the same detail popup that hover shows on desktop (tap
+  again or tap elsewhere to close). Desktop layout is unchanged.
 
 ### Period selection
 - **Quick set** dropdown: Trailing 12 months / Single month / Full year / All time
@@ -74,6 +80,33 @@ The layout is a **pivot**, grouped and ordered like a spreadsheet pivot table:
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).
+
+## Performance / loading
+
+The page used to block on the live Google Sheet fetch, so a cold network could
+leave it near-blank for up to ~10 seconds. It now uses a **stale-while-revalidate**
+cache:
+
+- The most recent raw CSV is cached in the browser's **localStorage**
+  (`finance-sankey-cache-v1`, key = raw CSV text + retrieval timestamp). Nothing is
+  stored server-side and nothing is sent anywhere except the existing public CSV
+  endpoint, so the privacy model is unchanged.
+- **Returning visits render instantly from cache** (if the cached copy is ≤24h old)
+  while a fresh copy is fetched in the **background**. When the background copy
+  differs, the diagram re-renders with the new data; when it is identical, nothing
+  re-renders. A small **"Showing last loaded data" badge** appears while refreshing
+  and if the refresh fails (the cached view stays on screen).
+- The live fetch **retries up to 3 times** with a **10s timeout per attempt**, and a
+  **30s overall guard** shows a timeout error if a cold load never returns. On a cold
+  failure with any cached copy present (even stale), the cached copy is shown instead
+  of an error.
+- The Sankey is rendered first and the net-worth table on the next frame, so the
+  diagram paints without waiting on the table.
+- If `localStorage` is unavailable (private mode, disabled), the app silently falls
+  back to a plain live fetch.
+
+The file remains a single self-contained HTML page with no build step and no
+external dependencies.
 
 ## Data source requirements
 The Google Sheet must be shared as **“Anyone with the link → Viewer”** and have a

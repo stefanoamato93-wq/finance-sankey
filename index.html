@@ -84,16 +84,41 @@
   .nw tr:last-child td{border-bottom:none;}
   .nw .val{color:var(--ink); font-weight:600;}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
-  /* mobile: keep the Sankey legible by rendering it wider and letting it scroll sideways,
-     with slightly larger labels; tighten page margins */
+  /* data-source freshness badge (shown when displaying last-loaded/cached data) */
+  .badge{margin:8px 26px 0; display:inline-block; color:#e7c14a; font-size:11.5px;
+         background:rgba(231,193,74,.10); border:1px solid rgba(231,193,74,.35);
+         border-radius:7px; padding:4px 9px;}
+  /* mobile: adapt every section — controls, cards, table, touch targets — and keep the
+     Sankey legible by rendering it wider inside its own horizontal scroll frame */
   @media (max-width:680px){
+    /* never let the whole page scroll sideways; only the diagram/table frames do */
+    html,body{overflow-x:hidden; max-width:100%;}
     header{padding:12px 16px 4px;}
-    .controls,.totals,.period,.status,#rangeBox,.hint,.nwhead,.nwcards{margin-left:14px; margin-right:14px;}
+    .controls,.totals,.period,.status,.badge,#rangeBox,.hint,.nwhead,.nwcards{margin-left:14px; margin-right:14px;}
+    /* controls: full-width, comfortable tap targets (>=44px), >=8px gaps */
+    .controls{gap:10px; font-size:14px;}
+    .controls > *{min-height:44px;}
+    .controls label{display:flex; align-items:center; gap:8px; min-height:44px;}
+    .controls select, #year, #month{min-height:44px; padding:8px 10px; font-size:14px; flex:1 1 auto;}
+    .controls input[type=checkbox]{width:22px; height:22px;}
+    /* range slider: enlarge the invisible hit area of each handle to ~48px for touch */
+    #rangeBox{max-width:100%;}
+    .dual{height:34px;}
+    .dual .track{top:15px;} .dual .fill{top:13px;}
+    .dual .handle{top:7px; width:20px; height:20px; margin-left:-10px;}
+    .dual .handle::before{content:""; position:absolute; top:-14px; left:-14px; right:-14px; bottom:-14px;}
     .wrap{margin:10px 14px 8px; padding:8px;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
-    .nwwrap{margin-left:14px; margin-right:14px;}
+    /* headline cards stack full width */
+    .nwcards{flex-direction:column; gap:10px;}
+    .nwcard, .nwcard.net{flex:1 1 100%; max-width:100%;}
     .nwcard .big{font-size:26px;} .nwcard.net .big{font-size:32px;}
+    /* net-worth table: scroll inside its own frame, keep values legible (>=12px) */
+    .nwwrap{margin-left:14px; margin-right:14px; max-width:100%;}
+    table.nw{font-size:12px;}
+    .nw th{font-size:12px;}
+    .nw th,.nw td{padding:8px 10px;}
     .swipehint{display:block;}
   }
   .swipehint{display:none; margin:4px 14px 0; color:var(--muted); font-size:11px;}
@@ -131,6 +156,7 @@
 </div>
 
 <div class="status" id="status">Loading data from Google Sheets…</div>
+<div class="badge" id="dataBadge" style="display:none"></div>
 <div class="period" id="periodLabel"></div>
 <div class="totals" id="totals"></div>
 <div class="swipehint" id="swipehint">Swipe the diagram sideways to see it all →</div>
@@ -154,6 +180,9 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
 const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
 const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
 const norm=s=> s==null ? "" : String(s).trim().toUpperCase();
+const MOBILE_BP=680;
+const isMobile=w=> (w==null?window.innerWidth:w) <= MOBILE_BP;   // <=680px resolves to mobile
+const noHover=()=> typeof window.matchMedia==='function' && window.matchMedia('(hover:none)').matches;
 
 let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,allMaxMi:0,refMonth:1,refWindow:1};
 
@@ -340,7 +369,15 @@ function render(res){
     const isExpLeaf = n.layer===maxLayer && detailFor(n.name).length>0;
     r.addEventListener('mousemove',e=>{ if(isExpLeaf){ showMini(e,n.name,nodeColor(n)); }
       else showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); });
-    r.addEventListener('mouseleave',()=>{ hideTip(); hideMini(); }); g.appendChild(r);
+    r.addEventListener('mouseleave',()=>{ hideTip(); hideMini(); });
+    /* touch / no-hover devices: tap a category to show the same detail popup */
+    if(noHover()){ r.style.cursor='pointer';
+      r.addEventListener('click',e=>{ e.stopPropagation();
+        if(isExpLeaf){ if(miniLeaf===n.name){ hideMini(); } else { showMini(e,n.name,nodeColor(n)); } }
+        else { showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); }
+      });
+    }
+    g.appendChild(r);
     const label=document.createElementNS(NS,'text'); const mid=n.y+n.h/2;
     if(n.layer===0 || n.layer===maxLayer){
       const left=n.layer===0;
@@ -381,17 +418,30 @@ function updateSliderUI(){
 function setSlider(lo,hi){ const N=maxIdx(); loIdx=Math.max(0,Math.min(N,Math.round(lo))); hiIdx=Math.max(0,Math.min(N,Math.round(hi)));
   if(loIdx>hiIdx)[loIdx,hiIdx]=[hiIdx,loIdx]; updateSliderUI(); }
 function idxFromX(clientX){ const r=dualEl.getBoundingClientRect(), N=maxIdx(); let f=(clientX-r.left)/r.width; f=Math.max(0,Math.min(1,f)); return Math.round(f*N); }
-hLo.addEventListener('pointerdown',e=>{ drag='lo'; e.preventDefault(); });
-hHi.addEventListener('pointerdown',e=>{ drag='hi'; e.preventDefault(); });
-rFill.addEventListener('pointerdown',e=>{ drag='band'; dragStart=idxFromX(e.clientX); dragLo=loIdx; dragHi=hiIdx; e.preventDefault(); });
-window.addEventListener('pointermove',e=>{
-  if(!drag) return; const idx=idxFromX(e.clientX), N=maxIdx();
+/* one shared drag pipeline for both pointer and touch input, so the range bar
+   behaves identically whether dragged with a mouse or a finger */
+function beginDrag(mode,clientX){ drag=mode; if(mode==='band'){ dragStart=idxFromX(clientX); dragLo=loIdx; dragHi=hiIdx; } }
+function moveDrag(clientX){
+  if(!drag) return; const idx=idxFromX(clientX), N=maxIdx();   // idxFromX already clamps to [0,N]
   if(drag==='lo') loIdx=Math.min(idx,hiIdx);
   else if(drag==='hi') hiIdx=Math.max(idx,loIdx);
   else { const w=dragHi-dragLo; let nl=dragLo+(idx-dragStart), nh=nl+w; if(nl<0){nl=0;nh=w;} if(nh>N){nh=N;nl=N-w;} loIdx=nl; hiIdx=nh; }
   updateSliderUI(); build();
-});
-window.addEventListener('pointerup',()=>{ drag=null; });
+}
+function endDrag(){ drag=null; }
+hLo.addEventListener('pointerdown',e=>{ beginDrag('lo',e.clientX); e.preventDefault(); });
+hHi.addEventListener('pointerdown',e=>{ beginDrag('hi',e.clientX); e.preventDefault(); });
+rFill.addEventListener('pointerdown',e=>{ beginDrag('band',e.clientX); e.preventDefault(); });
+window.addEventListener('pointermove',e=>{ moveDrag(e.clientX); });
+window.addEventListener('pointerup',endDrag);
+/* touch fallback for browsers that do not deliver pointer events for touch */
+const tx=e=> e.touches && e.touches[0] ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);
+hLo.addEventListener('touchstart',e=>{ beginDrag('lo',tx(e)); e.preventDefault(); },{passive:false});
+hHi.addEventListener('touchstart',e=>{ beginDrag('hi',tx(e)); e.preventDefault(); },{passive:false});
+rFill.addEventListener('touchstart',e=>{ beginDrag('band',tx(e)); e.preventDefault(); },{passive:false});
+window.addEventListener('touchmove',e=>{ if(drag){ moveDrag(tx(e)); e.preventDefault(); } },{passive:false});
+window.addEventListener('touchend',endDrag);
+window.addEventListener('touchcancel',endDrag);
 function presetRange(){
   const mode=modeEl.value, y=+yearEl.value, m=+monthEl.value;
   if(mode==='all') return [META.minMi, META.maxMi];
@@ -466,31 +516,121 @@ function build(){
   paintTotals(res); render(res);
 }
 
-/* ---- load ---------------------------------------------------------------- */
-async function load(){
-  const st=document.getElementById('status');
-  try{
-    const resp=await fetch(CSV_URL,{cache:"no-store"}); if(!resp.ok) throw new Error("HTTP "+resp.status);
-    aggregate(parseCSV(await resp.text()));
-    if(!DATA.length) throw new Error("No usable rows (check the sheet is shared 'anyone with the link → Viewer' and named DB).");
-    META.years.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; yearEl.appendChild(o); });
-    MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
-    const maxYear=Math.floor(META.maxMi/12), maxMonth=META.maxMi%12+1; yearEl.value=maxYear; monthEl.value=maxMonth;
-    setSlider(maxIdx()-11, maxIdx());          // default trailing 12
-    [modeEl,yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
-    monthlyEl.addEventListener('change',build);
-    document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
-    st.style.display='none';
-    document.getElementById('controls').style.display='';
-    document.getElementById('rangeBox').style.display='';
-    document.getElementById('nwhead').style.display='';
-    build(); buildNetWorth();
-  }catch(err){
-    st.className='status err';
-    st.innerHTML=`Could not load the sheet: ${err.message}<br>Make sure the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`;
+/* ---- data cache (stale-while-revalidate) --------------------------------- */
+/* Stores the raw CSV only, in the visitor's own browser (localStorage). Nothing
+   is transmitted anywhere except the existing public Google Sheets CSV endpoint. */
+const SheetCache={
+  KEY:"finance-sankey-cache-v1",
+  MAX_AGE_MS:24*60*60*1000,
+  available(){ try{ const k="__fs_probe__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }catch(e){ return false; } },
+  read(){ try{ const raw=localStorage.getItem(this.KEY); if(!raw) return {ok:false};
+      const entry=JSON.parse(raw);
+      if(!entry || typeof entry.csv!=='string' || typeof entry.retrievedAt!=='number') return {ok:false};
+      return {ok:true, entry}; }catch(e){ return {ok:false}; } },
+  write(csv,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:1,csv,retrievedAt})); return true; }catch(e){ return false; } },
+  isFresh(entry,now){ return !!entry && typeof entry.retrievedAt==='number' && (now-entry.retrievedAt) <= this.MAX_AGE_MS; },
+  differs(a,b){ return String(a) !== String(b); }
+};
+
+/* ---- fetch with bounded retry (<=3) + 10s per-attempt timeout ------------ */
+async function fetchSheet(){
+  let lastErr;
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      let signal, to;
+      if(typeof AbortController==='function'){ const ctrl=new AbortController(); signal=ctrl.signal; to=setTimeout(()=>ctrl.abort(),10000); }
+      const resp=await fetch(CSV_URL, signal?{cache:"no-store",signal}:{cache:"no-store"});
+      if(to) clearTimeout(to);
+      if(!resp.ok) throw new Error("HTTP "+resp.status);
+      return await resp.text();
+    }catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
   }
+  throw lastErr || new Error("fetch failed");
 }
-load();
+
+/* ---- rendering / control wiring ------------------------------------------ */
+const statusEl=document.getElementById('status'), badgeEl=document.getElementById('dataBadge');
+let controlsReady=false;
+function syncYearOptions(){
+  const prev=yearEl.value; yearEl.innerHTML='';
+  META.years.forEach(y=>{ const o=document.createElement('option'); o.value=y; o.textContent=y; yearEl.appendChild(o); });
+  const maxYear=Math.floor(META.maxMi/12);
+  yearEl.value=(prev && META.years.indexOf(+prev)>=0) ? prev : maxYear;
+}
+function initControlsOnce(){
+  if(controlsReady) return;
+  MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
+  monthEl.value=META.maxMi%12+1;
+  setSlider(maxIdx()-11, maxIdx());          // default trailing 12
+  [modeEl,yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
+  monthlyEl.addEventListener('change',build);
+  document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
+  document.getElementById('controls').style.display='';
+  document.getElementById('rangeBox').style.display='';
+  document.getElementById('nwhead').style.display='';
+  controlsReady=true;
+}
+function renderAll(){ build(); requestAnimationFrame(()=>buildNetWorth()); }   // Sankey first, table next frame
+function applyData(csv){
+  aggregate(parseCSV(csv));
+  if(!DATA.length) throw new Error("No usable rows (check the sheet is shared 'anyone with the link → Viewer' and named DB).");
+  syncYearOptions();
+  initControlsOnce();
+  const N=maxIdx();                            // keep the user's window on a refresh, clamp to new bounds
+  if(hiIdx>N) hiIdx=N; if(loIdx>hiIdx) loIdx=Math.max(0,hiIdx); updateSliderUI();
+  statusEl.style.display='none';
+  renderAll();
+}
+function showBadge(retrievedAt,refreshing){
+  if(!badgeEl) return;
+  const d=new Date(retrievedAt); const t=(retrievedAt && !isNaN(d.getTime()))?` (from ${d.toLocaleString()})`:'';
+  badgeEl.textContent=`Showing last loaded data${t}`+(refreshing?' — refreshing…':'');
+  badgeEl.style.display='';
+}
+function clearBadge(){ if(badgeEl) badgeEl.style.display='none'; }
+function showError(msg,timedOut){
+  statusEl.style.display=''; statusEl.className='status err';
+  statusEl.innerHTML = timedOut
+    ? `Loading timed out.<br>Check your connection and that the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`
+    : `Could not load the sheet: ${msg}<br>Make sure the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`;
+}
+
+/* ---- boot: render cached data first, refresh live in the background ------ */
+function boot(){
+  const cached=SheetCache.read(), now=Date.now();
+  let renderedFromCache=false, settled=false;
+  if(cached.ok && SheetCache.isFresh(cached.entry,now)){
+    try{ applyData(cached.entry.csv); renderedFromCache=true; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
+  }
+  const overall=setTimeout(()=>{ if(!settled && !renderedFromCache) showError('',true); },30000);
+  fetchSheet().then(csv=>{
+    settled=true; clearTimeout(overall);
+    if(renderedFromCache){
+      if(SheetCache.differs(cached.entry.csv,csv)){ SheetCache.write(csv,Date.now()); applyData(csv); }
+      clearBadge();                            // live data confirmed current
+    }else{
+      applyData(csv); SheetCache.write(csv,Date.now()); clearBadge();
+    }
+  }).catch(err=>{
+    settled=true; clearTimeout(overall);
+    if(renderedFromCache){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
+    if(cached.ok){ try{ applyData(cached.entry.csv); showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
+    showError(err && err.message ? err.message : 'load failed');
+  });
+}
+document.addEventListener('click',()=>{ hideMini(); });   // tap-away closes the detail popup on touch
+boot();
+
+/* ---- test-only export shim ------------------------------------------------
+   Exposes the pure helpers to the Node test harness (fast-check).
+   Guarded so it is completely inert in the browser: there is no `module`
+   global on the shipped single-file page, so this block never runs and adds
+   no external dependency or runtime cost. The export list grows as each pure
+   helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
+   later task; only helpers that already exist are referenced here. */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { parseCSV, aggregate, computeLinks, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP };
+}
 </script>
 </body>
 </html>
