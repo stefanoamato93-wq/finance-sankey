@@ -134,6 +134,15 @@ sheet's CSV URL) can see the figures. Keep only data you are comfortable exposin
 Change `SHEET_ID` / `SHEET_NAME` at the top of the `<script>` block. Colours for
 the nodes/flows are CSS variables in `:root`.
 
+## Tests (dev-only, not shipped)
+The `test/` folder holds a Node/fast-check harness for the pure helpers
+(`parseCSV`, `aggregate`, `computeLinks`, `detailFor`, `SheetCache`, `fetchSheet`,
+`isMobile`). It is **never referenced by `index.html`** — the page stays a single
+self-contained file. A tiny guarded export shim at the end of the inline script
+(`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those
+helpers to Node and is completely inert in the browser. Running the suite needs
+Node (`cd test && npm install && npm test`).
+
 ## Local variant
 The sibling folder `Personal Finance/` also has an offline builder
 (`build_sankey.py` → `sankey.html`) that embeds a snapshot of `FullDB.xlsx`
