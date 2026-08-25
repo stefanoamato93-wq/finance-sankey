@@ -37,12 +37,45 @@
   text.mid{fill:#fff; font-weight:600; font-size:10.5px; paint-order:stroke; stroke:var(--bg); stroke-width:3.4px; stroke-linejoin:round;}
   .link{fill-opacity:.36; transition:fill-opacity .15s;}
   .link:hover{fill-opacity:.7;}
+  /* de-emphasized (deselected) entries: greyed, reduced opacity, but still tappable to reactivate */
+  .node.deselected{opacity:.28; filter:grayscale(1);}
+  .node.deselected rect{cursor:pointer;}
+  .link.deselected{fill-opacity:.12; filter:grayscale(1); pointer-events:none;}
   .tip{position:fixed; pointer-events:none; background:#0b0f18; color:#fff; border:1px solid var(--grid);
        border-radius:6px; padding:6px 9px; font-size:12px; opacity:0; transition:opacity .1s; z-index:30; white-space:nowrap;}
   #mini{position:fixed; pointer-events:none; background:#0b0f18; border:1px solid var(--grid); border-radius:9px;
         padding:8px 10px; opacity:0; transition:opacity .1s; z-index:20; box-shadow:0 8px 24px rgba(0,0,0,.55);}
   #mini .mt{font-size:11px; color:#fff; font-weight:700; margin-bottom:4px;}
   #mini text.mtx{fill:var(--ink); font-size:9.5px; dominant-baseline:middle;}
+  /* Drilldown_Chart overlay: framed panel, same visual language as #mini/.framed.
+     Interactive (pointer-events auto) with a title, an inline SVG bar chart and a
+     close button; sits above the Sankey without unmounting it. */
+  #drilldown{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40;
+        max-width:min(680px,92vw); padding:14px 16px; box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  #drilldown .dhead{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:8px;}
+  #drilldown .dtitle{font-size:14px; font-weight:700; color:#fff;}
+  #drilldown .dclose{background:var(--panel); color:var(--muted); border:1px solid var(--grid);
+        border-radius:8px; padding:7px 13px; cursor:pointer; font-size:13px; min-width:44px; min-height:40px;}
+  #drilldown .dclose:hover{color:var(--ink);}
+  #drilldown svg{max-width:100%;}
+  #drilldown text.dval{fill:var(--muted); font-size:8.5px; font-variant-numeric:tabular-nums;}
+  #drilldown text.dmon{fill:var(--ink); font-size:9px;}
+  #drilldown line.daxis{stroke:var(--grid); stroke-width:1;}
+  #drilldown .drillmsg{color:var(--muted); font-size:13px; padding:30px 14px; text-align:center; max-width:420px;}
+  /* drill control: small bar-chart glyph + enlarged transparent hit target (>=44x44
+     CSS px at <=480px), distinct from the node-body selection tap */
+  .drill{cursor:pointer;}
+  .drill rect.hit{fill:transparent;}
+  .drill .bar{fill:var(--muted); transition:fill .12s;}
+  .drill:hover .bar{fill:var(--ink);}
+  /* mobile/touch selection parity: an enlarged transparent tap target around each
+     selectable node body. The visible bar can be as thin as MINSLOT (~22u ~=18px
+     at the mobile 720px diagram width, 0.8px/u), so a >=55u (>=44px) overlay
+     carries the same toggleEntry tap. It is inert on desktop (pointer-events:none,
+     so the node's hover mini-Sankey/tooltip on the bar itself is preserved) and
+     only activates at <=480px, mirroring the range-handle ::before enlarge trick. */
+  .node .nodehit{fill:transparent; pointer-events:none;}
+  @media (max-width:480px){ .node .nodehit{pointer-events:auto; cursor:pointer;} }
   /* draggable month-range slider */
   #rangeBox{margin:10px 26px 0; max-width:640px;}
   .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
@@ -210,6 +243,16 @@
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
 
+<!-- Drilldown_Chart overlay: hidden until a drill control is tapped -->
+<div id="drilldown" class="framed" style="display:none">
+  <div class="dhead">
+    <span class="dtitle" id="drillTitle"></span>
+    <button class="dclose" id="drillClose" type="button">Close</button>
+  </div>
+  <svg id="drillSvg"></svg>
+  <div class="drillmsg" id="drillMsg" style="display:none"></div>
+</div>
+
 <script>
 /* ---- data source --------------------------------------------------------- */
 const SHEET_ID="1SnEHP7oBD9Fo38yQ0OvlhYESiidmY98f9fqfHNhDLnc";
@@ -223,7 +266,8 @@ const MOBILE_BP=680;
 const isMobile=w=> (w==null?window.innerWidth:w) <= MOBILE_BP;   // <=680px resolves to mobile
 const noHover=()=> typeof window.matchMedia==='function' && window.matchMedia('(hover:none)').matches;
 
-let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,allMaxMi:0,refMonth:1,refWindow:1};
+let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,allMaxMi:0,refMonth:1,refWindow:1,
+  refs:{trailing12:{income:1,months:12},singleMonth:{income:1,months:1},fullYear:{income:1,months:12},allTime:{income:1,months:1}}};
 
 /* minimal RFC4180 CSV parser */
 function parseCSV(text){
@@ -281,17 +325,77 @@ function aggregate(rows){
   DETAIL=[...det.entries()].map(([k,v])=>{ const [mi,leaf,dn]=k.split("|"); return [+mi,leaf,dn,Math.round(v)]; });
   NWHOLD=[...HOLD.values()];
   const mis=DATA.map(r=>r[0]);
-  /* scale references (income-based) so node heights are comparable across periods */
-  let refMonth=0; for(const k in incByMi) refMonth=Math.max(refMonth, incByMi[k]);
-  let refWindow=0; const im=Object.keys(incByMi).map(Number);
-  if(im.length){ const lo=Math.min(...im), hi=Math.max(...im);
-    for(let end=lo; end<=hi; end++){ let s=0; for(let m=end-11;m<=end;m++) s+=incByMi[m]||0; refWindow=Math.max(refWindow,s); } }
+  /* ---- per-Comparison_Mode scale references (income-based) ------------------
+     Each reference is the MAX income of that mode across the loaded history, so
+     any in-mode window's income is <= the reference and maps to <= TARGET_H.
+     mi = year*12+(month-1); calendar year = floor(mi/12). */
+  const im=Object.keys(incByMi).map(Number);
+  const distinctMonths=im.length;                       // months present with income
+  /* singleMonth: largest single-month income */
+  let singleMonth=0; for(const k in incByMi) singleMonth=Math.max(singleMonth, incByMi[k]);
+  /* allTime: total income over the full history */
+  let allTime=0; for(const k in incByMi) allTime+=incByMi[k];
+  /* trailing12: max total income over any COMPLETE 12-consecutive-month window;
+     if fewer than 12 months of span are present, the sum over all months present */
+  let trailing12=0, monthsTrailing12=12;
+  if(im.length){
+    const lo=Math.min(...im), hi=Math.max(...im), span=hi-lo+1;
+    if(span>=12){
+      for(let end=lo+11; end<=hi; end++){ let s=0; for(let m=end-11;m<=end;m++) s+=incByMi[m]||0; trailing12=Math.max(trailing12,s); }
+    } else {
+      trailing12=allTime; monthsTrailing12=span;         // fewer than 12 months present
+    }
+  }
+  /* fullYear: max calendar-year total income across all calendar years present */
+  let fullYear=0; { const byYear={}; for(const k in incByMi){ const y=Math.floor((+k)/12); byYear[y]=(byYear[y]||0)+incByMi[k]; }
+    for(const y in byYear) fullYear=Math.max(fullYear, byYear[y]); }
+  /* floor every reference income to a positive value (>=1) so heights stay finite */
+  const floorPos=v=>Math.max(1,v);
+  const refs={
+    trailing12:  { income: floorPos(trailing12),  months: monthsTrailing12 },
+    singleMonth: { income: floorPos(singleMonth), months: 1 },
+    fullYear:    { income: floorPos(fullYear),    months: 12 },
+    allTime:     { income: floorPos(allTime),     months: distinctMonths || 1 }
+  };
   META={years:[...years].sort((a,b)=>a-b), minMi:Math.min(...mis), maxMi:Math.max(...mis),
-        allMinMi:allMin, allMaxMi:allMax, refMonth:refMonth||1, refWindow:refWindow||1};
+        allMinMi:allMin, allMaxMi:allMax, refs,
+        /* superseded by refs.singleMonth/refs.trailing12; kept until task 1.3 removes the last reader */
+        refMonth:refs.singleMonth.income, refWindow:refs.trailing12.income};
+}
+
+/* ---- Scale_Engine: active Scale_Reference (pure) --------------------------
+   scaleReferenceFor(mode, monthly, refs) -> positive number.
+   Maps the Comparison_Mode to its base reference income
+   (trailing->trailing12, month->singleMonth, year->fullYear, all->allTime).
+   When the "per month (avg)" toggle is on, divides that base income by the
+   mode's reference-window month count; otherwise uses the undivided income.
+   Reads only (mode, monthly, refs) so the result is window-independent (it
+   never touches miF/miT), and is clamped to a positive floor (>=1) so heights
+   stay finite when the largest income is zero. build() consumes this in
+   task 1.4 as curScale = TARGET_H / scaleReferenceFor(mode, monthly, refs). */
+function scaleReferenceFor(mode, monthly, refs){
+  const MODE_KEY={trailing:'trailing12', month:'singleMonth', year:'fullYear', all:'allTime'};
+  const ref=(refs && refs[MODE_KEY[mode]]) || (refs && refs.trailing12);
+  const income=ref ? ref.income : 1;
+  const months=(ref && ref.months>0) ? ref.months : 1;
+  return Math.max(1, monthly ? income/months : income);
+}
+
+/* ---- Savings_Calculator: savings percentage (pure) ------------------------
+   savingsPercentage(selectedIncome, selectedExpenses) -> number | null.
+   Returns null when selectedIncome <= 0 (caller shows a non-numeric
+   placeholder like "—" instead of dividing). Otherwise returns
+   (selectedIncome - selectedExpenses) / selectedIncome * 100, rounded to one
+   decimal place; negative results are allowed. Never returns NaN or Infinity.
+   paintTotals consumes this in task 4.3. */
+function savingsPercentage(selectedIncome, selectedExpenses){
+  if(!(selectedIncome>0)) return null;
+  return Math.round((selectedIncome-selectedExpenses)/selectedIncome*1000)/10;
 }
 
 /* ---- layout config ------------------------------------------------------- */
 const W=900, PAD_T=20, PAD_B=20, NODEW=13, GAP=6, MINSLOT=22, TARGET_H=360;
+const GHOST_TH=3;   // fixed pixel thickness for the dimmed flows of deselected (stub) entries
 const LEFTM=140, RIGHTM=185;
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--liberality'),Taxes:cssv('--taxes'),Savings:cssv('--savings')};
@@ -299,6 +403,25 @@ const INCOME=cssv('--income'), BUDGET=cssv('--budget'), EXPC=cssv('--exp');
 const ORDER=["Work income","Non-work income","Total income","Expenses","Needs","Wants","Liberality","Taxes","Savings"];
 const svg=document.getElementById('sankey'), NS="http://www.w3.org/2000/svg", tip=document.getElementById('tip');
 let showK=false, curMiF=0, curMiT=0, curDiv=1, curScale=1;
+
+/* ---- Selection_State (interactive selection) ------------------------------
+   Module-scope Set of *deselected* Entry keys. Lives OUTSIDE the render path so
+   it survives build() calls and Period_Selector window changes; it is only
+   cleared on an explicit reset action (no reset UI in this task). Empty set
+   means everything is selected. Entry keys are window-independent identities:
+     income leaf         -> "I|"+leaf
+     income group        -> "IG|"+group
+     expense macro group -> "EG|"+group
+     expense leaf        -> "E|"+leaf
+   isSelected/toggleEntry are consumed by applySelection (task 2.3) and render
+   (task 2.5); this task only introduces the state + helpers. */
+let deselected = new Set();
+function isSelected(key){ return !deselected.has(key); }
+function toggleEntry(key){
+  if(deselected.has(key)) deselected.delete(key); else deselected.add(key);
+  build();   // synchronous re-render off the mutated Selection_State
+}
+
 const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:1})+"K" : Math.round(v).toLocaleString();
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
 function hideTip(){ tip.style.opacity=0; }
@@ -325,10 +448,162 @@ function computeLinks(miF,miT){
   const sav=income-outflow; if(sav>0) links.push(['Total income','Savings',sav]);
   return {links, income, expGrp, sav, months:Object.keys(monthsSeen).length||1};
 }
+
+/* ---- Interactive selection: filter the diagram by Selection_State (pure) ---
+   applySelection(res, deselected) -> { links, income, expGrp, sav, months, hidden }.
+   Recomputes the computeLinks() result over ONLY the selected entries, keyed by
+   the window-independent Entry identities:
+     income leaf         -> "I|"+leaf
+     income group        -> "IG|"+group
+     expense macro group -> "EG|"+group
+     expense leaf        -> "E|"+leaf
+   An income (or expense) leaf is kept only when neither its own key nor its
+   group key is in `deselected`. Income-group subtotals + total income and the
+   expense-group subtotals + outflow are recomputed from the kept leaves, and
+   sav = income - outflow. The returned object has the SAME shape computeLinks
+   produces (links / income / expGrp / sav / months, in the same link order) so
+   render()/paintTotals() consume it unchanged, PLUS `hidden`: the set of the
+   in-window Entry keys that are deselected, so render() can draw them
+   de-emphasized. The empty deselected set is the identity — the result equals
+   the input totals and an equivalent links array. Pure: reads only its two
+   args, no DOM and no module-scope globals. applySelection is wired into
+   build() (before render/paintTotals) in task 2.5. */
+function applySelection(res, deselected){
+  const ds = deselected || new Set();
+  const links = (res && res.links) || [];
+  /* 1) recover the leaf/group structure from the raw [src,tgt,val] triples:
+        income groups  = sources of the "-> Total income" links,
+        expense groups = targets of the "Expenses ->" links. */
+  const incGroupSet = new Set(), expGroupSet = new Set();
+  for(const [s,t] of links){
+    if(t==='Total income') incGroupSet.add(s);
+    if(s==='Expenses') expGroupSet.add(t);
+  }
+  /* income leaf link = [leaf, group, v] (target is an income group);
+     expense leaf link = [group, leaf, v] (source is an expense group).
+     Preserve link-array order so the rebuilt links match computeLinks exactly. */
+  const incLeaves=[], expLeaves=[];
+  for(const [s,t,v] of links){
+    if(incGroupSet.has(t)) incLeaves.push({leaf:s, group:t, v});
+    else if(expGroupSet.has(s)) expLeaves.push({group:s, leaf:t, v});
+  }
+  /* 2) hidden = in-window Entry keys that are currently deselected. */
+  const hidden = new Set();
+  const mark=k=>{ if(ds.has(k)) hidden.add(k); };
+  incGroupSet.forEach(g=>mark('IG|'+g));
+  expGroupSet.forEach(g=>mark('EG|'+g));
+  incLeaves.forEach(x=>mark('I|'+x.leaf));
+  expLeaves.forEach(x=>mark('E|'+x.leaf));
+  /* 3) recompute the income side over selected leaves only. */
+  const incGrp={}, incGrpOrder=[]; let income=0; const outLinks=[];
+  const keptInc=[];
+  for(const {leaf,group,v} of incLeaves){
+    if(ds.has('I|'+leaf) || ds.has('IG|'+group)) continue;
+    keptInc.push([leaf,group,v]);
+    if(!(group in incGrp)){ incGrp[group]=0; incGrpOrder.push(group); }
+    incGrp[group]+=v; income+=v;
+  }
+  keptInc.forEach(l=>outLinks.push(l));
+  incGrpOrder.forEach(g=>outLinks.push([g,'Total income',incGrp[g]]));
+  /* 4) recompute the expense side over selected leaves only. */
+  const expGrp={}, expGrpOrder=[]; let outflow=0; const eb=[];
+  for(const {group,leaf,v} of expLeaves){
+    if(ds.has('E|'+leaf) || ds.has('EG|'+group)) continue;
+    if(!(group in expGrp)){ expGrp[group]=0; expGrpOrder.push(group); }
+    expGrp[group]+=v; outflow+=v; eb.push([group,leaf,v]);
+  }
+  if(outflow>0) outLinks.push(['Total income','Expenses',outflow]);
+  expGrpOrder.forEach(g=>outLinks.push(['Expenses',g,expGrp[g]]));
+  eb.forEach(x=>outLinks.push(x));
+  const sav=income-outflow; if(sav>0) outLinks.push(['Total income','Savings',sav]);
+  return {links:outLinks, income, expGrp, sav, months:(res&&res.months)||1, hidden};
+}
+
+/* ---- ghost (stub) links for in-window deselected entries ------------------
+   ghostLinks(raw, res) -> [{ s, t, node, key }, ...].
+   applySelection() already removed the deselected entries from the sized links;
+   this rebuilds a light, zero-value connector for each in-window `hidden` key so
+   render() can draw it as a greyed, minimum-height stub node (still tappable to
+   reactivate) with a dimmed flow. Group membership is recovered from the RAW
+   (pre-selection) structure; a leaf whose own group is no longer part of the
+   sized diagram is anchored to the nearest surviving backbone node so the stub
+   still lays out sensibly. `node` names the entry's own node (the one that gets
+   the .deselected treatment and the reactivate tap). Returns [] when nothing is
+   hidden, so a diagram with an empty Selection_State is byte-for-byte unchanged. */
+function ghostLinks(raw, res){
+  const hid = (res && res.hidden) || new Set();
+  if(!hid.size) return [];
+  const rlinks = (raw && raw.links) || [];
+  const incGroupSet=new Set(), expGroupSet=new Set();
+  for(const [s,t] of rlinks){ if(t==='Total income') incGroupSet.add(s); if(s==='Expenses') expGroupSet.add(t); }
+  const grpOfIncLeaf={}, grpOfExpLeaf={};
+  for(const [s,t] of rlinks){
+    if(incGroupSet.has(t)) grpOfIncLeaf[s]=t;         // income leaf -> its income group
+    else if(expGroupSet.has(s)) grpOfExpLeaf[t]=s;    // expense leaf -> its macro group
+  }
+  /* nodes that survive into the sized (selected) diagram */
+  const real=new Set(); for(const [s,t] of ((res&&res.links)||[])){ real.add(s); real.add(t); }
+  const ghosts=[];
+  hid.forEach(key=>{
+    const p=key.indexOf('|'), kind=key.slice(0,p), name=key.slice(p+1);
+    if(kind==='I'){                                   // income leaf
+      const g=grpOfIncLeaf[name];
+      ghosts.push({s:name, t: real.has(g)? g : 'Total income', node:name, key});
+    } else if(kind==='IG'){                           // income macro group
+      ghosts.push({s:name, t:'Total income', node:name, key});
+    } else if(kind==='EG'){                           // expense macro group
+      ghosts.push({s: real.has('Expenses')?'Expenses':'Total income', t:name, node:name, key});
+    } else if(kind==='E'){                            // expense leaf
+      const g=grpOfExpLeaf[name];
+      const src = real.has(g)? g : (real.has('Expenses')?'Expenses':'Total income');
+      ghosts.push({s:src, t:name, node:name, key});
+    }
+  });
+  return ghosts;
+}
 function detailFor(leaf){
   const d={};
   DETAIL.forEach(([mi,lf,dn,v])=>{ if(lf===leaf && mi>=curMiF && mi<=curMiT) d[dn]=(d[dn]||0)+v; });
   return Object.entries(d).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+}
+
+/* ---- Drilldown_Chart: per-month category series (pure) --------------------
+   monthlySeries(kind, category, miF, miT, DATA, DETAIL) -> [{mi, value}, ...].
+
+   Sums a single drilled category's euro amounts per month index, drawing from
+   the same source and using the same sign convention as the rest of the app:
+     kind==='income'  -> DATA rows with kind 'I' whose leaf === category;
+                         income vals are stored positive (as computeLinks reads
+                         them), summed as-is.
+     kind==='expense' -> DATA rows with kind 'E' whose leaf === category;
+                         expense vals are stored negative, flipped to a positive
+                         spend exactly as computeLinks does (-val).
+     kind==='detail'  -> DETAIL rows whose sub-category dn === category; DETAIL
+                         values are already positive (as detailFor reads them).
+
+   Emits EXACTLY one {mi, value} point per month index in [miF, miT],
+   chronological oldest->newest with indices exactly miF..miT (inclusive),
+   value 0 for months with no activity, and NO point for any month outside the
+   window (mi = year*12+(month-1)). Pure: reads only its arguments. Consumed by
+   renderDrilldown (task 5.3). */
+function monthlySeries(kind, category, miF, miT, data, detail){
+  const rows = kind==='detail' ? (detail||[]) : (data||[]);
+  const sums = {};                                    // mi -> summed value
+  if(kind==='detail'){
+    rows.forEach(([mi,lf,dn,v])=>{
+      if(dn!==category || mi<miF || mi>miT) return;
+      sums[mi]=(sums[mi]||0)+v;                        // DETAIL values already positive
+    });
+  } else {
+    const wantKind = kind==='income' ? 'I' : 'E';
+    rows.forEach(([mi,k,grp,leaf,val])=>{
+      if(k!==wantKind || leaf!==category || mi<miF || mi>miT) return;
+      sums[mi]=(sums[mi]||0)+(wantKind==='I' ? val : -val);   // expenses stored negative -> positive spend
+    });
+  }
+  const out=[];
+  for(let mi=miF; mi<=miT; mi++) out.push({ mi, value: sums[mi]||0 });   // one point per month, oldest->newest
+  return out;
 }
 
 /* ---- floating mini-sankey (category -> details) -------------------------- */
@@ -353,35 +628,140 @@ function renderMini(leaf,color){
     p.setAttribute('fill',color); p.setAttribute('fill-opacity','.38'); miniSvg.appendChild(p); soff+=bar;
     const rr=document.createElementNS(NS,'rect'); rr.setAttribute('x',rightX); rr.setAttribute('y',ry);
     rr.setAttribute('width',nodeW); rr.setAttribute('height',Math.max(1,bar)); rr.setAttribute('rx',2); rr.setAttribute('fill',color); miniSvg.appendChild(rr);
-    const tl=document.createElementNS(NS,'text'); tl.setAttribute('x',rightX+nodeW+6); tl.setAttribute('y',ry+bar/2);
+    const tl=document.createElementNS(NS,'text'); tl.setAttribute('x',rightX+nodeW+24); tl.setAttribute('y',ry+bar/2);
     tl.setAttribute('class','mtx'); tl.textContent=`${dn}  ${fmt(v)} · ${(v/total*100).toFixed(0)}%`; miniSvg.appendChild(tl);
+    /* per-row drill control -> month trend for this detail sub-category (kind 'detail') */
+    addDrillGlyph(miniSvg, rightX+nodeW+12, ry+bar/2, Math.max(18,Math.min(slot,24)), 'detail', dn);
     y+=slot+gap;
   });
   const lr=document.createElementNS(NS,'rect'); lr.setAttribute('x',leftX); lr.setAttribute('y',leftY);
   lr.setAttribute('width',nodeW); lr.setAttribute('height',Math.max(1,leftH)); lr.setAttribute('rx',2); lr.setAttribute('fill',color); miniSvg.appendChild(lr);
   return H;
 }
+let miniHideT=null;
 function showMini(e,leaf,color){
+  if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; }
   if(leaf!==miniLeaf){ miniH=renderMini(leaf,color); miniLeaf=leaf; miniEl.style.opacity=1; }
+  miniEl.style.pointerEvents='auto';   // interactive so the per-row detail drill glyph is tappable
   let left=e.clientX+16, top=e.clientY+16; const w=400, h=miniH+34;
   if(left+w>window.innerWidth) left=e.clientX-w-8;
   if(top+h>window.innerHeight) top=Math.max(8,window.innerHeight-h-8);
   miniEl.style.left=left+'px'; miniEl.style.top=top+'px';
 }
-function hideMini(){ miniEl.style.opacity=0; miniLeaf=null; }
+/* deferred hide so moving the pointer from the node into the mini keeps it open
+   (lets the user reach the per-row detail drill glyph) */
+function scheduleHideMini(){ if(miniHideT) clearTimeout(miniHideT); miniHideT=setTimeout(hideMini,180); }
+function hideMini(){ if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; } miniEl.style.opacity=0; miniEl.style.pointerEvents='none'; miniLeaf=null; }
+miniEl.addEventListener('mouseenter',()=>{ if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; } });
+miniEl.addEventListener('mouseleave',hideMini);
+
+/* ---- Drilldown_Chart: overlay + lifecycle -------------------------------- */
+/* `drill` is null when the overlay is closed, else { kind, category }. The
+   overlay is a framed panel (same visual language as #mini/.framed) with a
+   title, an inline SVG bar chart (one bar per calendar month in the active
+   window) and a close button. Opening it does NOT tear down the Sankey or the
+   Selection_State; closing it leaves `deselected` untouched (Requirement 5.9). */
+let drill=null;
+const drillEl=document.getElementById('drilldown'), drillTitle=document.getElementById('drillTitle'),
+      drillSvg=document.getElementById('drillSvg'), drillMsg=document.getElementById('drillMsg'),
+      drillClose=document.getElementById('drillClose');
+function openDrilldown(category, kind){
+  hideMini();                          // clear any transient detail popup first
+  drill={kind, category};
+  if(drillEl) drillEl.style.display='';
+  renderDrilldown();
+}
+function closeDrilldown(){
+  drill=null;                          // Selection_State (deselected) is NOT touched
+  if(drillEl) drillEl.style.display='none';
+}
+/* renderDrilldown reads the active window (curMiF/curMiT, set by build()), maps
+   monthlySeries() to bars scaled to the series max, labels each bar with
+   miLabel(mi) on the x-axis and its value via the existing fmt() (so the K
+   toggle is honoured automatically), shows the drilled category in the title,
+   and takes an explicit empty-state branch when the series is empty or every
+   value is 0 (Requirements 5.5-5.8). */
+function renderDrilldown(){
+  if(!drill || !drillSvg) return;
+  const {kind, category}=drill;
+  if(drillTitle) drillTitle.textContent=category;
+  const series=monthlySeries(kind, category, curMiF, curMiT, DATA, DETAIL);
+  const max=series.reduce((m,p)=>Math.max(m,p.value),0);
+  if(!series.length || max<=0){       // empty-state: no activity in the window
+    drillSvg.style.display='none';
+    if(drillMsg){ drillMsg.style.display=''; drillMsg.textContent=`No activity for “${category}” in ${miLabel(curMiF)} — ${miLabel(curMiT)}.`; }
+    return;
+  }
+  if(drillMsg) drillMsg.style.display='none';
+  drillSvg.style.display='';
+  const n=series.length;
+  const barW=Math.max(12, Math.min(46, 560/n)), gap=Math.max(4, barW*0.32);
+  const padL=10, padR=10, padTop=24, chartH=180, botH=46;
+  const innerW=n*barW+(n-1)*gap, VW=padL+padR+innerW, VH=padTop+chartH+botH, baseY=padTop+chartH;
+  drillSvg.setAttribute('viewBox',`0 0 ${VW} ${VH}`); drillSvg.setAttribute('width',VW); drillSvg.setAttribute('height',VH); drillSvg.innerHTML='';
+  const color = kind==='income'?INCOME : kind==='expense'?EXPC : GROUPCOL.Wants;
+  const axis=document.createElementNS(NS,'line'); axis.setAttribute('x1',padL); axis.setAttribute('y1',baseY);
+  axis.setAttribute('x2',VW-padR); axis.setAttribute('y2',baseY); axis.setAttribute('class','daxis'); drillSvg.appendChild(axis);
+  series.forEach((p,i)=>{
+    const x=padL+i*(barW+gap), bh=(p.value/max)*chartH, yb=baseY-bh, cx=x+barW/2;
+    const rect=document.createElementNS(NS,'rect'); rect.setAttribute('x',x); rect.setAttribute('y',yb);
+    rect.setAttribute('width',barW); rect.setAttribute('height',Math.max(0,bh)); rect.setAttribute('rx',2);
+    rect.setAttribute('fill',color); rect.setAttribute('fill-opacity','.85'); drillSvg.appendChild(rect);
+    if(p.value>0){ const vt=document.createElementNS(NS,'text'); vt.setAttribute('x',cx); vt.setAttribute('y',yb-5);
+      vt.setAttribute('text-anchor','middle'); vt.setAttribute('class','dval'); vt.textContent=fmt(p.value); drillSvg.appendChild(vt); }
+    const mt=document.createElementNS(NS,'text'); mt.setAttribute('x',cx); mt.setAttribute('y',baseY+14);
+    mt.setAttribute('text-anchor','end'); mt.setAttribute('class','dmon');
+    mt.setAttribute('transform',`rotate(-45 ${cx} ${baseY+14})`); mt.textContent=miLabel(p.mi); drillSvg.appendChild(mt);
+  });
+}
+if(drillClose) drillClose.addEventListener('click',e=>{ e.stopPropagation(); closeDrilldown(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && drill) closeDrilldown(); });
+
+/* Small bar-chart drill glyph with an enlarged transparent tap target. It is a
+   separate SVG element from the node body, so a node tap still toggles selection
+   (task 2.5) while a glyph tap opens the drilldown. The transparent hit rect is
+   sized so it is >=44x44 CSS px at <=480px: on the main Sankey a 56-user-unit
+   rect renders ~45px at the mobile min diagram width of 720px. */
+function addDrillGlyph(targetSvg, cx, cy, hit, kind, category){
+  const g=document.createElementNS(NS,'g'); g.setAttribute('class','drill');
+  const hr=document.createElementNS(NS,'rect'); hr.setAttribute('x',cx-hit/2); hr.setAttribute('y',cy-hit/2);
+  hr.setAttribute('width',hit); hr.setAttribute('height',hit); hr.setAttribute('class','hit'); g.appendChild(hr);
+  const bw=2.2, bg=1.5, bhs=[4,7,10], x0=cx-(bw*3+bg*2)/2, gBase=cy+5;
+  bhs.forEach((h,i)=>{ const b=document.createElementNS(NS,'rect'); b.setAttribute('x',x0+i*(bw+bg));
+    b.setAttribute('y',gBase-h); b.setAttribute('width',bw); b.setAttribute('height',h); b.setAttribute('rx',.4);
+    b.setAttribute('class','bar'); g.appendChild(b); });
+  g.addEventListener('click',e=>{ e.stopPropagation(); openDrilldown(category, kind); });
+  targetSvg.appendChild(g);
+  return g;
+}
 
 /* ---- render sankey ------------------------------------------------------- */
 function render(res){
   svg.innerHTML=''; const {links, income}=res;
-  if(!links.length || income<=0){ svg.style.display='none'; return; }
+  const hidden=res.hidden||new Set(), ghosts=res.ghosts||[];
+  if(!links.length || income<=0){ svg.style.display='none'; return; }   // all-deselected / empty income: hide the body gracefully (no divide-by-zero)
   svg.style.display='block';
   const nodes={};
   const ensure=n=>{ if(!nodes[n]) nodes[n]={name:n,in:0,out:0,outLinks:[],inLinks:[]}; return nodes[n]; };
   links.forEach(([s,t,v])=>{ const S=ensure(s),T=ensure(t),l={s,t,v,src:S,tgt:T}; S.out+=v; S.outLinks.push(l); T.in+=v; T.inLinks.push(l); });
+  /* deselected entries: zero-value ghost connectors, added for layout + drawing
+     ONLY (they never touch in/out sums, so they are excluded from node/flow sizing). */
+  ghosts.forEach(g=>{ const S=ensure(g.s), T=ensure(g.t); ensure(g.node).entryKey=g.key;
+    const l={s:g.s,t:g.t,v:0,src:S,tgt:T,ghost:true}; S.outLinks.push(l); T.inLinks.push(l); });
   const NL=Object.values(nodes); NL.forEach(n=> n.value=Math.max(n.in,n.out));
-  const layerOf=n=> n.in===0?0:1+Math.max(...n.inLinks.map(l=>layerOf(l.src)));
+  const layerOf=n=> n.inLinks.length ? 1+Math.max(...n.inLinks.map(l=>layerOf(l.src))) : 0;
   NL.forEach(n=> n.layer=layerOf(n));
   const maxLayer=Math.max(...NL.map(n=>n.layer));
+  /* window-independent Entry key for a node (null for the backbone hubs). Ghost
+     stub nodes carry an explicit entryKey; real nodes derive it from position. */
+  const entryKeyOf=n=>{ if(n.entryKey) return n.entryKey;
+    const nm=n.name;
+    if(nm==='Total income'||nm==='Expenses'||nm==='Savings') return null;
+    if(n.outLinks.some(l=>l.tgt&&l.tgt.name==='Total income')) return 'IG|'+nm;   // income macro group
+    if(n.inLinks.some(l=>l.src&&l.src.name==='Expenses')) return 'EG|'+nm;         // expense macro group
+    if(n.layer===0) return 'I|'+nm;                                               // income leaf
+    if(n.layer===maxLayer) return 'E|'+nm;                                        // expense leaf
+    return null; };
   const band=n=> n.layer===0 ? n.outLinks[0].tgt.name : n.layer===maxLayer ? n.inLinks[0].src.name : n.name;
   const nodeColor=n=> n.layer<=1 ? INCOME : n.name==='Total income' ? BUDGET : n.name==='Expenses' ? EXPC : n.name==='Savings' ? GROUPCOL.Savings : (GROUPCOL[band(n)]||BUDGET);
   const linkColor=l=> l.tgt.layer<=2 ? INCOME : l.tgt.name==='Expenses' ? EXPC : l.tgt.name==='Savings' ? GROUPCOL.Savings : l.src.name==='Expenses' ? (GROUPCOL[l.tgt.name]||EXPC) : (GROUPCOL[l.src.name]||BUDGET);
@@ -392,53 +772,96 @@ function render(res){
   const contentH=Math.max(...used);
   const xOf=L=> LEFTM + L*((W-LEFTM-RIGHTM-NODEW)/maxLayer);
   byLayer.forEach((col,ci)=>{ let y=PAD_T+(contentH-used[ci])/2;
-    col.forEach(n=>{ const bar=n.value*scale, slot=Math.max(bar,MINSLOT); n.x=xOf(ci); n.h=bar; n.y=y+(slot-bar)/2; y+=slot+GAP; }); });
+    col.forEach(n=>{ const key=entryKeyOf(n), isHidden=key&&hidden.has(key);
+      const bar=isHidden?MINSLOT:n.value*scale, slot=Math.max(bar,MINSLOT); n.x=xOf(ci); n.h=bar; n.y=y+(slot-bar)/2; y+=slot+GAP; }); });
   const H=PAD_T+contentH+PAD_B; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   NL.forEach(n=>{ n.outLinks.sort((a,b)=>a.tgt.y-b.tgt.y); n.inLinks.sort((a,b)=>a.src.y-b.src.y);
-    let so=0; n.outLinks.forEach(l=>{ l.soff=so; so+=l.v*scale; });
-    let io=0; n.inLinks.forEach(l=>{ l.ioff=io; io+=l.v*scale; }); });
-  const ribbon=l=>{ const th=l.v*scale, sx=l.src.x+NODEW, tx=l.tgt.x, sy=l.src.y+l.soff+th/2, ty=l.tgt.y+l.ioff+th/2, xm=(sx+tx)/2, t=th/2;
+    /* real links stack by their sized thickness; ghost stubs get a fixed thin
+       band just below the node so they never shift the real ribbons. */
+    let so=0, gso=0; n.outLinks.forEach(l=>{ if(l.ghost){ l.soff=n.h+2+gso; gso+=GHOST_TH+1; } else { l.soff=so; so+=l.v*scale; } });
+    let io=0, gio=0; n.inLinks.forEach(l=>{ if(l.ghost){ l.ioff=n.h+2+gio; gio+=GHOST_TH+1; } else { l.ioff=io; io+=l.v*scale; } }); });
+  const ribbon=l=>{ const th=l.ghost?GHOST_TH:l.v*scale, sx=l.src.x+NODEW, tx=l.tgt.x, sy=l.src.y+l.soff+th/2, ty=l.tgt.y+l.ioff+th/2, xm=(sx+tx)/2, t=th/2;
     return `M${sx},${sy-t} C${xm},${sy-t} ${xm},${ty-t} ${tx},${ty-t} L${tx},${ty+t} C${xm},${ty+t} ${xm},${sy+t} ${sx},${sy+t} Z`; };
   NL.forEach(n=> n.outLinks.forEach(l=>{ const p=document.createElementNS(NS,'path');
-    p.setAttribute('d',ribbon(l)); p.setAttribute('fill',linkColor(l)); p.setAttribute('class','link');
-    p.addEventListener('mousemove',e=>showTip(e,`${l.s} → ${l.t}: ${fmt(l.v)}`)); p.addEventListener('mouseleave',hideTip); svg.appendChild(p); }));
+    p.setAttribute('d',ribbon(l)); p.setAttribute('fill',linkColor(l)); p.setAttribute('class', l.ghost?'link deselected':'link');
+    if(!l.ghost){ p.addEventListener('mousemove',e=>showTip(e,`${l.s} → ${l.t}: ${fmt(l.v)}`)); p.addEventListener('mouseleave',hideTip); } svg.appendChild(p); }));
   NL.forEach(n=>{ const g=document.createElementNS(NS,'g'); g.setAttribute('class','node');
+    const key=entryKeyOf(n), isHidden=key&&hidden.has(key);
+    if(isHidden) g.classList.add('deselected');
     const r=document.createElementNS(NS,'rect'); r.setAttribute('x',n.x); r.setAttribute('y',n.y);
     r.setAttribute('width',NODEW); r.setAttribute('height',Math.max(1,n.h)); r.setAttribute('rx',2); r.setAttribute('fill',nodeColor(n));
-    const isExpLeaf = n.layer===maxLayer && detailFor(n.name).length>0;
-    r.addEventListener('mousemove',e=>{ if(isExpLeaf){ showMini(e,n.name,nodeColor(n)); }
-      else showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); });
-    r.addEventListener('mouseleave',()=>{ hideTip(); hideMini(); });
-    /* touch / no-hover devices: tap a category to show the same detail popup */
-    if(noHover()){ r.style.cursor='pointer';
-      r.addEventListener('click',e=>{ e.stopPropagation();
-        if(isExpLeaf){ if(miniLeaf===n.name){ hideMini(); } else { showMini(e,n.name,nodeColor(n)); } }
-        else { showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); }
-      });
+    const isExpLeaf = !isHidden && n.layer===maxLayer && detailFor(n.name).length>0;
+    /* plain click/tap on the node body toggles selection for the four Entry kinds
+       (distinct from the hover mini-Sankey detail below and the drill control);
+       a greyed, deselected stub taps back on. */
+    if(key){ r.style.cursor='pointer'; r.addEventListener('click',e=>{ e.stopPropagation(); toggleEntry(key); }); }
+    /* hover detail (mini-Sankey for expense leaves, else tooltip) — selected nodes only */
+    if(!isHidden){
+      r.addEventListener('mousemove',e=>{ if(isExpLeaf){ showMini(e,n.name,nodeColor(n)); }
+        else showTip(e,`<b>${n.name}</b> ${fmt(n.value)} <span style="color:#9aa6bd">(${(n.value/income*100).toFixed(0)}% of income)</span>`); });
+      r.addEventListener('mouseleave',()=>{ hideTip(); scheduleHideMini(); });
     }
     g.appendChild(r);
     const label=document.createElementNS(NS,'text'); const mid=n.y+n.h/2;
     if(n.layer===0 || n.layer===maxLayer){
       const left=n.layer===0;
       label.setAttribute('x', left? n.x-8 : n.x+NODEW+8); label.setAttribute('text-anchor', left?'end':'start'); label.setAttribute('y',mid);
-      const a=document.createElementNS(NS,'tspan'); a.textContent=n.name;
-      const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=' '+fmt(n.value)+'  '+(n.value/income*100).toFixed(0)+'%';
-      label.append(a,b);
+      const a=document.createElementNS(NS,'tspan'); a.textContent=n.name; label.append(a);
+      if(!isHidden){ const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=' '+fmt(n.value)+'  '+(n.value/income*100).toFixed(0)+'%'; label.append(b); }
     }else{
       label.setAttribute('x',n.x+NODEW/2); label.setAttribute('text-anchor','middle'); label.setAttribute('y',mid); label.setAttribute('class','mid');
-      const pctTxt = income>0 && n.name!=='Total income' ? '  '+(n.value/income*100).toFixed(0)+'%' : '';
-      label.textContent = `${n.name}  ${fmt(n.value)}${pctTxt}`;
+      if(isHidden){ label.textContent=n.name; }
+      else { const pctTxt = income>0 && n.name!=='Total income' ? '  '+(n.value/income*100).toFixed(0)+'%' : ''; label.textContent = `${n.name}  ${fmt(n.value)}${pctTxt}`; }
     }
-    g.appendChild(label); svg.appendChild(g); });
+    /* mobile/touch selection parity: enlarged transparent hit rect so the node
+       tap target is >=44x44 CSS px at <=480px (>=55 user units at the mobile
+       0.8px/unit diagram scale), even for very thin bars or greyed stubs. Carries
+       the same toggleEntry(key); inert on desktop via CSS so the bar's hover
+       mini-Sankey/tooltip is untouched. Centred on the node body, it stays clear
+       of the gutter drill glyph (x=30 / x=W-30), so it never blocks a drilldown. */
+    g.appendChild(label);
+    if(key){
+      const HITMIN=55, hw=Math.max(NODEW,HITMIN), hh=Math.max(n.h,HITMIN), mc=n.y+n.h/2;
+      const nh=document.createElementNS(NS,'rect');
+      nh.setAttribute('x',n.x+NODEW/2-hw/2); nh.setAttribute('y',mc-hh/2);
+      nh.setAttribute('width',hw); nh.setAttribute('height',hh); nh.setAttribute('class','nodehit');
+      nh.addEventListener('click',e=>{ e.stopPropagation(); toggleEntry(key); });
+      g.appendChild(nh);   // appended last => on top of bar + label, so the full 55u box taps toggle
+    }
+    svg.appendChild(g);
+    /* dedicated drill control beside each drillable leaf, in the outer gutter and
+       distinct from the node-body selection tap: income leaves (key "I|") drill
+       kind 'income', expense leaves (key "E|") drill kind 'expense'. Macro groups
+       ("IG|"/"EG|") and backbone hubs get none (monthlySeries keys off leaf/dn).
+       Skipped for de-emphasized (deselected) stubs. */
+    if(!isHidden && key){
+      if(key.slice(0,2)==='I|')      addDrillGlyph(svg, 30,    n.y+n.h/2, 56, 'income',  n.name);
+      else if(key.slice(0,2)==='E|') addDrillGlyph(svg, W-30,  n.y+n.h/2, 56, 'expense', n.name);
+    }
+  });
 }
 function paintTotals(res){
+  /* res is the post-applySelection result, so income / expGrp / sav already
+     reflect the current Selection_State; the cards and the savings percentage
+     update together on every build(), synchronously (well within the 1 s bound). */
   const {income,expGrp,sav}=res;
   const totExp=["Needs","Wants","Liberality","Taxes"].reduce((a,g)=>a+(expGrp[g]||0),0);
+  /* Savings percentage via the guarded helper: savingsPercentage(selectedIncome,
+     selectedExpenses) = (income - totExp)/income*100 (== sav/income*100, since
+     outflow == totExp). Returns null when selected income <= 0 (e.g. all income
+     deselected) -> show a non-numeric placeholder instead of a number/NaN. */
+  const savPct=savingsPercentage(income,totExp);
+  const savPctLabel = savPct===null ? '\u2014' : savPct.toFixed(1)+'% saved';
   const cards=[["Income",income,INCOME],["Expenses",totExp,EXPC]];
-  if(sav>0) cards.push(["Savings",sav,GROUPCOL.Savings]);
-  const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';
-  document.getElementById('totals').innerHTML=cards.map(([lab,v,c],i)=>
-    `<div class="tot"><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${i===0?'':pct(v)}</div></div>`).join('');
+  /* keep the pre-feature card set (Savings shown when sav>0); also surface a
+     Savings card when selected income <= 0 so the "—" placeholder is visible in
+     the all-income-deselected case. */
+  if(sav>0 || !(income>0)) cards.push(["Savings",sav,GROUPCOL.Savings]);
+  const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';   // unchanged: per-income "% of income" for Income/Expenses cards
+  document.getElementById('totals').innerHTML=cards.map(([lab,v,c],i)=>{
+    const sub = lab==='Savings' ? savPctLabel : (i===0?'':pct(v));
+    return `<div class="tot"><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${sub}</div></div>`;
+  }).join('');
 }
 
 /* ---- draggable month-range slider (with movable window) ------------------ */
@@ -543,8 +966,13 @@ function buildNetWorth(){
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
-  const res=computeLinks(curMiF,curMiT); const monthly=monthlyEl.checked; curDiv=monthly?res.months:1;
-  curScale = TARGET_H / (monthly ? META.refMonth : META.refWindow);   // fixed scale => sizes comparable across periods
+  const raw=computeLinks(curMiF,curMiT); const monthly=monthlyEl.checked; curDiv=monthly?raw.months:1;
+  /* filter the diagram by the current Selection_State before sizing/painting, so
+     render() and paintTotals() consume the selection-adjusted result; res.hidden
+     drives the greyed stubs and res.ghosts their dimmed connectors. */
+  const res=applySelection(raw, deselected);
+  res.ghosts=ghostLinks(raw, res);
+  curScale = TARGET_H / scaleReferenceFor(modeEl.value, monthly, META.refs);   // per-Comparison_Mode reference: consistent within a mode, adaptive across modes
   let plabel=`${miLabel(curMiF)} — ${miLabel(curMiT)}`;
   if(monthly && res.months>0){
     res.links=res.links.map(([s,t,v])=>[s,t,v/res.months]); res.income/=res.months; res.sav/=res.months;
@@ -553,6 +981,12 @@ function build(){
   }
   document.getElementById('periodLabel').textContent=plabel;
   paintTotals(res); render(res);
+  /* If a Drilldown_Chart is open, refresh its bars against the new window/mode so
+     ANY Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
+     drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing
+     down the Sankey or the Selection_State. renderDrilldown() reads the freshly
+     updated curMiF/curMiT and no-ops when drill is null (Requirements 6.2, 6.3). */
+  renderDrilldown();
 }
 
 /* ---- data cache (stale-while-revalidate) --------------------------------- */
@@ -670,7 +1104,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries };
 }
 </script>
 </body>

@@ -18,12 +18,47 @@ Needs / Wants / Liberality / Taxes → category`.
   split into their leaf categories.
 - **Mid nodes carry their monetary value** (Total income, Expenses, Savings and
   each macro group show the € amount, plus % of income where relevant).
-- **True-scale sizing:** node/flow thickness uses a **fixed € → pixels scale**,
-  so the whole diagram grows or shrinks with the absolute size of the selected
-  period — a period with 10× the income renders visibly ~10× taller. The
-  reference is the largest trailing-12-month income (or, in *per-month* mode, the
-  largest single-month income), so the default view fills the canvas and other
-  windows scale against it.
+- **True-scale sizing, per comparison mode:** node/flow thickness uses a
+  **fixed € → pixels scale**, so the whole diagram grows or shrinks with the
+  absolute size of the selected period. The scale reference now adapts to the
+  **Quick-set comparison mode** so the diagram is **consistent within a mode but
+  readable across modes** (a single month no longer renders against a full-history
+  reference and vice versa):
+  - **Trailing 12 months** → largest total income of any complete 12-consecutive-
+    month window (falls back to the sum of all months when fewer than 12 exist).
+  - **Single month** → largest single-month income.
+  - **Full year** → largest calendar-year total income.
+  - **All time** → total income over the full history.
+  Within a mode the reference is fixed, so shifting or resizing the window keeps
+  euro-to-pixel sizing identical (two same-type windows are directly comparable);
+  switching mode recomputes it. The **per month (avg)** toggle divides the active
+  mode's reference by that mode's window length. Each reference is the *maximum*
+  income of its mode, so the largest window fills the canvas and nothing clips;
+  references are floored to a positive value so heights stay finite even with zero
+  income. Implemented by `scaleReferenceFor(mode, monthly, refs)` reading the
+  per-mode `META.refs` computed once in `aggregate()`.
+- **Interactive selection:** click/tap any Sankey entry (income leaf, income
+  group, expense macro group, or expense leaf) to **deselect/reselect** it.
+  Deselected entries render greyed and de-emphasized (reduced opacity, grayscale)
+  as still-tappable stubs, and are excluded from node/flow sizing. The selection
+  is kept by category identity, so it **survives period changes** (a category that
+  leaves and re-enters the window keeps its state). Empty selection = everything
+  selected (identical to before the feature).
+- **Selection-aware totals & savings %:** the Income / Expenses / Savings cards
+  and the **savings percentage** recompute from the current selection. Savings % =
+  (selected income − selected expenses) ÷ selected income × 100, to one decimal
+  (negative allowed); when selected income is zero (e.g. all income deselected) it
+  shows a `—` placeholder instead of dividing. Helper: `savingsPercentage()`.
+- **Bar-chart drilldown:** a small bar-chart glyph next to each **income leaf** and
+  **expense leaf** (and next to each **detail sub-category** in the hover
+  mini-Sankey) opens an overlay showing that category's **month-by-month trend** —
+  one bar per calendar month in the current window, chronological, zero-height for
+  months with no activity, value labels honouring the **K toggle**, and an
+  empty-state message when the category has no data. The drilldown **follows the
+  top period selector**: changing the window, comparison mode, or per-month toggle
+  while it is open updates the bars, without tearing down the Sankey or losing the
+  selection. Closing it returns to the diagram with the selection intact. Helper:
+  `monthlySeries(kind, category, miF, miT, DATA, DETAIL)`.
 - **Hover an expense category** to pop up a small floating Sankey of its detail
   breakdown (from the `DETAIL` column), each detail with its % of the category.
 - Totals cards on top: **Income, Expenses, Savings** only, each with its % of
@@ -139,13 +174,26 @@ Change `SHEET_ID` / `SHEET_NAME` at the top of the `<script>` block. Colours for
 the nodes/flows are CSS variables in `:root`.
 
 ## Tests (dev-only, not shipped)
-The `test/` folder holds a Node/fast-check harness for the pure helpers
-(`parseCSV`, `aggregate`, `computeLinks`, `detailFor`, `SheetCache`, `fetchSheet`,
-`isMobile`). It is **never referenced by `index.html`** — the page stays a single
-self-contained file. A tiny guarded export shim at the end of the inline script
-(`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those
+The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpers
+(`parseCSV`, `aggregate`, `computeLinks`, `applySelection`, `savingsPercentage`,
+`monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `isMobile`,
+`scaleReferenceFor`). It is **never referenced by `index.html`** — the page stays a
+single self-contained file. A tiny guarded export shim at the end of the inline
+script (`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those
 helpers to Node and is completely inert in the browser. Running the suite needs
 Node (`cd test && npm install && npm test`).
+
+The interactive-drilldown feature added property/example suites
+(`scale-engine`, `scale-canvas-bound`, `selection-state`, `apply-selection`,
+`savings-percentage`, `monthly-series`, `drilldown-selection-independence`,
+`rendering-regression`, `data-path-smoke`) covering the 11 correctness properties
+in the spec.
+
+> **Note:** these suites are **committed as source but have not been executed** on
+> the maintainer's machine. The Node/vitest harness only runs inside WSL (where
+> the `W:` working copy is not mounted), while the app itself is edited from the
+> Windows side. The suites are runnable in any environment with Node + the working
+> tree; the practical verification for this app is **manual / in-browser**.
 
 ## Local variant
 The sibling folder `Personal Finance/` also has an offline builder
