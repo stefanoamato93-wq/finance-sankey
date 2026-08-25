@@ -94,7 +94,8 @@
     /* never let the whole page scroll sideways; only the diagram/table frames do */
     html,body{overflow-x:hidden; max-width:100%;}
     header{padding:12px 16px 4px;}
-    .controls,.totals,.period,.status,.badge,#rangeBox,.hint,.nwhead,.nwcards{margin-left:14px; margin-right:14px;}
+    .controls,.totals,.period,.status,.badge,#rangeBox,.hint,.nwhead,.nwcards,#skeleton{margin-left:14px; margin-right:14px;}
+    #skeleton{max-width:100%;}
     /* controls: full-width, comfortable tap targets (>=44px), >=8px gaps */
     .controls{gap:10px; font-size:14px;}
     .controls > *{min-height:44px;}
@@ -122,6 +123,24 @@
     .swipehint{display:block;}
   }
   .swipehint{display:none; margin:4px 14px 0; color:var(--muted); font-size:11px;}
+  /* skeleton Loading_State — present at first paint (no JS), CSS-only shimmer,
+     mirrors the real layout so there is never a blank/unstyled gap before render */
+  #skeleton{margin:12px 26px 40px; max-width:940px;}
+  .sk{position:relative; overflow:hidden; background:var(--panel);
+      border:1px solid var(--grid); border-radius:10px; display:block;}
+  .sk::after{content:""; position:absolute; inset:0;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,.07), transparent);
+      transform:translateX(-100%); animation:sk-shimmer 1.4s ease-in-out infinite;}
+  @keyframes sk-shimmer{100%{transform:translateX(100%);}}
+  .sk-controls{display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px;}
+  .sk-pill{width:150px; height:34px; border-radius:8px;} .sk-pill.sk-sm{width:90px;}
+  .sk-range{height:26px; width:min(640px,100%); margin-bottom:18px;}
+  .sk-cards{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px;}
+  .sk-card{flex:1 1 180px; height:84px; border-radius:14px;} .sk-card.big{flex:1.4 1 220px;}
+  .sk-sankey{height:360px; margin-bottom:18px; border-radius:12px;}
+  .sk-table{display:flex; flex-direction:column; gap:10px;}
+  .sk-row{height:26px; width:100%; border-radius:6px;}
+  @media (prefers-reduced-motion:reduce){ .sk::after{animation:none;} }
 </style>
 </head>
 <body>
@@ -155,7 +174,27 @@
   <div class="hint">Drag the ends to resize the window, or drag the middle band to shift the whole period.</div>
 </div>
 
-<div class="status" id="status">Loading data from Google Sheets…</div>
+<!-- skeleton Loading_State: visible at first paint, hidden the moment real content renders -->
+<div id="skeleton" aria-hidden="true">
+  <div class="sk-controls">
+    <span class="sk sk-pill"></span><span class="sk sk-pill"></span>
+    <span class="sk sk-pill sk-sm"></span><span class="sk sk-pill sk-sm"></span>
+  </div>
+  <div class="sk sk-range"></div>
+  <div class="sk-cards">
+    <span class="sk sk-card"></span><span class="sk sk-card"></span><span class="sk sk-card"></span>
+  </div>
+  <div class="sk sk-sankey"></div>
+  <div class="sk-cards">
+    <span class="sk sk-card big"></span><span class="sk sk-card"></span><span class="sk sk-card"></span>
+  </div>
+  <div class="sk-table">
+    <span class="sk sk-row"></span><span class="sk sk-row"></span><span class="sk sk-row"></span>
+    <span class="sk sk-row"></span><span class="sk sk-row"></span>
+  </div>
+</div>
+
+<div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
 <div class="badge" id="dataBadge" style="display:none"></div>
 <div class="period" id="periodLabel"></div>
 <div class="totals" id="totals"></div>
@@ -578,7 +617,7 @@ function applyData(csv){
   initControlsOnce();
   const N=maxIdx();                            // keep the user's window on a refresh, clamp to new bounds
   if(hiIdx>N) hiIdx=N; if(loIdx>hiIdx) loIdx=Math.max(0,hiIdx); updateSliderUI();
-  statusEl.style.display='none';
+  statusEl.style.display='none'; hideSkeleton();
   renderAll();
 }
 function showBadge(retrievedAt,refreshing){
@@ -588,7 +627,9 @@ function showBadge(retrievedAt,refreshing){
   badgeEl.style.display='';
 }
 function clearBadge(){ if(badgeEl) badgeEl.style.display='none'; }
+function hideSkeleton(){ const s=document.getElementById('skeleton'); if(s) s.style.display='none'; }
 function showError(msg,timedOut){
+  hideSkeleton();
   statusEl.style.display=''; statusEl.className='status err';
   statusEl.innerHTML = timedOut
     ? `Loading timed out.<br>Check your connection and that the Google Sheet is shared as <b>“Anyone with the link → Viewer”</b> and has a tab named <b>DB</b>.`

@@ -100,6 +100,10 @@ cache:
   **30s overall guard** shows a timeout error if a cold load never returns. On a cold
   failure with any cached copy present (even stale), the cached copy is shown instead
   of an error.
+- A **skeleton placeholder** (CSS-only shimmer mirroring the controls, cards,
+  Sankey and table) is in the initial markup, so it paints immediately with no JS
+  and is hidden the moment real content renders (no blank/unstyled gap). It
+  respects `prefers-reduced-motion`.
 - The Sankey is rendered first and the net-worth table on the next frame, so the
   diagram paints without waiting on the table.
 - If `localStorage` is unavailable (private mode, disabled), the app silently falls
