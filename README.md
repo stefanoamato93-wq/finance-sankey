@@ -1,11 +1,17 @@
-# Personal Finance — Sankey
+# Personal finance
 
 A single, self-contained web page that renders a money-flow **Sankey diagram**
-and a detailed **net-worth table** from a Google Sheet. No build step, no
-dependencies, no data stored in this repo — it reads the sheet live in the
+and a detailed **assets & liabilities table** from a Google Sheet. No build step,
+no dependencies, no data stored in this repo — it reads the sheet live in the
 browser.
 
 **Live:** https://stefanoamato93-wq.github.io/finance-sankey/
+
+## Page order
+1. Title (**Personal finance**).
+2. **Headline cards: Net worth / Total assets / Total liabilities** (top of the page).
+3. Period controls + the money-flow **Sankey**.
+4. **Assets & liabilities** table (collapsed by category).
 
 ## What it shows
 
@@ -65,7 +71,7 @@ Needs / Wants / Liberality / Taxes → category`.
   income. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
-  header and the net-worth section).
+  header; the assets & liabilities section keeps a one-line "tap a category" hint).
 - **Mobile:** on narrow screens (≤680px) the whole page adapts, not just the
   Sankey. The Sankey still renders at a fixed wider width (min 720px) inside its
   own horizontally scrollable frame (with a "swipe sideways" hint) so labels stay
@@ -78,40 +84,58 @@ Needs / Wants / Liberality / Taxes → category`.
   again or tap elsewhere to close). Desktop layout is unchanged.
 
 ### Period selection
+- **Default view: the current (latest) month.** The app opens on single-month mode
+  anchored to the most recent month in the sheet, so the first thing on screen is
+  this month's expenses.
+- **Trailing 12 months flag:** a checkbox next to the toggles switches between the
+  current month and the trailing-12-month window. It is two-way bound to the Quick
+  set dropdown (ticking it selects Trailing 12 months, and choosing a mode in the
+  dropdown updates the tick), so the same Comparison_Mode drives both.
 - **Quick set** dropdown: Trailing 12 months / Single month / Full year / All time
   (anchored by the Year and Month pickers).
 - **Draggable range bar** (always visible): drag either end to resize the window,
   or drag the **middle band to shift the whole period** (e.g. slide a trailing-12
-  window across the years and watch the numbers update live).
+  window across the years and watch the numbers update live). The on-screen usage
+  instructions under the bar were removed.
+  - **Drag fix (landscape / touch):** `touch-action` is not inherited, so the
+    handles and the middle band now set `touch-action:none` themselves — without it
+    the browser claimed a horizontal drag as a pan gesture and the bar did not move.
+    The drag also takes a **pointer capture** on the pressed element (so moves keep
+    arriving once the finger leaves the 26px band), handles `pointercancel`, keeps
+    the enlarged invisible grab area at **every** viewport width rather than only
+    under 680px, and only falls back to the touch-event pipeline when
+    `window.PointerEvent` is missing (running both pipelines let `touchstart`'s
+    `preventDefault` cancel the in-flight pointer drag).
 - **Per month (avg)** toggle divides every value by the number of months in the
   selected window (a partial current year divides by the elapsed months). It also
   switches the true-scale reference to a single-month basis.
 - **Values in K** toggle (applies to the Sankey and the net-worth table). Default
   is **off** (full values); when on, K values are shown to **one decimal**.
 
-### Net-worth table
-One row per **holding**, keyed by `VARIABLE` (variability) × `ASSETCLASSDETAILS`
-× `ACCOUNT` × `CATEGORY3`, showing only the **current balance** — the cumulative
-of *every* transaction up to the latest month (includes appreciation, transfers
-and liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall columns
-and their calculations were removed (they were unreliable); the table is now a
-clean value-only view.
+### Assets & liabilities table
+One row per **holding**, keyed by `VARIABLE` × `ASSETCLASSDETAILS` × `ACCOUNT` ×
+`CATEGORY3`, showing only the **current balance** — the cumulative of *every*
+transaction up to the latest month (includes appreciation, transfers and
+liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall columns and
+their calculations were removed (they were unreliable); the table is a clean
+value-only view.
 
-The layout is a **pivot**, grouped and ordered like a spreadsheet pivot table:
-- **Headline cards on top:** three cards above the table — a large **Net worth**
-  hero number, plus **Total liabilities** (sum of the `LIABILITIES` category only,
-  red) and **Total assets** (everything else, i.e. Net worth − liabilities,
-  green) — so the asset/liability split reads at a glance. Note liabilities is the
-  Liabilities category, not "every negative row", so a negative cash balance
-  (e.g. a credit-card line) reduces assets rather than counting as a liability.
-- **Variability → Category → Account.** Rows are grouped by variability
-  (`Variable` / `Nonvariable`), then by `CATEGORY3` within each. Each variability
-  group and each category shows a **subtotal** row.
-- **Ordered by value, highest to lowest, within the same category.** Variability
-  groups and categories are ordered by their subtotal (high → low), and the leaf
-  account rows are ordered by value (high → low) inside their category. Leaf rows
-  show only Asset class details + Account + Value; the variability/category cells
-  are left blank because the group/category headers above name them.
+- **Headline cards at the top of the page** (above the Sankey, not above the
+  table): a large **Net worth** hero number, plus **Total assets** (green) and
+  **Total liabilities** (sum of the `LIABILITIES` category only, red). Note
+  liabilities is the Liabilities category, not "every negative row", so a negative
+  cash balance (e.g. a credit-card line) reduces assets rather than counting as a
+  liability.
+- **Collapsed by category, expand on click.** The table lists **accounts and their
+  values**, grouped by `CATEGORY3`. Only the category rows (with their subtotal and
+  account count) show by default; **clicking a category** reveals its account and
+  asset-class-details rows underneath. Clicking again collapses it. Rows are
+  keyboard-operable (Enter / Space) and the expanded set survives a re-render, so
+  toggling **values in K** does not collapse everything.
+- **Ordering:** categories by absolute subtotal (largest positions first), accounts
+  inside a category by value (high → low).
+- The `VARIABLE` (variability) grouping level was removed from the table; it is
+  still part of the holding key used to compute balances.
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).

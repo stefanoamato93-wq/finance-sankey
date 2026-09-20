@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Personal Finance — Sankey</title>
+<title>Personal finance</title>
 <style>
   :root{
     --bg:#0f1420; --panel:#151b2b; --ink:#e7ecf5; --muted:#9aa6bd;
@@ -80,11 +80,18 @@
   #rangeBox{margin:10px 26px 0; max-width:640px;}
   .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
   .dual{position:relative; height:26px; user-select:none; touch-action:none;}
+  /* touch-action is NOT inherited, so it has to be set on the draggable children too,
+     otherwise a touch/pen drag that starts on a handle or on the band is taken over by
+     the browser as a pan gesture and the range bar never moves (the "horizontal drag
+     does not work" bug). */
+  .dual .track,.dual .fill,.dual .handle{touch-action:none;}
   .dual .track{position:absolute; top:11px; left:0; right:0; height:4px; background:var(--grid); border-radius:3px; z-index:1;}
   .dual .fill{position:absolute; top:9px; height:8px; background:var(--income); opacity:.5; border-radius:4px; z-index:2; cursor:grab;}
   .dual .handle{position:absolute; top:4px; width:16px; height:16px; margin-left:-8px; border-radius:50%;
      background:#fff; border:2px solid var(--income); z-index:3; cursor:grab;}
-  .hint{margin:4px 26px 0; color:var(--muted); font-size:11px;}
+  /* enlarged invisible grab area at every viewport width (not only on the mobile
+     breakpoint), so a landscape phone/tablet still gets a comfortable target */
+  .dual .handle::before{content:""; position:absolute; top:-12px; left:-12px; right:-12px; bottom:-12px;}
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
@@ -115,6 +122,14 @@
   .nw tr.sub .val{font-size:13.5px;}
   .nw tr.cat td{background:#0e1524; font-weight:600; color:var(--muted);}
   .nw tr:last-child td{border-bottom:none;}
+  /* collapsible category groups: the category row is the only thing shown until it is
+     clicked, then its account / asset-class rows appear underneath */
+  .nw tr.cgroup{cursor:pointer;}
+  .nw tr.cgroup:hover td{background:#18233a;}
+  .nw tr.cgroup td.t{border-left:3px solid var(--budget);}
+  .nw .tw{display:inline-block; width:13px; color:var(--muted); font-size:11px;}
+  .nw .cnt{color:var(--muted); font-weight:400; font-size:11px; text-transform:none; letter-spacing:0;}
+  .nw tr.kid td{background:#0e1524;}
   .nw .val{color:var(--ink); font-weight:600;}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
   /* data-source freshness badge (shown when displaying last-loaded/cached data) */
@@ -127,7 +142,7 @@
     /* never let the whole page scroll sideways; only the diagram/table frames do */
     html,body{overflow-x:hidden; max-width:100%;}
     header{padding:12px 16px 4px;}
-    .controls,.totals,.period,.status,.badge,#rangeBox,.hint,.nwhead,.nwcards,#skeleton{margin-left:14px; margin-right:14px;}
+    .controls,.totals,.period,.status,.badge,#rangeBox,.nwhead,.nwcards,#skeleton{margin-left:14px; margin-right:14px;}
     #skeleton{max-width:100%;}
     /* controls: full-width, comfortable tap targets (>=44px), >=8px gaps */
     .controls{gap:10px; font-size:14px;}
@@ -178,8 +193,11 @@
 </head>
 <body>
 <header>
-  <h1>Personal Finance — money flow</h1>
+  <h1>Personal finance</h1>
 </header>
+
+<!-- headline net worth / total assets / total liabilities: top of the page, above the flow -->
+<div class="nwcards" id="nwcards"></div>
 
 <div class="controls" id="controls" style="display:none">
   <label>Quick set
@@ -192,6 +210,7 @@
   </label>
   <select id="year"></select>
   <select id="month"></select>
+  <label><input type="checkbox" id="t12"> trailing 12 months</label>
   <label><input type="checkbox" id="tMonthly"> per month (avg)</label>
   <label><input type="checkbox" id="tK"> values in K</label>
 </div>
@@ -204,7 +223,6 @@
     <div class="handle" id="hLo"></div>
     <div class="handle" id="hHi"></div>
   </div>
-  <div class="hint">Drag the ends to resize the window, or drag the middle band to shift the whole period.</div>
 </div>
 
 <!-- skeleton Loading_State: visible at first paint, hidden the moment real content renders -->
@@ -235,9 +253,9 @@
 <div class="wrap framed"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
 
 <div class="nwhead" id="nwhead" style="display:none">
-  <h2>Net worth</h2>
+  <h2>Assets &amp; liabilities</h2>
+  <div class="nwsub">Tap a category to see the accounts inside it.</div>
 </div>
-<div class="nwcards" id="nwcards"></div>
 <div class="nwwrap framed" id="nwwrap"></div>
 
 <div class="tip" id="tip"></div>
@@ -866,7 +884,8 @@ function paintTotals(res){
 
 /* ---- draggable month-range slider (with movable window) ------------------ */
 const modeEl=document.getElementById('mode'), yearEl=document.getElementById('year'), monthEl=document.getElementById('month'),
-      monthlyEl=document.getElementById('tMonthly'), dualEl=document.getElementById('dual'),
+      monthlyEl=document.getElementById('tMonthly'), t12El=document.getElementById('t12'),
+      dualEl=document.getElementById('dual'),
       rFill=document.getElementById('rFill'), hLo=document.getElementById('hLo'), hHi=document.getElementById('hHi'),
       rLoL=document.getElementById('rLo'), rHiL=document.getElementById('rHi');
 const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -891,19 +910,36 @@ function moveDrag(clientX){
   updateSliderUI(); build();
 }
 function endDrag(){ drag=null; }
-hLo.addEventListener('pointerdown',e=>{ beginDrag('lo',e.clientX); e.preventDefault(); });
-hHi.addEventListener('pointerdown',e=>{ beginDrag('hi',e.clientX); e.preventDefault(); });
-rFill.addEventListener('pointerdown',e=>{ beginDrag('band',e.clientX); e.preventDefault(); });
-window.addEventListener('pointermove',e=>{ moveDrag(e.clientX); });
+/* Pointer path: capture the pointer on the element that was pressed, so the drag keeps
+   receiving moves even when the finger leaves the 26px-tall bar (which is what broke the
+   drag in landscape, where the bar is a small band in a wide viewport and the browser
+   reclaimed the gesture for panning). Captured moves still bubble to window. */
+function onDown(mode){
+  return e=>{
+    beginDrag(mode, e.clientX);
+    if(e.pointerId!=null && e.currentTarget.setPointerCapture){
+      try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
+    }
+    e.preventDefault();
+  };
+}
+hLo.addEventListener('pointerdown',onDown('lo'));
+hHi.addEventListener('pointerdown',onDown('hi'));
+rFill.addEventListener('pointerdown',onDown('band'));
+window.addEventListener('pointermove',e=>{ if(drag){ moveDrag(e.clientX); e.preventDefault(); } });
 window.addEventListener('pointerup',endDrag);
-/* touch fallback for browsers that do not deliver pointer events for touch */
-const tx=e=> e.touches && e.touches[0] ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);
-hLo.addEventListener('touchstart',e=>{ beginDrag('lo',tx(e)); e.preventDefault(); },{passive:false});
-hHi.addEventListener('touchstart',e=>{ beginDrag('hi',tx(e)); e.preventDefault(); },{passive:false});
-rFill.addEventListener('touchstart',e=>{ beginDrag('band',tx(e)); e.preventDefault(); },{passive:false});
-window.addEventListener('touchmove',e=>{ if(drag){ moveDrag(tx(e)); e.preventDefault(); } },{passive:false});
-window.addEventListener('touchend',endDrag);
-window.addEventListener('touchcancel',endDrag);
+window.addEventListener('pointercancel',endDrag);
+/* touch fallback ONLY where pointer events are unavailable: running both pipelines meant
+   touchstart's preventDefault could cancel the in-flight pointer sequence and kill the drag */
+if(!window.PointerEvent){
+  const tx=e=> e.touches && e.touches[0] ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);
+  hLo.addEventListener('touchstart',e=>{ beginDrag('lo',tx(e)); e.preventDefault(); },{passive:false});
+  hHi.addEventListener('touchstart',e=>{ beginDrag('hi',tx(e)); e.preventDefault(); },{passive:false});
+  rFill.addEventListener('touchstart',e=>{ beginDrag('band',tx(e)); e.preventDefault(); },{passive:false});
+  window.addEventListener('touchmove',e=>{ if(drag){ moveDrag(tx(e)); e.preventDefault(); } },{passive:false});
+  window.addEventListener('touchend',endDrag);
+  window.addEventListener('touchcancel',endDrag);
+}
 function presetRange(){
   const mode=modeEl.value, y=+yearEl.value, m=+monthEl.value;
   if(mode==='all') return [META.minMi, META.maxMi];
@@ -914,7 +950,12 @@ function presetRange(){
 }
 function applyPreset(){ const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi); build(); }
 
-/* ---- net worth table (pivot: variability -> category -> account, by value) */
+/* ---- net worth: headline cards + collapsible assets/liabilities table -------
+   The table lists accounts and their values, grouped by category. Categories are
+   collapsed by default; clicking one reveals its account / asset-class rows.
+   `nwOpen` lives at module scope so the expanded set survives a re-render (e.g.
+   toggling "values in K"). */
+let nwOpen=new Set();
 function buildNetWorth(){
   const holds=NWHOLD; const wrap=document.getElementById('nwwrap'); const cardsEl=document.getElementById('nwcards');
   if(!holds.length){ if(cardsEl) cardsEl.innerHTML=''; wrap.innerHTML=''; return; }
@@ -937,30 +978,36 @@ function buildNetWorth(){
     `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`+
     `<div class="nwcard liab"><div class="lab">Total liabilities</div><div class="big">${money(liab)}</div></div>`;
 
-  // group by variability, then by category; both ordered by subtotal value (high -> low),
-  // leaf rows ordered by value (high -> low) within the same category (pivot style)
-  const varyMap={}; rows.forEach(r=>{ (varyMap[r.vary]=varyMap[r.vary]||[]).push(r); });
-  const varyOrder=Object.keys(varyMap).sort((a,b)=>sumV(varyMap[b])-sumV(varyMap[a]));
+  // group by category, ordered by absolute subtotal (biggest positions first); the
+  // account rows inside a category are ordered by value (high -> low) and are only
+  // rendered when that category is open.
+  const catMap={}; rows.forEach(r=>{ (catMap[r.cat]=catMap[r.cat]||[]).push(r); });
+  const catOrder=Object.keys(catMap).sort((a,b)=>Math.abs(sumV(catMap[b]))-Math.abs(sumV(catMap[a])));
+  const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   let h=`<table class="nw"><thead><tr>`+
-    `<th class="grp">Variability</th><th class="grp">Category</th><th class="grp">Asset class details</th>`+
-    `<th class="grp">Account</th><th>Value</th></tr></thead><tbody>`;
-  // pivot body
-  varyOrder.forEach(vary=>{
-    const list=varyMap[vary];
-    h+=`<tr class="sub"><td class="t" colspan="4">${cap(vary)}</td>`+vcell(sumV(list))+`</tr>`;
-    const catMap={}; list.forEach(r=>{ (catMap[r.cat]=catMap[r.cat]||[]).push(r); });
-    const catOrder=Object.keys(catMap).sort((a,b)=>sumV(catMap[b])-sumV(catMap[a]));
-    catOrder.forEach(cat=>{
-      const cl=catMap[cat].slice().sort((a,b)=>b.v-a.v);
-      h+=`<tr class="cat"><td class="t2" colspan="4">${cap(cat)}</td>`+vcell(sumV(cl))+`</tr>`;
-      cl.forEach(r=>{
-        h+=`<tr><td></td><td></td><td class="t">${r.acd}</td><td class="mut">${r.acct}</td>`+vcell(r.v)+`</tr>`;
-      });
+    `<th class="grp">Category</th><th class="grp">Account</th><th class="grp">Asset class details</th>`+
+    `<th>Value</th></tr></thead><tbody>`;
+  catOrder.forEach(cat=>{
+    const cl=catMap[cat].slice().sort((a,b)=>b.v-a.v);
+    const open=nwOpen.has(cat);
+    h+=`<tr class="sub cgroup" data-cat="${esc(cat)}" tabindex="0" role="button" aria-expanded="${open}">`+
+       `<td class="t" colspan="3"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
+       `<span class="cnt">${cl.length} account${cl.length>1?'s':''}</span></td>`+vcell(sumV(cl))+`</tr>`;
+    if(open) cl.forEach(r=>{
+      h+=`<tr class="kid"><td></td><td class="t2">${esc(cap(r.acct))}</td>`+
+         `<td class="mut">${esc(cap(r.acd))}</td>`+vcell(r.v)+`</tr>`;
     });
   });
   h+=`</tbody></table>`;
   wrap.innerHTML=h;
+  // expand / collapse a category (click or keyboard), then re-render off nwOpen
+  const toggleCat=cat=>{ if(nwOpen.has(cat)) nwOpen.delete(cat); else nwOpen.add(cat); buildNetWorth(); };
+  wrap.querySelectorAll('tr.cgroup').forEach(tr=>{
+    const cat=tr.getAttribute('data-cat');
+    tr.addEventListener('click',()=>toggleCat(cat));
+    tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleCat(cat); } });
+  });
 }
 
 /* ---- main build ---------------------------------------------------------- */
@@ -1034,8 +1081,15 @@ function initControlsOnce(){
   if(controlsReady) return;
   MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
   monthEl.value=META.maxMi%12+1;
-  setSlider(maxIdx()-11, maxIdx());          // default trailing 12
-  [modeEl,yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
+  /* open on the current (latest) month, not on the trailing window */
+  modeEl.value='month';
+  t12El.checked=false;
+  setSlider(maxIdx(), maxIdx());
+  [yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
+  /* quick-set and the trailing-12 flag are two views of the same Comparison_Mode,
+     so each keeps the other in sync */
+  modeEl.addEventListener('change',()=>{ t12El.checked=(modeEl.value==='trailing'); applyPreset(); });
+  t12El.addEventListener('change',()=>{ modeEl.value=t12El.checked?'trailing':'month'; applyPreset(); });
   monthlyEl.addEventListener('change',build);
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
   document.getElementById('controls').style.display='';
