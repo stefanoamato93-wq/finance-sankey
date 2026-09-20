@@ -43,30 +43,45 @@ Needs / Wants / Liberality / Taxes → category`.
   references are floored to a positive value so heights stay finite even with zero
   income. Implemented by `scaleReferenceFor(mode, monthly, refs)` reading the
   per-mode `META.refs` computed once in `aggregate()`.
-- **Interactive selection:** click/tap any Sankey entry (income leaf, income
-  group, expense macro group, or expense leaf) to **deselect/reselect** it.
-  Deselected entries render greyed and de-emphasized (reduced opacity, grayscale)
-  as still-tappable stubs, and are excluded from node/flow sizing. The selection
-  is kept by category identity, so it **survives period changes** (a category that
-  leaves and re-enters the window keeps its state). Empty selection = everything
-  selected (identical to before the feature).
+- **Labels never run over the diagram.** Leaf names are **clipped with an ellipsis**
+  to the gutter they live in (the full name stays as a hover/long-press tooltip),
+  mid-node labels are clipped to the gap between two layers, the gutters were
+  widened (152 / 200), and the minimum slot per node went from 22 to 27 so two
+  adjacent labels always clear each other, including at the larger mobile font.
+- **Click any entry → detail panel.** Clicking or tapping a node (income leaf,
+  income group, expense macro group, expense leaf, or the Total income / Expenses /
+  Savings hubs) opens one overlay with:
+  - **Breakdown:** a **nested Sankey** of what that entry is made of — an expense
+    category breaks into its `DETAIL` sub-categories, a macro group or a hub breaks
+    into its leaves. Rows are clickable, so you can keep drilling; a breadcrumb
+    walks back up.
+  - **Monthly trend:** the month-by-month bar chart for that entry (one bar per
+    calendar month in the window, zero-height where there is no activity, values
+    honouring the K toggle, empty-state message when there is nothing). Entries with
+    nothing to break down (income leaves, detail rows) open straight on this view.
+  - **Exclude from metrics / Include in metrics:** the only way to take an entry out
+    of the numbers, so a tap on the diagram no longer silently changes the totals.
+  The panel follows the top period selector (window, mode, per-month toggle) without
+  tearing down the Sankey, and closes with the button, `Esc`, or a tap outside.
+- **Interactive exclusion:** excluded entries render greyed and de-emphasized
+  (reduced opacity, grayscale) as still-tappable stubs, and are out of node/flow
+  sizing and the totals. Exclusion is kept by category identity, so it **survives
+  period changes**. A **"N excluded · Include all"** pill appears in the controls row
+  whenever something is excluded, so exclusions are always visible and reversible in
+  one tap. Nothing excluded = everything counted.
 - **Selection-aware totals & savings %:** the Income / Expenses / Savings cards
   and the **savings percentage** recompute from the current selection. Savings % =
   (selected income − selected expenses) ÷ selected income × 100, to one decimal
   (negative allowed); when selected income is zero (e.g. all income deselected) it
   shows a `—` placeholder instead of dividing. Helper: `savingsPercentage()`.
-- **Bar-chart drilldown:** a small bar-chart glyph next to each **income leaf** and
-  **expense leaf** (and next to each **detail sub-category** in the hover
-  mini-Sankey) opens an overlay showing that category's **month-by-month trend** —
-  one bar per calendar month in the current window, chronological, zero-height for
-  months with no activity, value labels honouring the **K toggle**, and an
-  empty-state message when the category has no data. The drilldown **follows the
-  top period selector**: changing the window, comparison mode, or per-month toggle
-  while it is open updates the bars, without tearing down the Sankey or losing the
-  selection. Closing it returns to the diagram with the selection intact. Helper:
-  `monthlySeries(kind, category, miF, miT, DATA, DETAIL)`.
-- **Hover an expense category** to pop up a small floating Sankey of its detail
-  breakdown (from the `DETAIL` column), each detail with its % of the category.
+- **No per-name chart glyphs.** The small bar-chart icons that used to sit next to
+  every label are gone; the monthly trend moved into the detail panel above. Trend
+  series come from `monthlySeries(kind, category, miF, miT, DATA, DETAIL)` for
+  leaves and details, and from `seriesOf()` for groups, the hubs and Savings
+  (savings per month = income + expenses, since expenses are stored negative).
+- **Hover an expense category** (desktop) for a quick floating preview of its detail
+  breakdown, each detail with its % of the category. It is a preview only — click to
+  get the full panel.
 - Totals cards on top: **Income, Expenses, Savings** only, each with its % of
   income. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
   splits still show on the Sankey and its mid-node labels.
@@ -77,11 +92,10 @@ Needs / Wants / Liberality / Taxes → category`.
   own horizontally scrollable frame (with a "swipe sideways" hint) so labels stay
   ≥12px and legible, but in addition: the period controls stack full-width with
   ≥44px tap targets, the range-bar handles get an enlarged ~48px invisible touch
-  area and respond to touch dragging, the headline cards stack in a single column,
-  and the net-worth table scrolls inside its own frame (font floored at 12px) so
-  the page body never scrolls sideways. On touch/no-hover devices, tapping an
-  expense category opens the same detail popup that hover shows on desktop (tap
-  again or tap elsewhere to close). Desktop layout is unchanged.
+  area and respond to touch dragging, the two headline cards stay side by side but
+  tighten up, and the assets table fits the screen in two columns (font floored at
+  12px) so the page body never scrolls sideways. Tapping a node opens the detail
+  panel, which scrolls inside itself (capped at 88vh). Desktop layout is unchanged.
 
 ### Period selection
 - **Default view: the current (latest) month.** The app opens on single-month mode
@@ -120,18 +134,23 @@ liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall column
 their calculations were removed (they were unreliable); the table is a clean
 value-only view.
 
-- **Headline cards at the top of the page** (above the Sankey, not above the
-  table): a large **Net worth** hero number, plus **Total assets** (green) and
-  **Total liabilities** (sum of the `LIABILITIES` category only, red). Note
-  liabilities is the Liabilities category, not "every negative row", so a negative
-  cash balance (e.g. a credit-card line) reduces assets rather than counting as a
-  liability.
+- **Two headline cards at the top of the page**, side by side and compact: **Net
+  worth** and **Total assets** (green). The Total liabilities card was dropped to
+  save vertical space; liabilities are still netted out of assets (liabilities = the
+  `LIABILITIES` category only, not "every negative row", so a negative cash balance
+  such as a credit-card line reduces assets rather than counting as a liability) and
+  the Liabilities category is still a row in the table. The cards stay side by side
+  on mobile too.
+- **Two columns only, so it fits a phone.** The table is `Category / account | Value`
+  with a fixed layout, wrapping names and no horizontal scroll at any width; the
+  asset-class detail rides as a small muted second line under the account name
+  (suppressed when it just repeats the account).
 - **Collapsed by category, expand on click.** The table lists **accounts and their
   values**, grouped by `CATEGORY3`. Only the category rows (with their subtotal and
-  account count) show by default; **clicking a category** reveals its account and
-  asset-class-details rows underneath. Clicking again collapses it. Rows are
-  keyboard-operable (Enter / Space) and the expanded set survives a re-render, so
-  toggling **values in K** does not collapse everything.
+  account count) show by default; **clicking a category** reveals its account rows
+  underneath. Clicking again collapses it. Rows are keyboard-operable (Enter /
+  Space) and the expanded set survives a re-render, so toggling **values in K** does
+  not collapse everything.
 - **Ordering:** categories by absolute subtotal (largest positions first), accounts
   inside a category by value (high → low).
 - The `VARIABLE` (variability) grouping level was removed from the table; it is

@@ -47,35 +47,44 @@
         padding:8px 10px; opacity:0; transition:opacity .1s; z-index:20; box-shadow:0 8px 24px rgba(0,0,0,.55);}
   #mini .mt{font-size:11px; color:#fff; font-weight:700; margin-bottom:4px;}
   #mini text.mtx{fill:var(--ink); font-size:9.5px; dominant-baseline:middle;}
-  /* Drilldown_Chart overlay: framed panel, same visual language as #mini/.framed.
-     Interactive (pointer-events auto) with a title, an inline SVG bar chart and a
-     close button; sits above the Sankey without unmounting it. */
-  #drilldown{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40;
-        max-width:min(680px,92vw); padding:14px 16px; box-shadow:0 12px 40px rgba(0,0,0,.6);}
-  #drilldown .dhead{display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:8px;}
-  #drilldown .dtitle{font-size:14px; font-weight:700; color:#fff;}
-  #drilldown .dclose{background:var(--panel); color:var(--muted); border:1px solid var(--grid);
-        border-radius:8px; padding:7px 13px; cursor:pointer; font-size:13px; min-width:44px; min-height:40px;}
-  #drilldown .dclose:hover{color:var(--ink);}
-  #drilldown svg{max-width:100%;}
-  #drilldown text.dval{fill:var(--muted); font-size:8.5px; font-variant-numeric:tabular-nums;}
-  #drilldown text.dmon{fill:var(--ink); font-size:9px;}
-  #drilldown line.daxis{stroke:var(--grid); stroke-width:1;}
-  #drilldown .drillmsg{color:var(--muted); font-size:13px; padding:30px 14px; text-align:center; max-width:420px;}
-  /* drill control: small bar-chart glyph + enlarged transparent hit target (>=44x44
-     CSS px at <=480px), distinct from the node-body selection tap */
-  .drill{cursor:pointer;}
-  .drill rect.hit{fill:transparent;}
-  .drill .bar{fill:var(--muted); transition:fill .12s;}
-  .drill:hover .bar{fill:var(--ink);}
-  /* mobile/touch selection parity: an enlarged transparent tap target around each
-     selectable node body. The visible bar can be as thin as MINSLOT (~22u ~=18px
-     at the mobile 720px diagram width, 0.8px/u), so a >=55u (>=44px) overlay
-     carries the same toggleEntry tap. It is inert on desktop (pointer-events:none,
-     so the node's hover mini-Sankey/tooltip on the bar itself is preserved) and
-     only activates at <=480px, mirroring the range-handle ::before enlarge trick. */
+  /* Detail panel: one overlay per clicked Sankey entry. Holds the nested breakdown
+     Sankey, a monthly-trend view, and the include/exclude control. Replaces the
+     per-name bar-chart glyphs that used to sit next to every label. */
+  #detail{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40;
+        max-width:min(700px,94vw); max-height:88vh; overflow-y:auto;
+        padding:12px 14px; box-shadow:0 12px 40px rgba(0,0,0,.6);}
+  #detail .dhead{display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:4px;}
+  #detail .dtitle{font-size:14px; font-weight:700; color:#fff;}
+  #detail .dsub{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  #detail .dacts{display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end;}
+  #detail button{background:var(--panel); color:var(--muted); border:1px solid var(--grid);
+        border-radius:8px; padding:7px 11px; cursor:pointer; font-size:12.5px; min-height:38px;
+        font-family:inherit; white-space:nowrap;}
+  #detail button:hover{color:var(--ink);}
+  #detail button.on{color:#fff; border-color:#3a4d78; background:#1c2947;}
+  #detail button.excl{color:#e7c14a; border-color:rgba(231,193,74,.4);}
+  #detail .dcrumb{font-size:11.5px; color:var(--muted); margin:2px 0 6px; cursor:pointer;}
+  #detail .dcrumb:hover{color:var(--ink);}
+  #detail svg{max-width:100%;}
+  #detail text.dval{fill:var(--muted); font-size:8.5px; font-variant-numeric:tabular-nums;}
+  #detail text.dmon{fill:var(--ink); font-size:9px;}
+  #detail line.daxis{stroke:var(--grid); stroke-width:1;}
+  #detail text.dtx{fill:var(--ink); font-size:10px; dominant-baseline:middle;}
+  #detail g.drow{cursor:pointer;}
+  #detail g.drow:hover text.dtx{fill:#fff;}
+  #detail g.drow rect.dhit{fill:transparent;}
+  #detail .dmsg{color:var(--muted); font-size:12.5px; padding:18px 10px; text-align:center;}
+  #detail .dhintrow{color:var(--muted); font-size:11px; margin-top:6px;}
+  /* mobile/touch parity: an enlarged transparent tap target around each selectable
+     node body. The visible bar can be as thin as MINSLOT (~22u ~=18px at the mobile
+     720px diagram width, 0.8px/u), so a >=55u (>=44px) overlay carries the same tap.
+     Inert on desktop (pointer-events:none) so the node's hover preview is preserved. */
   .node .nodehit{fill:transparent; pointer-events:none;}
   @media (max-width:480px){ .node .nodehit{pointer-events:auto; cursor:pointer;} }
+  /* excluded-entries reset pill in the controls row */
+  #exclBox{display:none; align-items:center; gap:8px;}
+  #exclReset{background:var(--panel); color:#e7c14a; border:1px solid rgba(231,193,74,.4);
+        border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px; font-family:inherit;}
   /* draggable month-range slider */
   #rangeBox{margin:10px 26px 0; max-width:640px;}
   .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
@@ -95,26 +104,28 @@
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
-  /* headline cards */
-  .nwcards{display:flex; gap:14px; margin:12px 26px 0; flex-wrap:wrap; max-width:940px;}
-  .nwcard{flex:1 1 180px; background:linear-gradient(180deg,#182135,#141a28);
-          border:1px solid var(--grid); border-radius:14px; padding:14px 20px;}
-  .nwcard .lab{font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px;}
-  .nwcard .big{font-size:30px; font-weight:800; line-height:1.05; margin-top:6px; color:var(--ink);
+  /* headline cards: just Net worth + Total assets, side by side, compact */
+  .nwcards{display:flex; gap:10px; margin:10px 26px 0; max-width:560px;}
+  .nwcard{flex:1 1 0; min-width:0; background:linear-gradient(180deg,#182135,#141a28);
+          border:1px solid var(--grid); border-radius:11px; padding:8px 12px;}
+  .nwcard .lab{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px;}
+  .nwcard .big{font-size:21px; font-weight:800; line-height:1.1; margin-top:1px; color:var(--ink);
                font-variant-numeric:tabular-nums;}
-  .nwcard.net{flex:1.4 1 220px; border-color:#3a4d78;
-              background:linear-gradient(180deg,#1c2947,#141d31); box-shadow:0 6px 22px rgba(0,0,0,.4);}
-  .nwcard.net .big{font-size:40px;}
+  .nwcard.net{border-color:#3a4d78; background:linear-gradient(180deg,#1c2947,#141d31);}
+  .nwcard.net .big{font-size:24px;}
   .nwcard.assets .big{color:#7fd0a3;}
-  .nwcard.liab .big{color:#e58a8a;}
-  .nwwrap{margin:12px 26px 40px; padding:6px 8px; overflow-x:auto; max-width:940px;}
-  table.nw{border-collapse:collapse; font-size:12.5px; width:100%; font-variant-numeric:tabular-nums;}
-  .nw th,.nw td{padding:8px 14px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--grid);}
+  /* two-column table (name | value) so it always fits the viewport, no sideways scroll */
+  .nwwrap{margin:12px 26px 40px; padding:6px 8px; max-width:560px;}
+  table.nw{border-collapse:collapse; font-size:12.5px; width:100%; table-layout:fixed;
+           font-variant-numeric:tabular-nums;}
+  .nw th,.nw td{padding:7px 10px; text-align:right; border-bottom:1px solid var(--grid);}
   .nw th{color:var(--muted); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;}
   .nw th.grp{text-align:left;}
-  .nw td.t{text-align:left; color:var(--ink);}
-  .nw td.t2{text-align:left; color:var(--ink); padding-left:28px;}
-  .nw td.mut{text-align:left; color:var(--muted);}
+  .nw col.cval{width:34%;}
+  .nw td.t{text-align:left; color:var(--ink); word-break:break-word;}
+  .nw td.t2{text-align:left; color:var(--ink); padding-left:24px; word-break:break-word;}
+  .nw td .acd{display:block; color:var(--muted); font-size:11px; margin-top:1px;}
+  .nw td.val{white-space:nowrap;}
   .nw tbody tr:hover td{background:rgba(255,255,255,.035);}
   .nw tr.sub td{background:#141d30; font-weight:700; text-transform:uppercase; font-size:11.5px;
                 letter-spacing:.5px; border-top:1px solid var(--grid);}
@@ -159,15 +170,17 @@
     .wrap{margin:10px 14px 8px; padding:8px;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
-    /* headline cards stack full width */
-    .nwcards{flex-direction:column; gap:10px;}
-    .nwcard, .nwcard.net{flex:1 1 100%; max-width:100%;}
-    .nwcard .big{font-size:26px;} .nwcard.net .big{font-size:32px;}
-    /* net-worth table: scroll inside its own frame, keep values legible (>=12px) */
-    .nwwrap{margin-left:14px; margin-right:14px; max-width:100%;}
+    /* headline cards stay side by side (they are only two now), just tighter */
+    .nwcards{gap:8px; max-width:100%;}
+    .nwcard{padding:8px 10px;}
+    .nwcard .big{font-size:19px;} .nwcard.net .big{font-size:21px;}
+    /* assets table: fits the screen, never scrolls sideways */
+    .nwwrap{margin-left:14px; margin-right:14px; max-width:100%; padding:4px 2px;}
     table.nw{font-size:12px;}
-    .nw th{font-size:12px;}
-    .nw th,.nw td{padding:8px 10px;}
+    .nw th{font-size:11px;}
+    .nw th,.nw td{padding:8px 6px;}
+    .nw td.t2{padding-left:16px;}
+    .nw col.cval{width:38%;}
     .swipehint{display:block;}
   }
   .swipehint{display:none; margin:4px 14px 0; color:var(--muted); font-size:11px;}
@@ -213,6 +226,7 @@
   <label><input type="checkbox" id="t12"> trailing 12 months</label>
   <label><input type="checkbox" id="tMonthly"> per month (avg)</label>
   <label><input type="checkbox" id="tK"> values in K</label>
+  <span id="exclBox"><span id="exclCount"></span><button id="exclReset" type="button">Include all</button></span>
 </div>
 
 <div id="rangeBox" style="display:none">
@@ -261,14 +275,25 @@
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
 
-<!-- Drilldown_Chart overlay: hidden until a drill control is tapped -->
-<div id="drilldown" class="framed" style="display:none">
+<!-- Detail panel: opens on clicking any Sankey entry (breakdown Sankey / monthly
+     trend / include-exclude), hidden until then -->
+<div id="detail" class="framed" style="display:none">
   <div class="dhead">
-    <span class="dtitle" id="drillTitle"></span>
-    <button class="dclose" id="drillClose" type="button">Close</button>
+    <div>
+      <div class="dtitle" id="dTitle"></div>
+      <div class="dsub" id="dSub"></div>
+    </div>
+    <div class="dacts">
+      <button id="dBreakBtn" type="button">Breakdown</button>
+      <button id="dTrendBtn" type="button">Monthly trend</button>
+      <button id="dExcl" type="button" class="excl">Exclude</button>
+      <button id="dClose" type="button">Close</button>
+    </div>
   </div>
-  <svg id="drillSvg"></svg>
-  <div class="drillmsg" id="drillMsg" style="display:none"></div>
+  <div class="dcrumb" id="dCrumb" style="display:none"></div>
+  <svg id="dSvg"></svg>
+  <div class="dmsg" id="dMsg" style="display:none"></div>
+  <div class="dhintrow" id="dHint" style="display:none"></div>
 </div>
 
 <script>
@@ -412,9 +437,13 @@ function savingsPercentage(selectedIncome, selectedExpenses){
 }
 
 /* ---- layout config ------------------------------------------------------- */
-const W=900, PAD_T=20, PAD_B=20, NODEW=13, GAP=6, MINSLOT=22, TARGET_H=360;
+const W=900, PAD_T=20, PAD_B=20, NODEW=13, GAP=6, MINSLOT=27, TARGET_H=360;
 const GHOST_TH=3;   // fixed pixel thickness for the dimmed flows of deselected (stub) entries
-const LEFTM=140, RIGHTM=185;
+/* MINSLOT is the minimum vertical room per node: it also sets the minimum spacing
+   between two adjacent labels, so it has to clear the mobile label size (13px) —
+   this is what stopped names colliding with each other. LEFTM/RIGHTM are the label
+   gutters the leaf names are clipped to fit. */
+const LEFTM=152, RIGHTM=200;
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--liberality'),Taxes:cssv('--taxes'),Savings:cssv('--savings')};
 const INCOME=cssv('--income'), BUDGET=cssv('--budget'), EXPC=cssv('--exp');
@@ -431,8 +460,9 @@ let showK=false, curMiF=0, curMiT=0, curDiv=1, curScale=1;
      income group        -> "IG|"+group
      expense macro group -> "EG|"+group
      expense leaf        -> "E|"+leaf
-   isSelected/toggleEntry are consumed by applySelection (task 2.3) and render
-   (task 2.5); this task only introduces the state + helpers. */
+   applySelection() consumes it when sizing the diagram; toggleEntry() is called
+   from the Detail_Panel's Exclude/Include button (never from a bare node tap) and
+   from the "Include all" pill in the controls row. */
 let deselected = new Set();
 function isSelected(key){ return !deselected.has(key); }
 function toggleEntry(key){
@@ -603,7 +633,7 @@ function detailFor(leaf){
    chronological oldest->newest with indices exactly miF..miT (inclusive),
    value 0 for months with no activity, and NO point for any month outside the
    window (mi = year*12+(month-1)). Pure: reads only its arguments. Consumed by
-   renderDrilldown (task 5.3). */
+   the Detail_Panel's trend view (seriesOf). */
 function monthlySeries(kind, category, miF, miT, data, detail){
   const rows = kind==='detail' ? (detail||[]) : (data||[]);
   const sums = {};                                    // mi -> summed value
@@ -648,8 +678,6 @@ function renderMini(leaf,color){
     rr.setAttribute('width',nodeW); rr.setAttribute('height',Math.max(1,bar)); rr.setAttribute('rx',2); rr.setAttribute('fill',color); miniSvg.appendChild(rr);
     const tl=document.createElementNS(NS,'text'); tl.setAttribute('x',rightX+nodeW+24); tl.setAttribute('y',ry+bar/2);
     tl.setAttribute('class','mtx'); tl.textContent=`${dn}  ${fmt(v)} · ${(v/total*100).toFixed(0)}%`; miniSvg.appendChild(tl);
-    /* per-row drill control -> month trend for this detail sub-category (kind 'detail') */
-    addDrillGlyph(miniSvg, rightX+nodeW+12, ry+bar/2, Math.max(18,Math.min(slot,24)), 'detail', dn);
     y+=slot+gap;
   });
   const lr=document.createElementNS(NS,'rect'); lr.setAttribute('x',leftX); lr.setAttribute('y',leftY);
@@ -658,9 +686,10 @@ function renderMini(leaf,color){
 }
 let miniHideT=null;
 function showMini(e,leaf,color){
+  if(panel) return;                    // the detail panel owns the screen while it is open
   if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; }
   if(leaf!==miniLeaf){ miniH=renderMini(leaf,color); miniLeaf=leaf; miniEl.style.opacity=1; }
-  miniEl.style.pointerEvents='auto';   // interactive so the per-row detail drill glyph is tappable
+  miniEl.style.pointerEvents='none';   // hover preview only; clicking the node opens the full panel
   let left=e.clientX+16, top=e.clientY+16; const w=400, h=miniH+34;
   if(left+w>window.innerWidth) left=e.clientX-w-8;
   if(top+h>window.innerHeight) top=Math.max(8,window.innerHeight-h-8);
@@ -673,84 +702,217 @@ function hideMini(){ if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; } m
 miniEl.addEventListener('mouseenter',()=>{ if(miniHideT){ clearTimeout(miniHideT); miniHideT=null; } });
 miniEl.addEventListener('mouseleave',hideMini);
 
-/* ---- Drilldown_Chart: overlay + lifecycle -------------------------------- */
-/* `drill` is null when the overlay is closed, else { kind, category }. The
-   overlay is a framed panel (same visual language as #mini/.framed) with a
-   title, an inline SVG bar chart (one bar per calendar month in the active
-   window) and a close button. Opening it does NOT tear down the Sankey or the
-   Selection_State; closing it leaves `deselected` untouched (Requirement 5.9). */
-let drill=null;
-const drillEl=document.getElementById('drilldown'), drillTitle=document.getElementById('drillTitle'),
-      drillSvg=document.getElementById('drillSvg'), drillMsg=document.getElementById('drillMsg'),
-      drillClose=document.getElementById('drillClose');
-function openDrilldown(category, kind){
-  hideMini();                          // clear any transient detail popup first
-  drill={kind, category};
-  if(drillEl) drillEl.style.display='';
-  renderDrilldown();
-}
-function closeDrilldown(){
-  drill=null;                          // Selection_State (deselected) is NOT touched
-  if(drillEl) drillEl.style.display='none';
-}
-/* renderDrilldown reads the active window (curMiF/curMiT, set by build()), maps
-   monthlySeries() to bars scaled to the series max, labels each bar with
-   miLabel(mi) on the x-axis and its value via the existing fmt() (so the K
-   toggle is honoured automatically), shows the drilled category in the title,
-   and takes an explicit empty-state branch when the series is empty or every
-   value is 0 (Requirements 5.5-5.8). */
-function renderDrilldown(){
-  if(!drill || !drillSvg) return;
-  const {kind, category}=drill;
-  if(drillTitle) drillTitle.textContent=category;
-  const series=monthlySeries(kind, category, curMiF, curMiT, DATA, DETAIL);
-  const max=series.reduce((m,p)=>Math.max(m,p.value),0);
-  if(!series.length || max<=0){       // empty-state: no activity in the window
-    drillSvg.style.display='none';
-    if(drillMsg){ drillMsg.style.display=''; drillMsg.textContent=`No activity for “${category}” in ${miLabel(curMiF)} — ${miLabel(curMiT)}.`; }
-    return;
+/* ---- Detail_Panel: breakdown Sankey + monthly trend + include/exclude -----
+   Clicking any Sankey entry opens this one overlay. It replaces both the old
+   per-label bar-chart glyphs (the trend is now a view inside the panel) and the
+   old click-to-deselect behaviour (exclusion is now an explicit button here, so
+   a tap never silently changes the totals).
+
+   `panel` is null when closed, else { name, key, kind, parent, view } where
+     kind  = 'income' | 'expense' | 'detail' | 'incGroup' | 'expGroup'
+             | 'hubIncome' | 'hubExpenses' | 'savings'
+     key   = the window-independent Entry key ("I|"/"E|"/"IG|"/"EG|"), null for
+             the backbone hubs (Total income / Expenses / Savings)
+     parent= the panel we drilled in from (breadcrumb), null at the top
+     view  = 'break' (nested Sankey of its children) | 'trend' (month bars)
+   Opening/closing the panel never touches the Selection_State. */
+let panel=null;
+const dEl=document.getElementById('detail'), dTitle=document.getElementById('dTitle'),
+      dSub=document.getElementById('dSub'), dSvg=document.getElementById('dSvg'),
+      dMsg=document.getElementById('dMsg'), dHint=document.getElementById('dHint'),
+      dCrumb=document.getElementById('dCrumb'), dBreakBtn=document.getElementById('dBreakBtn'),
+      dTrendBtn=document.getElementById('dTrendBtn'), dExcl=document.getElementById('dExcl'),
+      dClose=document.getElementById('dClose');
+
+function kindOf(name,key){
+  if(key){
+    if(key.slice(0,3)==='IG|') return 'incGroup';
+    if(key.slice(0,3)==='EG|') return 'expGroup';
+    if(key.slice(0,2)==='I|')  return 'income';
+    if(key.slice(0,2)==='E|')  return 'expense';
   }
-  if(drillMsg) drillMsg.style.display='none';
-  drillSvg.style.display='';
-  const n=series.length;
+  if(name==='Total income') return 'hubIncome';
+  if(name==='Expenses')     return 'hubExpenses';
+  if(name==='Savings')      return 'savings';
+  return 'detail';
+}
+function panelColor(p){
+  if(p.kind==='income'||p.kind==='incGroup') return INCOME;
+  if(p.kind==='hubIncome') return BUDGET;
+  if(p.kind==='savings')   return GROUPCOL.Savings;
+  if(p.kind==='hubExpenses') return EXPC;
+  if(p.kind==='expGroup')  return GROUPCOL[p.name]||EXPC;
+  return EXPC;                                    // expense leaf / detail
+}
+/* children of an entry inside the active window: [[label, value, childSpec|null], ...]
+   ordered high -> low. Expense leaves break into their DETAIL sub-categories;
+   groups and the hubs break into their leaves; income leaves and details have none. */
+function childrenOf(p){
+  const rows=[];
+  if(p.kind==='expense'){
+    detailFor(p.name).forEach(([dn,v])=> rows.push([dn, v, {name:dn, key:null, kind:'detail'}]));
+  } else if(p.kind==='incGroup'||p.kind==='expGroup'||p.kind==='hubIncome'||p.kind==='hubExpenses'){
+    const want=(p.kind==='incGroup'||p.kind==='hubIncome')?'I':'E', sums={};
+    DATA.forEach(([mi,k,grp,leaf,val])=>{
+      if(mi<curMiF||mi>curMiT||k!==want) return;
+      if((p.kind==='incGroup'||p.kind==='expGroup') && grp!==p.name) return;
+      sums[leaf]=(sums[leaf]||0)+(want==='I'?val:-val);
+    });
+    Object.keys(sums).forEach(leaf=>{ if(sums[leaf]>0)
+      rows.push([leaf, sums[leaf], {name:leaf, key:(want==='I'?'I|':'E|')+leaf, kind:(want==='I'?'income':'expense')}]); });
+  }
+  rows.sort((a,b)=>b[1]-a[1]);
+  return rows;
+}
+/* one {mi,value} point per month in the active window, for any entry kind.
+   Leaves/details delegate to the pure monthlySeries(); groups, the hubs and
+   Savings aggregate from DATA (savings = income + expenses, expenses stored negative). */
+function seriesOf(p){
+  if(p.kind==='detail')  return monthlySeries('detail',  p.name, curMiF, curMiT, DATA, DETAIL);
+  if(p.kind==='income')  return monthlySeries('income',  p.name, curMiF, curMiT, DATA, DETAIL);
+  if(p.kind==='expense') return monthlySeries('expense', p.name, curMiF, curMiT, DATA, DETAIL);
+  const sums={};
+  DATA.forEach(([mi,k,grp,leaf,val])=>{
+    if(mi<curMiF||mi>curMiT) return;
+    if(p.kind==='savings'){ sums[mi]=(sums[mi]||0)+val; return; }
+    let hit=false;
+    if(p.kind==='incGroup')          hit=(k==='I' && grp===p.name);
+    else if(p.kind==='expGroup')     hit=(k==='E' && grp===p.name);
+    else if(p.kind==='hubIncome')    hit=(k==='I');
+    else if(p.kind==='hubExpenses')  hit=(k==='E');
+    if(hit) sums[mi]=(sums[mi]||0)+(k==='I'?val:-val);
+  });
+  const out=[]; for(let mi=curMiF; mi<=curMiT; mi++) out.push({mi, value:sums[mi]||0});
+  return out;
+}
+function openPanel(name,key,parent){
+  hideMini();
+  const p={name, key:key||null, kind:kindOf(name,key), parent:parent||null, view:'break'};
+  panel=p;
+  if(!childrenOf(p).length) p.view='trend';       // nothing to break down -> straight to the trend
+  if(dEl) dEl.style.display='';
+  renderPanel();
+}
+function closePanel(){ panel=null; if(dEl) dEl.style.display='none'; }
+
+/* nested Sankey of the entry's children (this is the "details with another
+   sankey" view). Each row is clickable: a child with its own breakdown opens a
+   nested panel, a leaf/detail row opens its monthly trend. */
+function renderBreakdown(p, rows){
+  const color=panelColor(p);
+  let parts=rows.map(([lab,v,spec])=>[lab, v/curDiv, spec]);
+  const CAP=14;
+  if(parts.length>CAP){ const head=parts.slice(0,CAP), rest=parts.slice(CAP);
+    head.push([`Other (${rest.length})`, rest.reduce((a,x)=>a+x[1],0), null]); parts=head; }
+  const total=parts.reduce((a,x)=>a+x[1],0)||1;
+  const MW=560, nodeW=11, leftX=16, rightX=150, pad=10, gap=4, minSlot=19;
+  const sc=Math.max(120, Math.min(360, parts.length*26))/total;
+  const slots=parts.map(x=>Math.max(x[1]*sc,minSlot));
+  const contentH=slots.reduce((a,s)=>a+s,0)+gap*Math.max(0,parts.length-1), H=contentH+pad*2;
+  dSvg.setAttribute('viewBox',`0 0 ${MW} ${H}`); dSvg.removeAttribute('width');
+  dSvg.setAttribute('height',H); dSvg.innerHTML='';
+  const leftH=total*sc, leftY=pad+(contentH-leftH)/2; let y=pad, soff=0;
+  parts.forEach(([lab,v,spec],i)=>{
+    const bar=v*sc, slot=slots[i], ry=y+(slot-bar)/2;
+    const sx=leftX+nodeW, txx=rightX, sy=leftY+soff+bar/2, ty=ry+bar/2, xm=(sx+txx)/2, t=Math.max(bar,1)/2;
+    const path=document.createElementNS(NS,'path');
+    path.setAttribute('d',`M${sx},${sy-t} C${xm},${sy-t} ${xm},${ty-t} ${txx},${ty-t} L${txx},${ty+t} C${xm},${ty+t} ${xm},${sy+t} ${sx},${sy+t} Z`);
+    path.setAttribute('fill',color); path.setAttribute('fill-opacity','.38'); dSvg.appendChild(path); soff+=bar;
+    const g=document.createElementNS(NS,'g'); g.setAttribute('class','drow');
+    const rr=document.createElementNS(NS,'rect'); rr.setAttribute('x',rightX); rr.setAttribute('y',ry);
+    rr.setAttribute('width',nodeW); rr.setAttribute('height',Math.max(1,bar)); rr.setAttribute('rx',2);
+    rr.setAttribute('fill',color); g.appendChild(rr);
+    const tl=document.createElementNS(NS,'text'); tl.setAttribute('x',rightX+nodeW+9); tl.setAttribute('y',ry+bar/2);
+    tl.setAttribute('class','dtx');
+    tl.textContent=`${clipTxt(lab,236,5.6)}   ${fmt(v)} · ${(v/total*100).toFixed(0)}%`;
+    const ttl=document.createElementNS(NS,'title'); ttl.textContent=lab; tl.appendChild(ttl);
+    g.appendChild(tl);
+    const hit=document.createElementNS(NS,'rect'); hit.setAttribute('x',rightX);
+    hit.setAttribute('y',y); hit.setAttribute('width',MW-rightX); hit.setAttribute('height',slot);
+    hit.setAttribute('class','dhit'); g.appendChild(hit);
+    if(spec) g.addEventListener('click',ev=>{ ev.stopPropagation(); openPanel(spec.name, spec.key, p); });
+    else g.style.cursor='default';
+    dSvg.appendChild(g);
+    y+=slot+gap;
+  });
+  const lr=document.createElementNS(NS,'rect'); lr.setAttribute('x',leftX); lr.setAttribute('y',leftY);
+  lr.setAttribute('width',nodeW); lr.setAttribute('height',Math.max(1,leftH)); lr.setAttribute('rx',2);
+  lr.setAttribute('fill',color); dSvg.appendChild(lr);
+  if(dHint){ dHint.style.display=''; dHint.textContent='Tap a row to go one level deeper.'; }
+}
+/* month-by-month bars for the entry (one bar per calendar month in the window,
+   zero-height where there is no activity, values honouring the K toggle) */
+function renderTrend(p, series){
+  const n=series.length, max=series.reduce((m,x)=>Math.max(m,Math.abs(x.value)),0);
   const barW=Math.max(12, Math.min(46, 560/n)), gap=Math.max(4, barW*0.32);
   const padL=10, padR=10, padTop=24, chartH=180, botH=46;
   const innerW=n*barW+(n-1)*gap, VW=padL+padR+innerW, VH=padTop+chartH+botH, baseY=padTop+chartH;
-  drillSvg.setAttribute('viewBox',`0 0 ${VW} ${VH}`); drillSvg.setAttribute('width',VW); drillSvg.setAttribute('height',VH); drillSvg.innerHTML='';
-  const color = kind==='income'?INCOME : kind==='expense'?EXPC : GROUPCOL.Wants;
+  dSvg.setAttribute('viewBox',`0 0 ${VW} ${VH}`); dSvg.setAttribute('width',VW); dSvg.setAttribute('height',VH);
+  dSvg.innerHTML='';
+  const color=panelColor(p);
   const axis=document.createElementNS(NS,'line'); axis.setAttribute('x1',padL); axis.setAttribute('y1',baseY);
-  axis.setAttribute('x2',VW-padR); axis.setAttribute('y2',baseY); axis.setAttribute('class','daxis'); drillSvg.appendChild(axis);
-  series.forEach((p,i)=>{
-    const x=padL+i*(barW+gap), bh=(p.value/max)*chartH, yb=baseY-bh, cx=x+barW/2;
-    const rect=document.createElementNS(NS,'rect'); rect.setAttribute('x',x); rect.setAttribute('y',yb);
+  axis.setAttribute('x2',VW-padR); axis.setAttribute('y2',baseY); axis.setAttribute('class','daxis'); dSvg.appendChild(axis);
+  series.forEach((x,i)=>{
+    const px=padL+i*(barW+gap), bh=max>0?(Math.abs(x.value)/max)*chartH:0, yb=baseY-bh, cx=px+barW/2;
+    const rect=document.createElementNS(NS,'rect'); rect.setAttribute('x',px); rect.setAttribute('y',yb);
     rect.setAttribute('width',barW); rect.setAttribute('height',Math.max(0,bh)); rect.setAttribute('rx',2);
-    rect.setAttribute('fill',color); rect.setAttribute('fill-opacity','.85'); drillSvg.appendChild(rect);
-    if(p.value>0){ const vt=document.createElementNS(NS,'text'); vt.setAttribute('x',cx); vt.setAttribute('y',yb-5);
-      vt.setAttribute('text-anchor','middle'); vt.setAttribute('class','dval'); vt.textContent=fmt(p.value); drillSvg.appendChild(vt); }
+    rect.setAttribute('fill',color); rect.setAttribute('fill-opacity', x.value<0?'.45':'.85'); dSvg.appendChild(rect);
+    if(x.value!==0){ const vt=document.createElementNS(NS,'text'); vt.setAttribute('x',cx); vt.setAttribute('y',yb-5);
+      vt.setAttribute('text-anchor','middle'); vt.setAttribute('class','dval'); vt.textContent=fmt(x.value); dSvg.appendChild(vt); }
     const mt=document.createElementNS(NS,'text'); mt.setAttribute('x',cx); mt.setAttribute('y',baseY+14);
     mt.setAttribute('text-anchor','end'); mt.setAttribute('class','dmon');
-    mt.setAttribute('transform',`rotate(-45 ${cx} ${baseY+14})`); mt.textContent=miLabel(p.mi); drillSvg.appendChild(mt);
+    mt.setAttribute('transform',`rotate(-45 ${cx} ${baseY+14})`); mt.textContent=miLabel(x.mi); dSvg.appendChild(mt);
   });
+  if(dHint) dHint.style.display='none';
 }
-if(drillClose) drillClose.addEventListener('click',e=>{ e.stopPropagation(); closeDrilldown(); });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape' && drill) closeDrilldown(); });
+function renderPanel(){
+  if(!panel || !dEl || dEl.style.display==='none') return;
+  const p=panel, rows=childrenOf(p), series=seriesOf(p);
+  const tot=series.reduce((a,x)=>a+x.value,0)/curDiv;
+  if(dTitle) dTitle.textContent=p.name;
+  if(dSub) dSub.textContent=`${fmt(tot)} · ${miLabel(curMiF)} — ${miLabel(curMiT)}`+
+    (curDiv>1?' · per-month average':'');
+  /* breadcrumb back to the entry we drilled in from */
+  if(dCrumb){
+    if(p.parent){ dCrumb.style.display=''; dCrumb.textContent=`\u2190 back to ${p.parent.name}`;
+      dCrumb.onclick=ev=>{ ev.stopPropagation(); panel=p.parent; renderPanel(); }; }
+    else { dCrumb.style.display='none'; dCrumb.onclick=null; }
+  }
+  /* view switches: Breakdown only when there is something to break down */
+  if(dBreakBtn){ dBreakBtn.style.display=rows.length?'':'none'; dBreakBtn.classList.toggle('on',p.view==='break'); }
+  if(dTrendBtn) dTrendBtn.classList.toggle('on',p.view==='trend');
+  /* exclusion moved here: only real entries (not the backbone hubs) can be excluded */
+  if(dExcl){
+    if(p.key){ dExcl.style.display=''; const off=deselected.has(p.key);
+      dExcl.textContent=off?'Include in metrics':'Exclude from metrics';
+      dExcl.classList.toggle('on',off); }
+    else dExcl.style.display='none';
+  }
+  if(!rows.length && p.view==='break') p.view='trend';
+  const hasTrend=series.some(x=>x.value!==0);
+  if(p.view==='trend' && !hasTrend){
+    dSvg.style.display='none';
+    if(dHint) dHint.style.display='none';
+    if(dMsg){ dMsg.style.display=''; dMsg.textContent=`No activity for “${p.name}” in ${miLabel(curMiF)} — ${miLabel(curMiT)}.`; }
+    return;
+  }
+  if(dMsg) dMsg.style.display='none';
+  dSvg.style.display='';
+  if(p.view==='break') renderBreakdown(p,rows); else renderTrend(p,series);
+}
+if(dBreakBtn) dBreakBtn.addEventListener('click',e=>{ e.stopPropagation(); if(panel){ panel.view='break'; renderPanel(); } });
+if(dTrendBtn) dTrendBtn.addEventListener('click',e=>{ e.stopPropagation(); if(panel){ panel.view='trend'; renderPanel(); } });
+if(dExcl) dExcl.addEventListener('click',e=>{ e.stopPropagation(); if(panel && panel.key) toggleEntry(panel.key); });
+if(dClose) dClose.addEventListener('click',e=>{ e.stopPropagation(); closePanel(); });
+if(dEl) dEl.addEventListener('click',e=>e.stopPropagation());
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && panel) closePanel(); });
 
-/* Small bar-chart drill glyph with an enlarged transparent tap target. It is a
-   separate SVG element from the node body, so a node tap still toggles selection
-   (task 2.5) while a glyph tap opens the drilldown. The transparent hit rect is
-   sized so it is >=44x44 CSS px at <=480px: on the main Sankey a 56-user-unit
-   rect renders ~45px at the mobile min diagram width of 720px. */
-function addDrillGlyph(targetSvg, cx, cy, hit, kind, category){
-  const g=document.createElementNS(NS,'g'); g.setAttribute('class','drill');
-  const hr=document.createElementNS(NS,'rect'); hr.setAttribute('x',cx-hit/2); hr.setAttribute('y',cy-hit/2);
-  hr.setAttribute('width',hit); hr.setAttribute('height',hit); hr.setAttribute('class','hit'); g.appendChild(hr);
-  const bw=2.2, bg=1.5, bhs=[4,7,10], x0=cx-(bw*3+bg*2)/2, gBase=cy+5;
-  bhs.forEach((h,i)=>{ const b=document.createElementNS(NS,'rect'); b.setAttribute('x',x0+i*(bw+bg));
-    b.setAttribute('y',gBase-h); b.setAttribute('width',bw); b.setAttribute('height',h); b.setAttribute('rx',.4);
-    b.setAttribute('class','bar'); g.appendChild(b); });
-  g.addEventListener('click',e=>{ e.stopPropagation(); openDrilldown(category, kind); });
-  targetSvg.appendChild(g);
-  return g;
+/* label clipping: SVG font sizes are user units here, so the budget is in the
+   same units as the layout margins. Keeps long category names from running over
+   the diagram; the full name stays available as a <title> tooltip. */
+function clipTxt(s,budget,cw){
+  const str=String(s==null?'':s), max=Math.max(3,Math.floor(budget/cw));
+  return str.length<=max ? str : str.slice(0,max-1)+'\u2026';
 }
 
 /* ---- render sankey ------------------------------------------------------- */
@@ -809,10 +971,11 @@ function render(res){
     const r=document.createElementNS(NS,'rect'); r.setAttribute('x',n.x); r.setAttribute('y',n.y);
     r.setAttribute('width',NODEW); r.setAttribute('height',Math.max(1,n.h)); r.setAttribute('rx',2); r.setAttribute('fill',nodeColor(n));
     const isExpLeaf = !isHidden && n.layer===maxLayer && detailFor(n.name).length>0;
-    /* plain click/tap on the node body toggles selection for the four Entry kinds
-       (distinct from the hover mini-Sankey detail below and the drill control);
-       a greyed, deselected stub taps back on. */
-    if(key){ r.style.cursor='pointer'; r.addEventListener('click',e=>{ e.stopPropagation(); toggleEntry(key); }); }
+    /* click/tap on a node opens the Detail_Panel (nested breakdown Sankey +
+       monthly trend + the include/exclude control). It no longer toggles the
+       metrics directly: exclusion lives on the panel's button. */
+    r.style.cursor='pointer';
+    r.addEventListener('click',e=>{ e.stopPropagation(); openPanel(n.name, key); });
     /* hover detail (mini-Sankey for expense leaves, else tooltip) — selected nodes only */
     if(!isHidden){
       r.addEventListener('mousemove',e=>{ if(isExpLeaf){ showMini(e,n.name,nodeColor(n)); }
@@ -824,38 +987,39 @@ function render(res){
     if(n.layer===0 || n.layer===maxLayer){
       const left=n.layer===0;
       label.setAttribute('x', left? n.x-8 : n.x+NODEW+8); label.setAttribute('text-anchor', left?'end':'start'); label.setAttribute('y',mid);
-      const a=document.createElementNS(NS,'tspan'); a.textContent=n.name; label.append(a);
-      if(!isHidden){ const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=' '+fmt(n.value)+'  '+(n.value/income*100).toFixed(0)+'%'; label.append(b); }
+      /* clip the name to the margin it has to live in, so a long category never
+         runs over the diagram (or off-canvas). Full name stays in the tooltip. */
+      const valTxt = isHidden ? '' : ' '+fmt(n.value)+'  '+(n.value/income*100).toFixed(0)+'%';
+      const budget = (left?LEFTM:RIGHTM) - 14 - valTxt.length*5.3;
+      const a=document.createElementNS(NS,'tspan'); a.textContent=clipTxt(n.name,budget,6.0); label.append(a);
+      if(valTxt){ const b=document.createElementNS(NS,'tspan'); b.setAttribute('class','nval'); b.textContent=valTxt; label.append(b); }
+      const ttl=document.createElementNS(NS,'title'); ttl.textContent=n.name; label.appendChild(ttl);
     }else{
       label.setAttribute('x',n.x+NODEW/2); label.setAttribute('text-anchor','middle'); label.setAttribute('y',mid); label.setAttribute('class','mid');
-      if(isHidden){ label.textContent=n.name; }
-      else { const pctTxt = income>0 && n.name!=='Total income' ? '  '+(n.value/income*100).toFixed(0)+'%' : ''; label.textContent = `${n.name}  ${fmt(n.value)}${pctTxt}`; }
+      /* mid labels sit on top of the flows, so clip them to the gap between two
+         layers: past that they start covering the neighbouring columns */
+      const colGap=(W-LEFTM-RIGHTM-NODEW)/maxLayer;
+      if(isHidden){ label.textContent=clipTxt(n.name,colGap-8,5.9); }
+      else { const pctTxt = income>0 && n.name!=='Total income' ? '  '+(n.value/income*100).toFixed(0)+'%' : '';
+        const valTail=`  ${fmt(n.value)}${pctTxt}`;
+        label.textContent = clipTxt(n.name, colGap-8-valTail.length*5.9, 5.9)+valTail; }
+      const ttl=document.createElementNS(NS,'title'); ttl.textContent=n.name; label.appendChild(ttl);
     }
     /* mobile/touch selection parity: enlarged transparent hit rect so the node
        tap target is >=44x44 CSS px at <=480px (>=55 user units at the mobile
        0.8px/unit diagram scale), even for very thin bars or greyed stubs. Carries
-       the same toggleEntry(key); inert on desktop via CSS so the bar's hover
-       mini-Sankey/tooltip is untouched. Centred on the node body, it stays clear
-       of the gutter drill glyph (x=30 / x=W-30), so it never blocks a drilldown. */
+       the same openPanel(); inert on desktop via CSS so the bar's hover
+       mini-Sankey/tooltip is untouched. */
     g.appendChild(label);
-    if(key){
+    {
       const HITMIN=55, hw=Math.max(NODEW,HITMIN), hh=Math.max(n.h,HITMIN), mc=n.y+n.h/2;
       const nh=document.createElementNS(NS,'rect');
       nh.setAttribute('x',n.x+NODEW/2-hw/2); nh.setAttribute('y',mc-hh/2);
       nh.setAttribute('width',hw); nh.setAttribute('height',hh); nh.setAttribute('class','nodehit');
-      nh.addEventListener('click',e=>{ e.stopPropagation(); toggleEntry(key); });
-      g.appendChild(nh);   // appended last => on top of bar + label, so the full 55u box taps toggle
+      nh.addEventListener('click',e=>{ e.stopPropagation(); openPanel(n.name, key); });
+      g.appendChild(nh);   // appended last => on top of bar + label, so the full 55u box opens the panel
     }
     svg.appendChild(g);
-    /* dedicated drill control beside each drillable leaf, in the outer gutter and
-       distinct from the node-body selection tap: income leaves (key "I|") drill
-       kind 'income', expense leaves (key "E|") drill kind 'expense'. Macro groups
-       ("IG|"/"EG|") and backbone hubs get none (monthlySeries keys off leaf/dn).
-       Skipped for de-emphasized (deselected) stubs. */
-    if(!isHidden && key){
-      if(key.slice(0,2)==='I|')      addDrillGlyph(svg, 30,    n.y+n.h/2, 56, 'income',  n.name);
-      else if(key.slice(0,2)==='E|') addDrillGlyph(svg, W-30,  n.y+n.h/2, 56, 'expense', n.name);
-    }
   });
 }
 function paintTotals(res){
@@ -968,15 +1132,14 @@ function buildNetWorth(){
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
-  // headline cards: net worth (hero), then the asset / liability split.
+  // headline cards: net worth + total assets only, side by side and compact.
   // Liabilities = only the LIABILITIES category (not every negative row); assets = the rest.
   const gTot=sumV(rows);
   const liab=sumV(rows.filter(r=>r.cat==="LIABILITIES"));
   const assets=gTot-liab;
   cardsEl.innerHTML=
     `<div class="nwcard net"><div class="lab">Net worth</div><div class="big">${money(gTot)}</div></div>`+
-    `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`+
-    `<div class="nwcard liab"><div class="lab">Total liabilities</div><div class="big">${money(liab)}</div></div>`;
+    `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`;
 
   // group by category, ordered by absolute subtotal (biggest positions first); the
   // account rows inside a category are ordered by value (high -> low) and are only
@@ -985,18 +1148,19 @@ function buildNetWorth(){
   const catOrder=Object.keys(catMap).sort((a,b)=>Math.abs(sumV(catMap[b]))-Math.abs(sumV(catMap[a])));
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  let h=`<table class="nw"><thead><tr>`+
-    `<th class="grp">Category</th><th class="grp">Account</th><th class="grp">Asset class details</th>`+
-    `<th>Value</th></tr></thead><tbody>`;
+  /* two columns only (name | value) so the table fits a phone screen without any
+     sideways scroll; the asset-class detail rides under the account name. */
+  let h=`<table class="nw"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
+    `<th class="grp">Category / account</th><th>Value</th></tr></thead><tbody>`;
   catOrder.forEach(cat=>{
     const cl=catMap[cat].slice().sort((a,b)=>b.v-a.v);
     const open=nwOpen.has(cat);
     h+=`<tr class="sub cgroup" data-cat="${esc(cat)}" tabindex="0" role="button" aria-expanded="${open}">`+
-       `<td class="t" colspan="3"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
-       `<span class="cnt">${cl.length} account${cl.length>1?'s':''}</span></td>`+vcell(sumV(cl))+`</tr>`;
+       `<td class="t"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
+       `<span class="cnt">(${cl.length})</span></td>`+vcell(sumV(cl))+`</tr>`;
     if(open) cl.forEach(r=>{
-      h+=`<tr class="kid"><td></td><td class="t2">${esc(cap(r.acct))}</td>`+
-         `<td class="mut">${esc(cap(r.acd))}</td>`+vcell(r.v)+`</tr>`;
+      const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
+      h+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
     });
   });
   h+=`</tbody></table>`;
@@ -1027,13 +1191,23 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res);
-  /* If a Drilldown_Chart is open, refresh its bars against the new window/mode so
-     ANY Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
+  paintTotals(res); render(res); syncExclUI();
+  /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
+     Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
      drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing
-     down the Sankey or the Selection_State. renderDrilldown() reads the freshly
-     updated curMiF/curMiT and no-ops when drill is null (Requirements 6.2, 6.3). */
-  renderDrilldown();
+     down the Sankey or the Selection_State. renderPanel() reads the freshly
+     updated curMiF/curMiT and no-ops when the panel is closed. */
+  renderPanel();
+}
+/* excluded-entries pill: shows how many entries are out of the metrics and offers
+   a one-tap way back in (the only place exclusions were visible before was the
+   greyed stubs on the diagram itself) */
+function syncExclUI(){
+  const box=document.getElementById('exclBox'), cnt=document.getElementById('exclCount');
+  if(!box) return;
+  if(deselected.size){ box.style.display='inline-flex';
+    if(cnt) cnt.textContent=`${deselected.size} excluded`; }
+  else box.style.display='none';
 }
 
 /* ---- data cache (stale-while-revalidate) --------------------------------- */
@@ -1092,6 +1266,8 @@ function initControlsOnce(){
   t12El.addEventListener('change',()=>{ modeEl.value=t12El.checked?'trailing':'month'; applyPreset(); });
   monthlyEl.addEventListener('change',build);
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
+  const er=document.getElementById('exclReset');
+  if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
   document.getElementById('rangeBox').style.display='';
   document.getElementById('nwhead').style.display='';
@@ -1147,7 +1323,9 @@ function boot(){
     showError(err && err.message ? err.message : 'load failed');
   });
 }
-document.addEventListener('click',()=>{ hideMini(); });   // tap-away closes the detail popup on touch
+/* tap/click away closes the hover preview and the detail panel (the panel itself
+   stops propagation, and node clicks do too, so neither closes on its own click) */
+document.addEventListener('click',()=>{ hideMini(); if(panel) closePanel(); });
 boot();
 
 /* ---- test-only export shim ------------------------------------------------
