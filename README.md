@@ -59,10 +59,22 @@ Needs / Wants / Liberality / Taxes → category`.
     calendar month in the window, zero-height where there is no activity, values
     honouring the K toggle, empty-state message when there is nothing). Entries with
     nothing to break down (income leaves, detail rows) open straight on this view.
+  - **Yearly trend:** the same bar chart rolled up to **one bar per calendar year,
+    all-time**. Unlike every other view it is **window-independent**: it always
+    spans the first year in the sheet (2018) to the latest, so you see the whole
+    history side by side no matter what the period selector says. Years with no
+    activity still get a zero bar, so the axis stays continuous. Labels are
+    horizontal (not slanted) and bars are wider, since there are only a handful.
+    With **per month (avg)** ticked, each year shows its own per-month average
+    (year total ÷ months of that year present in the data), which keeps the
+    current, part-complete year comparable to the closed ones. Subtitle reads
+    `<total> · <first year> — <last year> · all time`.
   - **Exclude from metrics / Include in metrics:** the only way to take an entry out
     of the numbers, so a tap on the diagram no longer silently changes the totals.
   The panel follows the top period selector (window, mode, per-month toggle) without
-  tearing down the Sankey, and closes with the button, `Esc`, or a tap outside.
+  tearing down the Sankey, and closes with the button, `Esc`, or a tap outside. The
+  Yearly trend is the exception: it ignores the window by design (the per-month
+  toggle still applies to it).
 - **Interactive exclusion:** excluded entries render greyed and de-emphasized
   (reduced opacity, grayscale) as still-tappable stubs, and are out of node/flow
   sizing and the totals. Exclusion is kept by category identity, so it **survives
@@ -77,8 +89,13 @@ Needs / Wants / Liberality / Taxes → category`.
 - **No per-name chart glyphs.** The small bar-chart icons that used to sit next to
   every label are gone; the monthly trend moved into the detail panel above. Trend
   series come from `monthlySeries(kind, category, miF, miT, DATA, DETAIL)` for
-  leaves and details, and from `seriesOf()` for groups, the hubs and Savings
-  (savings per month = income + expenses, since expenses are stored negative).
+  leaves and details, and from `seriesOf(p, miF, miT)` for groups, the hubs and
+  Savings (savings per month = income + expenses, since expenses are stored
+  negative). `seriesOf()` defaults to the active window; the Yearly trend calls it
+  with `allTimeSpan()` (`[META.minMi, META.maxMi]`) and folds the result with
+  `bucketByYear(points) -> [{year, mi, value, months}]`. Both views then paint
+  through one shared `renderTrend(p, bars, opts)` that takes
+  `[{label, value}]` plus `{rotate, maxBarW}`.
 - **Hover an expense category** (desktop) for a quick floating preview of its detail
   breakdown, each detail with its % of the category. It is a preview only — click to
   get the full panel.

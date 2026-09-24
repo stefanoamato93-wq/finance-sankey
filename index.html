@@ -286,6 +286,7 @@
     <div class="dacts">
       <button id="dBreakBtn" type="button">Breakdown</button>
       <button id="dTrendBtn" type="button">Monthly trend</button>
+      <button id="dYearBtn" type="button">Yearly trend</button>
       <button id="dExcl" type="button" class="excl">Exclude</button>
       <button id="dClose" type="button">Close</button>
     </div>
@@ -654,6 +655,25 @@ function monthlySeries(kind, category, miF, miT, data, detail){
   return out;
 }
 
+/* ---- Drilldown_Chart: per-year rollup of a monthly series (pure) ----------
+   bucketByYear(points) -> [{year, mi, value, months}, ...] oldest->newest.
+
+   Folds a [{mi, value}] monthly series (as monthlySeries/seriesOf emit) into one
+   entry per calendar year, where year = floor(mi/12) and months = how many
+   monthly points of that year were present in the input. Emits a bucket for
+   every year the input covers, including all-zero years, so the yearly trend
+   keeps a continuous axis from the first year of data to the latest. Pure:
+   reads only its argument. Consumed by the Detail_Panel's yearly trend view. */
+function bucketByYear(points){
+  const sums={}, cnt={};
+  (points||[]).forEach(({mi,value})=>{
+    const y=Math.floor(mi/12);
+    sums[y]=(sums[y]||0)+value; cnt[y]=(cnt[y]||0)+1;
+  });
+  return Object.keys(sums).map(Number).sort((a,b)=>a-b)
+    .map(y=>({ year:y, mi:y*12, value:sums[y], months:cnt[y] }));
+}
+
 /* ---- floating mini-sankey (category -> details) -------------------------- */
 const miniEl=document.getElementById('mini'), miniSvg=document.getElementById('miniSvg'), miniTitle=document.getElementById('miniTitle');
 let miniLeaf=null, miniH=0;
@@ -714,14 +734,18 @@ miniEl.addEventListener('mouseleave',hideMini);
      key   = the window-independent Entry key ("I|"/"E|"/"IG|"/"EG|"), null for
              the backbone hubs (Total income / Expenses / Savings)
      parent= the panel we drilled in from (breadcrumb), null at the top
-     view  = 'break' (nested Sankey of its children) | 'trend' (month bars)
+     view  = 'break'  (nested Sankey of its children, window-bound)
+           | 'trend'  (one bar per month in the active window)
+           | 'ytrend' (one bar per calendar year, ALL-TIME: ignores the active
+                       window and spans the first year of data to the latest)
    Opening/closing the panel never touches the Selection_State. */
 let panel=null;
 const dEl=document.getElementById('detail'), dTitle=document.getElementById('dTitle'),
       dSub=document.getElementById('dSub'), dSvg=document.getElementById('dSvg'),
       dMsg=document.getElementById('dMsg'), dHint=document.getElementById('dHint'),
       dCrumb=document.getElementById('dCrumb'), dBreakBtn=document.getElementById('dBreakBtn'),
-      dTrendBtn=document.getElementById('dTrendBtn'), dExcl=document.getElementById('dExcl'),
+      dTrendBtn=document.getElementById('dTrendBtn'), dYearBtn=document.getElementById('dYearBtn'),
+      dExcl=document.getElementById('dExcl'),
       dClose=document.getElementById('dClose');
 
 function kindOf(name,key){
@@ -764,16 +788,19 @@ function childrenOf(p){
   rows.sort((a,b)=>b[1]-a[1]);
   return rows;
 }
-/* one {mi,value} point per month in the active window, for any entry kind.
+/* one {mi,value} point per month, for any entry kind. Defaults to the active
+   window; pass an explicit (miF, miT) to read a different span (the yearly trend
+   passes the full data range so it is window-independent).
    Leaves/details delegate to the pure monthlySeries(); groups, the hubs and
    Savings aggregate from DATA (savings = income + expenses, expenses stored negative). */
-function seriesOf(p){
-  if(p.kind==='detail')  return monthlySeries('detail',  p.name, curMiF, curMiT, DATA, DETAIL);
-  if(p.kind==='income')  return monthlySeries('income',  p.name, curMiF, curMiT, DATA, DETAIL);
-  if(p.kind==='expense') return monthlySeries('expense', p.name, curMiF, curMiT, DATA, DETAIL);
+function seriesOf(p, miF, miT){
+  const f = (miF==null) ? curMiF : miF, t = (miT==null) ? curMiT : miT;
+  if(p.kind==='detail')  return monthlySeries('detail',  p.name, f, t, DATA, DETAIL);
+  if(p.kind==='income')  return monthlySeries('income',  p.name, f, t, DATA, DETAIL);
+  if(p.kind==='expense') return monthlySeries('expense', p.name, f, t, DATA, DETAIL);
   const sums={};
   DATA.forEach(([mi,k,grp,leaf,val])=>{
-    if(mi<curMiF||mi>curMiT) return;
+    if(mi<f||mi>t) return;
     if(p.kind==='savings'){ sums[mi]=(sums[mi]||0)+val; return; }
     let hit=false;
     if(p.kind==='incGroup')          hit=(k==='I' && grp===p.name);
@@ -782,9 +809,12 @@ function seriesOf(p){
     else if(p.kind==='hubExpenses')  hit=(k==='E');
     if(hit) sums[mi]=(sums[mi]||0)+(k==='I'?val:-val);
   });
-  const out=[]; for(let mi=curMiF; mi<=curMiT; mi++) out.push({mi, value:sums[mi]||0});
+  const out=[]; for(let mi=f; mi<=t; mi++) out.push({mi, value:sums[mi]||0});
   return out;
 }
+/* the all-time monthly span, i.e. from the first month of data (2018) to the
+   latest, independent of the Period_Selector. Feeds the yearly trend. */
+function allTimeSpan(){ return [META.minMi, META.maxMi]; }
 function openPanel(name,key,parent){
   hideMini();
   const p={name, key:key||null, kind:kindOf(name,key), parent:parent||null, view:'break'};
@@ -840,11 +870,15 @@ function renderBreakdown(p, rows){
   lr.setAttribute('fill',color); dSvg.appendChild(lr);
   if(dHint){ dHint.style.display=''; dHint.textContent='Tap a row to go one level deeper.'; }
 }
-/* month-by-month bars for the entry (one bar per calendar month in the window,
-   zero-height where there is no activity, values honouring the K toggle) */
-function renderTrend(p, series){
-  const n=series.length, max=series.reduce((m,x)=>Math.max(m,Math.abs(x.value)),0);
-  const barW=Math.max(12, Math.min(46, 560/n)), gap=Math.max(4, barW*0.32);
+/* bar chart for the entry: one bar per period, zero-height where there is no
+   activity, values honouring the K toggle. Shared by both trend views.
+     bars = [{label, value}, ...] oldest -> newest
+     opts.rotate  = slant the axis labels (month labels are long, years are not)
+     opts.maxBarW = bar-width ceiling (yearly has few bars, so they get wider) */
+function renderTrend(p, bars, opts){
+  const o=opts||{}, rotate=(o.rotate!==false), maxBarW=o.maxBarW||46;
+  const series=bars, n=series.length, max=series.reduce((m,x)=>Math.max(m,Math.abs(x.value)),0);
+  const barW=Math.max(12, Math.min(maxBarW, 560/n)), gap=Math.max(4, barW*0.32);
   const padL=10, padR=10, padTop=24, chartH=180, botH=46;
   const innerW=n*barW+(n-1)*gap, VW=padL+padR+innerW, VH=padTop+chartH+botH, baseY=padTop+chartH;
   dSvg.setAttribute('viewBox',`0 0 ${VW} ${VH}`); dSvg.setAttribute('width',VW); dSvg.setAttribute('height',VH);
@@ -860,18 +894,32 @@ function renderTrend(p, series){
     if(x.value!==0){ const vt=document.createElementNS(NS,'text'); vt.setAttribute('x',cx); vt.setAttribute('y',yb-5);
       vt.setAttribute('text-anchor','middle'); vt.setAttribute('class','dval'); vt.textContent=fmt(x.value); dSvg.appendChild(vt); }
     const mt=document.createElementNS(NS,'text'); mt.setAttribute('x',cx); mt.setAttribute('y',baseY+14);
-    mt.setAttribute('text-anchor','end'); mt.setAttribute('class','dmon');
-    mt.setAttribute('transform',`rotate(-45 ${cx} ${baseY+14})`); mt.textContent=miLabel(x.mi); dSvg.appendChild(mt);
+    mt.setAttribute('text-anchor',rotate?'end':'middle'); mt.setAttribute('class','dmon');
+    if(rotate) mt.setAttribute('transform',`rotate(-45 ${cx} ${baseY+14})`);
+    mt.textContent=x.label; dSvg.appendChild(mt);
   });
   if(dHint) dHint.style.display='none';
 }
 function renderPanel(){
   if(!panel || !dEl || dEl.style.display==='none') return;
-  const p=panel, rows=childrenOf(p), series=seriesOf(p);
-  const tot=series.reduce((a,x)=>a+x.value,0)/curDiv;
+  const p=panel, rows=childrenOf(p);
+  /* the yearly trend is deliberately window-independent: it always reads the full
+     data range so you can see every year since the start next to each other. */
+  const isYear=(p.view==='ytrend'), span=isYear?allTimeSpan():[curMiF,curMiT];
+  const series=seriesOf(p, span[0], span[1]);
+  const perMonthEl=document.getElementById('tMonthly'), perMonth=!!(perMonthEl && perMonthEl.checked);
+  const yearBars=isYear ? bucketByYear(series).map(y=>({
+        label:String(y.year), value: perMonth ? y.value/Math.max(1,y.months) : y.value })) : null;
+  const tot=series.reduce((a,x)=>a+x.value,0)/(isYear?1:curDiv);
   if(dTitle) dTitle.textContent=p.name;
-  if(dSub) dSub.textContent=`${fmt(tot)} · ${miLabel(curMiF)} — ${miLabel(curMiT)}`+
-    (curDiv>1?' · per-month average':'');
+  if(dSub){
+    if(isYear){
+      const y0=Math.floor(span[0]/12), y1=Math.floor(span[1]/12);
+      dSub.textContent=`${fmt(tot)} · ${y0} — ${y1} · all time`+(perMonth?' · bars are per-month averages':'');
+    } else {
+      dSub.textContent=`${fmt(tot)} · ${miLabel(curMiF)} — ${miLabel(curMiT)}`+(curDiv>1?' · per-month average':'');
+    }
+  }
   /* breadcrumb back to the entry we drilled in from */
   if(dCrumb){
     if(p.parent){ dCrumb.style.display=''; dCrumb.textContent=`\u2190 back to ${p.parent.name}`;
@@ -881,6 +929,7 @@ function renderPanel(){
   /* view switches: Breakdown only when there is something to break down */
   if(dBreakBtn){ dBreakBtn.style.display=rows.length?'':'none'; dBreakBtn.classList.toggle('on',p.view==='break'); }
   if(dTrendBtn) dTrendBtn.classList.toggle('on',p.view==='trend');
+  if(dYearBtn) dYearBtn.classList.toggle('on',isYear);
   /* exclusion moved here: only real entries (not the backbone hubs) can be excluded */
   if(dExcl){
     if(p.key){ dExcl.style.display=''; const off=deselected.has(p.key);
@@ -890,18 +939,24 @@ function renderPanel(){
   }
   if(!rows.length && p.view==='break') p.view='trend';
   const hasTrend=series.some(x=>x.value!==0);
-  if(p.view==='trend' && !hasTrend){
+  if(p.view!=='break' && !hasTrend){
     dSvg.style.display='none';
     if(dHint) dHint.style.display='none';
-    if(dMsg){ dMsg.style.display=''; dMsg.textContent=`No activity for “${p.name}” in ${miLabel(curMiF)} — ${miLabel(curMiT)}.`; }
+    if(dMsg){ dMsg.style.display='';
+      dMsg.textContent=isYear
+        ? `No activity for “${p.name}” in any year on record.`
+        : `No activity for “${p.name}” in ${miLabel(curMiF)} — ${miLabel(curMiT)}.`; }
     return;
   }
   if(dMsg) dMsg.style.display='none';
   dSvg.style.display='';
-  if(p.view==='break') renderBreakdown(p,rows); else renderTrend(p,series);
+  if(p.view==='break')      renderBreakdown(p,rows);
+  else if(isYear)           renderTrend(p, yearBars, {rotate:false, maxBarW:64});
+  else                      renderTrend(p, series.map(x=>({label:miLabel(x.mi), value:x.value})), {rotate:true});
 }
 if(dBreakBtn) dBreakBtn.addEventListener('click',e=>{ e.stopPropagation(); if(panel){ panel.view='break'; renderPanel(); } });
 if(dTrendBtn) dTrendBtn.addEventListener('click',e=>{ e.stopPropagation(); if(panel){ panel.view='trend'; renderPanel(); } });
+if(dYearBtn) dYearBtn.addEventListener('click',e=>{ e.stopPropagation(); if(panel){ panel.view='ytrend'; renderPanel(); } });
 if(dExcl) dExcl.addEventListener('click',e=>{ e.stopPropagation(); if(panel && panel.key) toggleEntry(panel.key); });
 if(dClose) dClose.addEventListener('click',e=>{ e.stopPropagation(); closePanel(); });
 if(dEl) dEl.addEventListener('click',e=>e.stopPropagation());
