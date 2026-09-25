@@ -135,6 +135,12 @@
   .nw tr:last-child td{border-bottom:none;}
   /* collapsible category groups: the category row is the only thing shown until it is
      clicked, then its account / asset-class rows appear underneath */
+  /* expand all / collapse all controls above the net worth table */
+  .nwtools{display:flex; gap:6px; justify-content:flex-end; margin:0 0 6px;}
+  .nwtools button{background:#141d30; color:var(--ink); border:1px solid var(--grid); border-radius:6px;
+                  padding:4px 10px; font-size:11px; cursor:pointer;}
+  .nwtools button:hover{background:#18233a;}
+  .nwtools button:disabled{opacity:.4; cursor:default;}
   .nw tr.cgroup{cursor:pointer;}
   .nw tr.cgroup:hover td{background:#18233a;}
   .nw tr.cgroup td.t{border-left:3px solid var(--budget);}
@@ -1205,7 +1211,11 @@ function buildNetWorth(){
 
   /* two columns only (name | value) so the table fits a phone screen without any
      sideways scroll; the asset-class detail rides under the account name. */
-  let h=`<table class="nw"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
+  const allOpen=catOrder.every(c=>nwOpen.has(c)), noneOpen=catOrder.every(c=>!nwOpen.has(c));
+  let h=`<div class="nwtools">`+
+    `<button type="button" data-nwall="open"${allOpen?' disabled':''}>Expand all</button>`+
+    `<button type="button" data-nwall="close"${noneOpen?' disabled':''}>Collapse all</button></div>`+
+    `<table class="nw"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
     `<th class="grp">Category / account</th><th>Value</th></tr></thead><tbody>`;
   catOrder.forEach(cat=>{
     const cl=catMap[cat].slice().sort((a,b)=>b.v-a.v);
@@ -1227,6 +1237,11 @@ function buildNetWorth(){
     tr.addEventListener('click',()=>toggleCat(cat));
     tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleCat(cat); } });
   });
+  // expand all / collapse all categories at once
+  wrap.querySelectorAll('button[data-nwall]').forEach(b=>b.addEventListener('click',()=>{
+    nwOpen = b.getAttribute('data-nwall')==='open' ? new Set(catOrder) : new Set();
+    buildNetWorth();
+  }));
 }
 
 /* ---- main build ---------------------------------------------------------- */

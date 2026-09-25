@@ -168,6 +168,8 @@ value-only view.
   underneath. Clicking again collapses it. Rows are keyboard-operable (Enter /
   Space) and the expanded set survives a re-render, so toggling **values in K** does
   not collapse everything.
+- **Expand all / Collapse all.** Two small buttons above the table open or close
+  every category in one click (each is disabled when it would do nothing).
 - **Ordering:** categories by absolute subtotal (largest positions first), accounts
   inside a category by value (high → low).
 - The `VARIABLE` (variability) grouping level was removed from the table; it is
