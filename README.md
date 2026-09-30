@@ -43,6 +43,14 @@ Needs / Wants / Liberality / Taxes → category`.
   references are floored to a positive value so heights stay finite even with zero
   income. Implemented by `scaleReferenceFor(mode, monthly, refs)` reading the
   per-mode `META.refs` computed once in `aggregate()`.
+- **Fixed category order (Stable_Order).** Categories keep the same slot whatever
+  window is selected, so dragging the range bar shows each one grow or shrink in
+  place instead of reshuffling. Leaves are ranked **once per data load** by their
+  total over the **latest trailing 12 months**, then by all-time total (for
+  categories absent from the last 12 months), then by name. Groups follow the fixed
+  `ORDER` list (now including "Other income" / "Other"). The same rank orders the
+  detail panel's breakdown and the hover preview. Helpers: `stableRank()` (built at
+  the end of `aggregate()` into `RANK`) and `rankCmp()`.
 - **Labels never run over the diagram.** Leaf names are **clipped with an ellipsis**
   to the gutter they live in (the full name stays as a hover/long-press tooltip),
   mid-node labels are clipped to the gap between two layers, the gutters were
@@ -137,6 +145,12 @@ Needs / Wants / Liberality / Taxes → category`.
     under 680px, and only falls back to the touch-event pipeline when
     `window.PointerEvent` is missing (running both pipelines let `touchstart`'s
     `preventDefault` cancel the in-flight pointer drag).
+  - **1-month window fix:** when the window is a single month the two handles sit
+    on top of each other and the top one was clamped so it could never move left,
+    which froze the bar. Now, in **Single month** mode, dragging the handle slides
+    the month back and forth; in any other mode, the first move decides the side
+    (drag left widens the start, drag right widens the end). Moves that do not
+    change the months skip the re-render, which keeps dragging smooth.
 - **Per month (avg)** toggle divides every value by the number of months in the
   selected window (a partial current year divides by the elapsed months). It also
   switches the true-scale reference to a single-month basis.

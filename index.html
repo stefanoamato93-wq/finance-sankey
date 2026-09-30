@@ -411,6 +411,7 @@ function aggregate(rows){
         allMinMi:allMin, allMaxMi:allMax, refs,
         /* superseded by refs.singleMonth/refs.trailing12; kept until task 1.3 removes the last reader */
         refMonth:refs.singleMonth.income, refWindow:refs.trailing12.income};
+  RANK=stableRank(DATA, DETAIL, META.maxMi);   // fixed category order, see Stable_Order
 }
 
 /* ---- Scale_Engine: active Scale_Reference (pure) --------------------------
@@ -454,7 +455,31 @@ const LEFTM=152, RIGHTM=200;
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const GROUPCOL={Needs:cssv('--needs'),Wants:cssv('--wants'),Liberality:cssv('--liberality'),Taxes:cssv('--taxes'),Savings:cssv('--savings')};
 const INCOME=cssv('--income'), BUDGET=cssv('--budget'), EXPC=cssv('--exp');
-const ORDER=["Work income","Non-work income","Total income","Expenses","Needs","Wants","Liberality","Taxes","Savings"];
+const ORDER=["Work income","Non-work income","Other income","Total income","Expenses","Needs","Wants","Liberality","Taxes","Other","Savings"];
+
+/* ---- Stable_Order: window-independent ranking of categories ----------------
+   The diagram used to sort each column by the value inside the CURRENT window,
+   so dragging the range bar reshuffled the categories and you could not follow
+   one line as it evolved. Leaves (income leaves, expense leaves, expense detail
+   sub-categories) are now ranked ONCE per data load:
+     1) by their total over the latest trailing-12-month window (META.maxMi-11..maxMi),
+     2) then by their all-time total (for categories absent from the last 12 months),
+     3) then by name (deterministic tie-break).
+   Keys: 'I|'+leaf, 'E|'+leaf, 'D|'+leaf+'|'+detail. Pure: reads only its args. */
+let RANK={r12:{}, all:{}};
+function stableRank(data, detail, maxMi){
+  const r12={}, all={}, lo=maxMi-11;
+  const add=(k,mi,v)=>{ all[k]=(all[k]||0)+v; if(mi>=lo && mi<=maxMi) r12[k]=(r12[k]||0)+v; };
+  (data||[]).forEach(([mi,k,grp,leaf,val])=> add(k+'|'+leaf, mi, k==='I'?val:-val));
+  (detail||[]).forEach(([mi,lf,dn,v])=> add('D|'+lf+'|'+dn, mi, v));
+  return {r12, all};
+}
+function rankCmp(ka, kb, rank){
+  const R=rank||RANK;
+  const a12=R.r12[ka]||0, b12=R.r12[kb]||0; if(b12!==a12) return b12-a12;
+  const aa=R.all[ka]||0, ba=R.all[kb]||0;  if(ba!==aa) return ba-aa;
+  return ka<kb?-1:ka>kb?1:0;
+}
 const svg=document.getElementById('sankey'), NS="http://www.w3.org/2000/svg", tip=document.getElementById('tip');
 let showK=false, curMiF=0, curMiT=0, curDiv=1, curScale=1;
 
@@ -619,7 +644,7 @@ function ghostLinks(raw, res){
 function detailFor(leaf){
   const d={};
   DETAIL.forEach(([mi,lf,dn,v])=>{ if(lf===leaf && mi>=curMiF && mi<=curMiT) d[dn]=(d[dn]||0)+v; });
-  return Object.entries(d).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  return Object.entries(d).filter(([,v])=>v>0).sort((a,b)=>rankCmp('D|'+leaf+'|'+a[0],'D|'+leaf+'|'+b[0]));   // Stable_Order
 }
 
 /* ---- Drilldown_Chart: per-month category series (pure) --------------------
@@ -791,7 +816,10 @@ function childrenOf(p){
     Object.keys(sums).forEach(leaf=>{ if(sums[leaf]>0)
       rows.push([leaf, sums[leaf], {name:leaf, key:(want==='I'?'I|':'E|')+leaf, kind:(want==='I'?'income':'expense')}]); });
   }
-  rows.sort((a,b)=>b[1]-a[1]);
+  /* Stable_Order: same fixed ranking as the main diagram, so the panel's breakdown
+     does not reshuffle either while the range bar is dragged */
+  const rk=r=> r[2] && r[2].key ? r[2].key : 'D|'+p.name+'|'+r[0];
+  rows.sort((a,b)=>rankCmp(rk(a),rk(b)));
   return rows;
 }
 /* one {mi,value} point per month, for any entry kind. Defaults to the active
@@ -1008,7 +1036,11 @@ function render(res){
   const linkColor=l=> l.tgt.layer<=2 ? INCOME : l.tgt.name==='Expenses' ? EXPC : l.tgt.name==='Savings' ? GROUPCOL.Savings : l.src.name==='Expenses' ? (GROUPCOL[l.tgt.name]||EXPC) : (GROUPCOL[l.src.name]||BUDGET);
   const scale=curScale;   // fixed px-per-€ so the diagram grows/shrinks with the period's absolute size
   const byLayer=[]; for(let i=0;i<=maxLayer;i++) byLayer[i]=NL.filter(n=>n.layer===i);
-  byLayer.forEach(col=>col.sort((a,b)=>{ const r=ORDER.indexOf(band(a))-ORDER.indexOf(band(b)); return r!==0?r:b.value-a.value; }));
+  /* leaves sort by the Stable_Order rank (not the in-window value), so a category keeps
+     its slot while the range bar is dragged and its bar visibly grows/shrinks in place */
+  const rankKey=n=> n.layer===0 ? 'I|'+n.name : n.layer===maxLayer ? 'E|'+n.name : null;
+  byLayer.forEach(col=>col.sort((a,b)=>{ const r=ORDER.indexOf(band(a))-ORDER.indexOf(band(b)); if(r!==0) return r;
+    const ka=rankKey(a), kb=rankKey(b); return (ka&&kb) ? rankCmp(ka,kb) : b.value-a.value; }));
   const used=byLayer.map(col=>col.reduce((a,n)=>a+Math.max(n.value*scale,MINSLOT),0)+(col.length-1)*GAP);
   const contentH=Math.max(...used);
   const xOf=L=> LEFTM + L*((W-LEFTM-RIGHTM-NODEW)/maxLayer);
@@ -1126,12 +1158,23 @@ function setSlider(lo,hi){ const N=maxIdx(); loIdx=Math.max(0,Math.min(N,Math.ro
 function idxFromX(clientX){ const r=dualEl.getBoundingClientRect(), N=maxIdx(); let f=(clientX-r.left)/r.width; f=Math.max(0,Math.min(1,f)); return Math.round(f*N); }
 /* one shared drag pipeline for both pointer and touch input, so the range bar
    behaves identically whether dragged with a mouse or a finger */
-function beginDrag(mode,clientX){ drag=mode; if(mode==='band'){ dragStart=idxFromX(clientX); dragLo=loIdx; dragHi=hiIdx; } }
+/* 1-month window: both handles sit on the same spot and hHi (painted last) always
+   wins the press. It was clamped to hi>=lo, so it could never move left, and the
+   zero-width band could not be grabbed, so the dragger looked frozen. Now:
+     - "Single month" quick set  -> pressing the handle slides the month (band drag),
+     - any other mode           -> 'split': the first move picks the side, left
+                                   widens the start, right widens the end. */
+function beginDrag(mode,clientX){
+  if((mode==='lo'||mode==='hi') && loIdx===hiIdx) mode = modeEl.value==='month' ? 'band' : 'split';
+  drag=mode; if(mode==='band'||mode==='split'){ dragStart=idxFromX(clientX); dragLo=loIdx; dragHi=hiIdx; } }
 function moveDrag(clientX){
   if(!drag) return; const idx=idxFromX(clientX), N=maxIdx();   // idxFromX already clamps to [0,N]
+  const pLo=loIdx, pHi=hiIdx;
+  if(drag==='split'){ if(idx<loIdx) drag='lo'; else if(idx>hiIdx) drag='hi'; else return; }
   if(drag==='lo') loIdx=Math.min(idx,hiIdx);
   else if(drag==='hi') hiIdx=Math.max(idx,loIdx);
   else { const w=dragHi-dragLo; let nl=dragLo+(idx-dragStart), nh=nl+w; if(nl<0){nl=0;nh=w;} if(nh>N){nh=N;nl=N-w;} loIdx=nl; hiIdx=nh; }
+  if(loIdx===pLo && hiIdx===pHi) return;   // same months: skip the re-render, keeps the drag smooth
   updateSliderUI(); build();
 }
 function endDrag(){ drag=null; }
