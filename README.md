@@ -9,9 +9,16 @@ browser.
 
 ## Page order
 1. Title (**Personal finance**).
-2. **Headline cards: Net worth / Total assets / Total liabilities** (top of the page).
+2. **Headline cards: Net worth / Total assets** (top of the page).
 3. Period controls + the money-flow **Sankey**.
-4. **Assets & liabilities** table (collapsed by category).
+4. **Assets** table (collapsed by category), then a separate **Liabilities** table
+   listed last.
+
+**Favicon:** an inline SVG data-URI `<link rel="icon">` in `<head>` (a mini Sankey:
+green income bar splitting into needs / wants / savings bands on a dark tile), so
+the tab, and a pinned Chrome tab, shows the app icon instead of the generic globe.
+It is embedded, so the page stays a single self-contained file. Chrome caches
+favicons, so after a change hard-refresh or unpin/re-pin the tab.
 
 ## What it shows
 
@@ -172,7 +179,7 @@ value-only view.
   save vertical space; liabilities are still netted out of assets (liabilities = the
   `LIABILITIES` category only, not "every negative row", so a negative cash balance
   such as a credit-card line reduces assets rather than counting as a liability) and
-  the Liabilities category is still a row in the table. The cards stay side by side
+  liabilities are listed in their own table below. The cards stay side by side
   on mobile too.
 - **Two columns only, so it fits a phone.** The table is `Category / account | Value`
   with a fixed layout, wrapping names and no horizontal scroll at any width; the
@@ -190,6 +197,13 @@ value-only view.
   inside a category by value (high → low).
 - The `VARIABLE` (variability) grouping level was removed from the table; it is
   still part of the holding key used to compute balances.
+
+- **Liabilities: separate table, always last.** The `LIABILITIES` category is kept
+  out of the collapsible assets table and rendered as its own `Liabilities | Value`
+  table underneath (`table.nw.liab`): the liability accounts listed flat (no
+  expand/collapse), largest first, then a **Total liabilities** row (red accent).
+  Expand all / Collapse all only act on the assets table. The table is skipped when
+  there are no liability balances.
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).

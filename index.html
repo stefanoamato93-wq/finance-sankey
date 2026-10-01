@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Personal finance</title>
+<!-- favicon (inline SVG, keeps the file self-contained): a mini Sankey, income bar on
+     the left splitting into needs / wants / savings. Shows on pinned Chrome tabs. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1420'/%3E%3Cpath d='M8 6C16 6 16 4 24 4V10C16 10 16 12 8 12Z' fill='%235b8fd0' opacity='.8'/%3E%3Cpath d='M8 13H24V19H8Z' fill='%23e08a3c' opacity='.8'/%3E%3Cpath d='M8 20C16 20 16 22 24 22V28C16 28 16 26 8 26Z' fill='%23e7c14a' opacity='.8'/%3E%3Crect x='4' y='6' width='4' height='20' rx='1' fill='%233aa86a'/%3E%3Crect x='24' y='4' width='4' height='6' rx='1' fill='%235b8fd0'/%3E%3Crect x='24' y='13' width='4' height='6' rx='1' fill='%23e08a3c'/%3E%3Crect x='24' y='22' width='4' height='6' rx='1' fill='%23e7c14a'/%3E%3C/svg%3E">
 <style>
   :root{
     --bg:#0f1420; --panel:#151b2b; --ink:#e7ecf5; --muted:#9aa6bd;
@@ -133,6 +136,9 @@
   .nw tr.sub .val{font-size:13.5px;}
   .nw tr.cat td{background:#0e1524; font-weight:600; color:var(--muted);}
   .nw tr:last-child td{border-bottom:none;}
+  /* liabilities: own table, always below the assets table */
+  table.nw.liab{margin-top:22px;}
+  .nw.liab tr.sub td.t{border-left-color:#e58a8a;}
   /* collapsible category groups: the category row is the only thing shown until it is
      clicked, then its account / asset-class rows appear underneath */
   /* expand all / collapse all controls above the net worth table */
@@ -1245,10 +1251,12 @@ function buildNetWorth(){
     `<div class="nwcard net"><div class="lab">Net worth</div><div class="big">${money(gTot)}</div></div>`+
     `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`;
 
-  // group by category, ordered by absolute subtotal (biggest positions first); the
-  // account rows inside a category are ordered by value (high -> low) and are only
-  // rendered when that category is open.
-  const catMap={}; rows.forEach(r=>{ (catMap[r.cat]=catMap[r.cat]||[]).push(r); });
+  // assets table: group by category, ordered by absolute subtotal (biggest positions
+  // first); the account rows inside a category are ordered by value (high -> low) and
+  // are only rendered when that category is open. The LIABILITIES category is kept
+  // out of it and rendered last, in its own table.
+  const liabRows=rows.filter(r=>r.cat==="LIABILITIES").sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  const catMap={}; rows.forEach(r=>{ if(r.cat!=="LIABILITIES") (catMap[r.cat]=catMap[r.cat]||[]).push(r); });
   const catOrder=Object.keys(catMap).sort((a,b)=>Math.abs(sumV(catMap[b]))-Math.abs(sumV(catMap[a])));
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -1272,6 +1280,18 @@ function buildNetWorth(){
     });
   });
   h+=`</tbody></table>`;
+  // liabilities: separate table, always last, accounts listed flat (largest first)
+  // with a total row at the bottom
+  if(liabRows.length){
+    h+=`<table class="nw liab"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
+       `<th class="grp">Liabilities</th><th>Value</th></tr></thead><tbody>`;
+    liabRows.forEach(r=>{
+      const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
+      h+=`<tr><td class="t">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
+    });
+    h+=`<tr class="sub"><td class="t">Total liabilities <span class="cnt">(${liabRows.length})</span></td>`+
+       vcell(sumV(liabRows))+`</tr></tbody></table>`;
+  }
   wrap.innerHTML=h;
   // expand / collapse a category (click or keyboard), then re-render off nwOpen
   const toggleCat=cat=>{ if(nwOpen.has(cat)) nwOpen.delete(cat); else nwOpen.add(cat); buildNetWorth(); };
