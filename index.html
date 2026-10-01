@@ -1255,44 +1255,39 @@ function buildNetWorth(){
   // first); the account rows inside a category are ordered by value (high -> low) and
   // are only rendered when that category is open. The LIABILITIES category is kept
   // out of it and rendered last, in its own table.
-  const liabRows=rows.filter(r=>r.cat==="LIABILITIES").sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
-  const catMap={}; rows.forEach(r=>{ if(r.cat!=="LIABILITIES") (catMap[r.cat]=catMap[r.cat]||[]).push(r); });
-  const catOrder=Object.keys(catMap).sort((a,b)=>Math.abs(sumV(catMap[b]))-Math.abs(sumV(catMap[a])));
+  const isLiab=r=>r.cat==="LIABILITIES";
+  const groupCats=list=>{ const m={}; list.forEach(r=>{ (m[r.cat]=m[r.cat]||[]).push(r); });
+    return {m, order:Object.keys(m).sort((a,b)=>Math.abs(sumV(m[b]))-Math.abs(sumV(m[a])))}; };
+  const A=groupCats(rows.filter(r=>!isLiab(r))), L=groupCats(rows.filter(isLiab));
+  const catOrder=[...A.order, ...L.order];   // every collapsible group, assets first
   const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  /* two columns only (name | value) so the table fits a phone screen without any
-     sideways scroll; the asset-class detail rides under the account name. */
+  /* two tables, assets first then liabilities, same two-column layout (name | value)
+     so they fit a phone without sideways scroll. Every category starts collapsed;
+     Expand all / Collapse all act on both tables. */
+  const table=(title,cls,G)=>{
+    if(!G.order.length) return '';
+    let t=`<table class="nw ${cls}"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
+          `<th class="grp">${title}</th><th>Value</th></tr></thead><tbody>`;
+    G.order.forEach(cat=>{
+      // assets: high -> low; liabilities: largest debt first
+      const cl=G.m[cat].slice().sort(cls==='liab' ? (a,b)=>a.v-b.v : (a,b)=>b.v-a.v);
+      const open=nwOpen.has(cat);
+      t+=`<tr class="sub cgroup" data-cat="${esc(cat)}" tabindex="0" role="button" aria-expanded="${open}">`+
+         `<td class="t"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
+         `<span class="cnt">(${cl.length})</span></td>`+vcell(sumV(cl))+`</tr>`;
+      if(open) cl.forEach(r=>{
+        const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
+        t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
+      });
+    });
+    return t+`</tbody></table>`;
+  };
   const allOpen=catOrder.every(c=>nwOpen.has(c)), noneOpen=catOrder.every(c=>!nwOpen.has(c));
-  let h=`<div class="nwtools">`+
+  wrap.innerHTML=`<div class="nwtools">`+
     `<button type="button" data-nwall="open"${allOpen?' disabled':''}>Expand all</button>`+
     `<button type="button" data-nwall="close"${noneOpen?' disabled':''}>Collapse all</button></div>`+
-    `<table class="nw"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
-    `<th class="grp">Category / account</th><th>Value</th></tr></thead><tbody>`;
-  catOrder.forEach(cat=>{
-    const cl=catMap[cat].slice().sort((a,b)=>b.v-a.v);
-    const open=nwOpen.has(cat);
-    h+=`<tr class="sub cgroup" data-cat="${esc(cat)}" tabindex="0" role="button" aria-expanded="${open}">`+
-       `<td class="t"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
-       `<span class="cnt">(${cl.length})</span></td>`+vcell(sumV(cl))+`</tr>`;
-    if(open) cl.forEach(r=>{
-      const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
-      h+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
-    });
-  });
-  h+=`</tbody></table>`;
-  // liabilities: separate table, always last, accounts listed flat (largest first)
-  // with a total row at the bottom
-  if(liabRows.length){
-    h+=`<table class="nw liab"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
-       `<th class="grp">Liabilities</th><th>Value</th></tr></thead><tbody>`;
-    liabRows.forEach(r=>{
-      const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
-      h+=`<tr><td class="t">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
-    });
-    h+=`<tr class="sub"><td class="t">Total liabilities <span class="cnt">(${liabRows.length})</span></td>`+
-       vcell(sumV(liabRows))+`</tr></tbody></table>`;
-  }
-  wrap.innerHTML=h;
+    table('Assets','assets',A)+table('Liabilities','liab',L);
   // expand / collapse a category (click or keyboard), then re-render off nwOpen
   const toggleCat=cat=>{ if(nwOpen.has(cat)) nwOpen.delete(cat); else nwOpen.add(cat); buildNetWorth(); };
   wrap.querySelectorAll('tr.cgroup').forEach(tr=>{
