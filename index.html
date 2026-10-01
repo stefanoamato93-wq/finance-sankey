@@ -1368,10 +1368,10 @@ function initControlsOnce(){
   if(controlsReady) return;
   MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
   monthEl.value=META.maxMi%12+1;
-  /* open on the current (latest) month, not on the trailing window */
-  modeEl.value='month';
-  t12El.checked=false;
-  setSlider(maxIdx(), maxIdx());
+  /* open on the trailing 12 months ending on the latest month in the sheet */
+  modeEl.value='trailing';
+  t12El.checked=true;
+  { const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi); }
   [yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
   /* quick-set and the trailing-12 flag are two views of the same Comparison_Mode,
      so each keeps the other in sync */

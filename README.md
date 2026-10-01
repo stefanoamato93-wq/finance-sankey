@@ -123,9 +123,11 @@ Needs / Wants / Liberality / Taxes → category`.
   panel, which scrolls inside itself (capped at 88vh). Desktop layout is unchanged.
 
 ### Period selection
-- **Default view: the current (latest) month.** The app opens on single-month mode
-  anchored to the most recent month in the sheet, so the first thing on screen is
-  this month's expenses.
+- **Default view: trailing 12 months.** The app opens in Trailing 12 months mode
+  (flag ticked), on the 12-month window ending on the most recent month in the
+  sheet (or the full span if fewer than 12 months exist). Set in
+  `initControlsOnce()` via `presetRange()`; a data refresh keeps whatever window
+  the user has moved to.
 - **Trailing 12 months flag:** a checkbox next to the toggles switches between the
   current month and the trailing-12-month window. It is two-way bound to the Quick
   set dropdown (ticking it selects Trailing 12 months, and choosing a mode in the
