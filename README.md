@@ -11,8 +11,8 @@ browser.
 1. Title (**Personal finance**).
 2. **Headline cards: Net worth / Total assets** (top of the page).
 3. Period controls + the money-flow **Sankey**.
-4. **Assets** table (collapsed by category), then a separate **Liabilities** table
-   listed last.
+4. **Assets** table, then a separate **Liabilities** table, both collapsed by
+   category (Expand all / Collapse all cover both).
 
 **Favicon:** an inline SVG data-URI `<link rel="icon">` in `<head>` (a mini Sankey:
 green income bar splitting into needs / wants / savings bands on a dark tile), so
@@ -198,12 +198,12 @@ value-only view.
 - The `VARIABLE` (variability) grouping level was removed from the table; it is
   still part of the holding key used to compute balances.
 
-- **Liabilities: separate table, always last.** The `LIABILITIES` category is kept
-  out of the collapsible assets table and rendered as its own `Liabilities | Value`
-  table underneath (`table.nw.liab`): the liability accounts listed flat (no
-  expand/collapse), largest first, then a **Total liabilities** row (red accent).
-  Expand all / Collapse all only act on the assets table. The table is skipped when
-  there are no liability balances.
+- **Two tables: Assets first, Liabilities after.** `table.nw.assets` holds every
+  category except `LIABILITIES`; `table.nw.liab` (red accent) sits underneath with
+  the `LIABILITIES` category. Both use the same collapsible category rows, both
+  start **fully collapsed**, and **Expand all / Collapse all** act on both tables
+  at once. Liability accounts sort largest debt first. Built by the `table()`
+  helper inside `buildNetWorth()`; a table is skipped when it has no rows.
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).
