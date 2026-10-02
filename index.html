@@ -61,6 +61,9 @@
   .tip i.sw{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px;}
   .tip i.ln{display:inline-block; width:13px; height:0; border-top:2px solid; vertical-align:middle; margin-right:4px;}
   .tip i.ln.dash{border-top-style:dashed;}
+  .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  #cfSel{height:28px; padding:0 6px; font-size:12px; font-family:inherit; max-width:min(260px,55%); min-width:0;}
+  #cfSel.on{border-color:#25603f; color:#fff; background:#1b3a2b;}
   #cfbars text{font-variant-numeric:tabular-nums;}
   #cfbars .hit{fill:transparent; cursor:pointer;}
   #cfbars .hit:hover{fill:rgba(255,255,255,.035);}
@@ -396,8 +399,10 @@
 
 <!-- 4) cash flow vs savings: one stacked bar per year (income up, expenses down) and the
      savings rate on total income and on safe income (Base + TFR + Food tickets) -->
-<div class="nwhead" id="cfbhead" style="display:none">
+<div class="nwhead cfbhead" id="cfbhead" style="display:none">
   <h2>Cash Flow vs Savings</h2>
+  <!-- Overview (stacks + savings %) or one category / label / detail plotted per year -->
+  <select id="cfSel" aria-label="Plot one category" title="Plot one category, label or detail"></select>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
@@ -1577,21 +1582,96 @@ function cashFlowByYear(data, lastMi, excluded){
   const by={}, ds=excluded||new Set();
   (data||[]).forEach(([mi,k,grp,leaf,val])=>{
     if(mi>lastMi) return;
+    const y=Math.floor(mi/12);
+    const b=by[y]||(by[y]={mset:{}, nz:false, inc:{safe:0,stocks:0,other:0}, exp:{}});
+    /* months and the "year has data" flag count every row, so Avg/m divisors and the
+       year axis do not move when entries are excluded */
+    b.mset[mi]=1; if(val) b.nz=true;
     /* same Entry keys as the Sankey's Selection_State */
     if(k==='I' ? (ds.has('I|'+leaf)||ds.has('IG|'+grp)) : (ds.has('E|'+leaf)||ds.has('EG|'+grp))) return;
-    const y=Math.floor(mi/12);
-    const b=by[y]||(by[y]={mset:{}, inc:{safe:0,stocks:0,other:0}, exp:{}});
-    b.mset[mi]=1;
     if(k==='I') b.inc[CF_SAFE.has(leaf)?'safe':leaf==='STOCKS'?'stocks':'other']+=val;
     else b.exp[grp]=(b.exp[grp]||0)-val;          // expenses stored negative -> positive spend
   });
   return Object.keys(by).map(Number).sort((a,b)=>a-b).map(y=>{
     const b=by[y], income=b.inc.safe+b.inc.stocks+b.inc.other,
           expenses=Object.values(b.exp).reduce((a,v)=>a+v,0);
-    return {year:y, months:Object.keys(b.mset).length, inc:b.inc, exp:b.exp, income, safe:b.inc.safe, expenses,
+    return {year:y, nz:b.nz, months:Object.keys(b.mset).length, inc:b.inc, exp:b.exp, income, safe:b.inc.safe, expenses,
       rateTot:  income>0     ? (income-expenses)/income*100         : null,
       rateSafe: b.inc.safe>0 ? (b.inc.safe-expenses)/b.inc.safe*100 : null};
-  }).filter(r=>r.income||r.expenses);             // drops blank-date rows (Dec 1899)
+  }).filter(r=>r.nz);                             // drops blank-date rows (Dec 1899)
+}
+
+/* ---- single-series mode: plot one category / label / detail per year -------
+   Selection keys (the #cfSel <select>):
+     T|inc  T|safe  T|exp  T|sav  T|safesav     totals
+     IG|<income group>   EG|<expense macro group>
+     I|<income leaf>     E|<expense leaf>        D|<expense leaf>|<detail>
+   Totals honour every exclusion; a group honours the exclusions of its leaves (not
+   of itself, it was picked explicitly); a leaf or a detail ignores exclusions.
+   Pure: returns {year: raw value} (income positive, spend positive, savings signed). */
+function cfSeriesByYear(sel, data, detail, lastMi, excluded){
+  const out={}, ds=excluded||new Set(), p=sel.indexOf('|'), kind=sel.slice(0,p), name=sel.slice(p+1);
+  const add=(mi,v)=>{ if(mi>lastMi) return; const y=Math.floor(mi/12); out[y]=(out[y]||0)+v; };
+  if(kind==='D'){
+    const q=name.indexOf('|'), lf=name.slice(0,q), dn=name.slice(q+1);
+    (detail||[]).forEach(([mi,l,d,v])=>{ if(l===lf && d===dn) add(mi,v); });
+    return out;
+  }
+  (data||[]).forEach(([mi,k,grp,leaf,val])=>{
+    const lk=(k==='I'?'I|':'E|')+leaf, gk=(k==='I'?'IG|':'EG|')+grp;
+    if(kind==='I'){ if(k==='I' && leaf===name) add(mi,val); return; }
+    if(kind==='E'){ if(k==='E' && leaf===name) add(mi,-val); return; }
+    if(ds.has(lk)) return;
+    if(kind==='IG'){ if(k==='I' && grp===name) add(mi,val); return; }
+    if(kind==='EG'){ if(k==='E' && grp===name) add(mi,-val); return; }
+    if(ds.has(gk)) return;
+    if(name==='inc'){ if(k==='I') add(mi,val); }
+    else if(name==='safe'){ if(k==='I' && CF_SAFE.has(leaf)) add(mi,val); }
+    else if(name==='exp'){ if(k==='E') add(mi,-val); }
+    else if(name==='sav'){ add(mi,val); }                              // income + (negative) expenses
+    else if(name==='safesav'){ if(k==='E' || CF_SAFE.has(leaf)) add(mi,val); }
+  });
+  return out;
+}
+/* option list for #cfSel, rebuilt once per data load. CF_OPTS maps key -> {label,
+   color, base} where base = what the tooltip share is taken of ('income' | 'safe' | null). */
+let cfSel='', CF_OPTS=new Map(), cfOptData=null;
+function buildCfOptions(){
+  const sel=document.getElementById('cfSel'); if(!sel) return;
+  CF_OPTS=new Map(); cfOptData=DATA;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const IND='\u00a0\u00a0\u00a0', IND2=IND+IND;
+  const expCol=g=>(CF_EXP.find(x=>x[0]===g)||[0,0,'#dc5b55'])[2];
+  const opt=(key,label,indent,color,base)=>{ CF_OPTS.set(key,{label,color,base});
+    return `<option value="${esc(key)}">${indent}${esc(label)}</option>`; };
+  /* structure straight from DATA / DETAIL */
+  const incLeaves={}, expLeaves={}, dets={};
+  DATA.forEach(([mi,k,grp,leaf])=>{ const m=(k==='I'?incLeaves:expLeaves); (m[grp]=m[grp]||new Set()).add(leaf); });
+  DETAIL.forEach(([mi,lf,dn])=>{ (dets[lf]=dets[lf]||new Set()).add(dn); });
+  const byOrder=(a,b)=>{ const ia=ORDER.indexOf(a), ib=ORDER.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib) || (a<b?-1:1); };
+  let h=`<option value="">Overview</option><optgroup label="Income">`+
+    opt('T|inc','Total income','',CF_INC[0][2],null)+opt('T|safe','Safe income','',CF_INC[0][2],'income');
+  Object.keys(incLeaves).sort(byOrder).forEach(g=>{
+    h+=opt('IG|'+g,g,'','#3aa86a','income');
+    [...incLeaves[g]].sort((a,b)=>rankCmp('I|'+a,'I|'+b)).forEach(lf=> h+=opt('I|'+lf,lf,IND,'#63c28b','income'));
+  });
+  h+=`</optgroup><optgroup label="Savings">`+opt('T|sav','Savings','','#e7c14a','income')+
+     opt('T|safesav','Safe savings','','#e7c14a','safe')+`</optgroup>`+
+     `<optgroup label="Expenses">`+opt('T|exp','Total expenses','','#dc5b55','income')+`</optgroup>`;
+  Object.keys(expLeaves).sort(byOrder).forEach(g=>{
+    const c=expCol(g);
+    h+=`<optgroup label="${esc(g)}">`+opt('EG|'+g,'All '+g.toLowerCase(),'',c,'income');
+    [...expLeaves[g]].sort((a,b)=>rankCmp('E|'+a,'E|'+b)).forEach(lf=>{
+      h+=opt('E|'+lf,lf,IND,c,'income');
+      const ds=[...(dets[lf]||[])];
+      if(ds.length>1) ds.sort((a,b)=>rankCmp('D|'+lf+'|'+a,'D|'+lf+'|'+b))
+        .forEach(dn=> h+=opt('D|'+lf+'|'+dn,dn,IND2,c,'income'));
+    });
+    h+=`</optgroup>`;
+  });
+  sel.innerHTML=h;
+  if(cfSel && !CF_OPTS.has(cfSel)) cfSel='';      // the picked entry vanished on a data refresh
+  sel.value=cfSel; sel.classList.toggle('on',!!cfSel);
 }
 let cfLastW=0, cfSig=null, cfData=null;
 /* called from every build(); redraws only when an input changed (data, exclusions,
@@ -1601,20 +1681,26 @@ function renderCashBars(){
   if(!svgEl || !DATA.length) return;
   const perMonth=monthlyEl.checked, dv=r=> perMonth ? Math.max(1,r.months) : 1;
   const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
-  const sig=[W,perMonth,showK,[...deselected].sort().join(',')].join('#');
+  if(DATA!==cfOptData) buildCfOptions();
+  const sig=[W,perMonth,showK,cfSel,[...deselected].sort().join(',')].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
-  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
-  const rows=cashFlowByYear(DATA, Math.min(META.maxMi, nowMi), deselected);
+  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth(), lastMi=Math.min(META.maxMi, nowMi);
+  const rows=cashFlowByYear(DATA, lastMi, deselected);
   const narrow=W<560, n=rows.length;
   if(!n){ svgEl.innerHTML=''; return; }
+  /* single-series mode: one bar per year for the picked entry, no savings % lines */
+  const info=cfSel ? CF_OPTS.get(cfSel) : null;
+  const ser=info ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected) : null;
+  const sv=ser ? rows.map(r=>(ser[r.year]||0)/dv(r)) : null;
   /* geometry (CSS px, viewBox = real width) */
   const padL=4, padR=4, slot=(W-padL-padR)/n, barW=Math.min(58, slot*0.62);
   const cx=i=> padL+slot*i+slot/2;
-  const vals=rows.map(r=>({inc:r.income/dv(r), exp:r.expenses/dv(r)}));
+  const vals=ser ? sv.map(v=>({inc:Math.max(0,v), exp:Math.max(0,-v)}))
+                 : rows.map(r=>({inc:r.income/dv(r), exp:r.expenses/dv(r)}));
   const maxPos=Math.max(1,...vals.map(v=>Math.max(0,v.inc))), maxNeg=Math.max(0,...vals.map(v=>Math.max(0,v.exp)));
-  const lineH=narrow?54:70, barsH=narrow?170:220;
-  const lineTop=16, lineBot=lineTop+lineH, barsTop=lineBot+14+18;
+  const lineH=ser?0:(narrow?54:70), barsH=narrow?170:220;
+  const lineTop=ser?0:16, lineBot=lineTop+lineH, barsTop=ser?22:lineBot+14+18;
   const sc=barsH/(maxPos+maxNeg||1), baseY=barsTop+maxPos*sc, negBot=baseY+maxNeg*sc;
   const yLab=negBot+16+14, H=yLab+(rows.some(r=>r.months<12)?14:4)+4;
   /* label font: shrink when the longest value label would not fit its column */
@@ -1627,7 +1713,22 @@ function renderCashBars(){
   svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`); svgEl.setAttribute('height',H); svgEl.innerHTML='';
   /* zero line */
   svgEl.appendChild(el('line',{x1:padL,x2:W-padR,y1:baseY,y2:baseY,stroke:'#3a4d78','stroke-width':1}));
-  rows.forEach((r,i)=>{
+  const yearLabel=(r,i)=>{
+    const yt=el('text',{x:cx(i),y:yLab,'text-anchor':'middle',fill:'#e7ecf5','font-size':narrow?10:11},String(r.year));
+    if(r.months<12){ const ts=el('tspan',{x:cx(i),dy:12,fill:'#9aa6bd','font-size':9},
+      r.year===d.getFullYear()?'YTD':r.months+'m'); yt.appendChild(ts); }
+    svgEl.appendChild(yt); };
+  if(ser) rows.forEach((r,i)=>{
+    /* one bar: up when positive, down when negative (a savings loss, a net refund) */
+    const x=cx(i)-barW/2, v=sv[i], h=Math.abs(v)*sc, neg=v<0, isSav=/^T\|(safe)?sav$/.test(cfSel);
+    /* negative savings = red; any other negative (net refund) = its own colour, faded */
+    if(h>0) svgEl.appendChild(el('rect',{x,y:neg?baseY:baseY-h,width:barW,height:h,
+      fill: neg && isSav ? '#e58a8a' : info.color, 'fill-opacity': neg && !isSav ? .5 : 1}));
+    if(!/^-?0K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:neg?baseY+h+fsV+3:baseY-h-5,'text-anchor':'middle',
+      fill:neg?'#e58a8a':'#e7ecf5','font-size':fsV,'font-weight':700},fmt(v)));
+    yearLabel(r,i);
+  });
+  else rows.forEach((r,i)=>{
     const x=cx(i)-barW/2, v=vals[i];
     /* income stack, upwards from the zero line */
     let y=baseY;
@@ -1639,14 +1740,10 @@ function renderCashBars(){
     CF_EXP.forEach(([g,,c])=>{ const h=Math.max(0,(r.exp[g]||0)/dv(r))*sc; if(h<=0) return;
       svgEl.appendChild(el('rect',{x,y:yn,width:barW,height:h,fill:c})); yn+=h; });
     if(v.exp>0) svgEl.appendChild(el('text',{x:cx(i),y:yn+fsV+3,'text-anchor':'middle',fill:'#e58a8a','font-size':fsV,'font-weight':600},fmt(-v.exp)));
-    /* year axis label (+ YTD / months on a second line for a part year) */
-    const yt=el('text',{x:cx(i),y:yLab,'text-anchor':'middle',fill:'#e7ecf5','font-size':narrow?10:11},String(r.year));
-    if(r.months<12){ const ts=el('tspan',{x:cx(i),dy:12,fill:'#9aa6bd','font-size':9},
-      r.year===d.getFullYear()?'YTD':r.months+'m'); yt.appendChild(ts); }
-    svgEl.appendChild(yt);
+    yearLabel(r,i);   // year axis label (+ YTD / months on a second line for a part year)
   });
-  /* savings-rate lines: own % scale in the band above the bars */
-  const rates=rows.flatMap(r=>[r.rateTot,r.rateSafe]).filter(x=>x!=null);
+  /* savings-rate lines: own % scale in the band above the bars (overview only) */
+  const rates=ser ? [] : rows.flatMap(r=>[r.rateTot,r.rateSafe]).filter(x=>x!=null);
   if(rates.length){
     let rMax=Math.max(...rates), rMin=Math.min(...rates); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
     const ry=v=> lineTop+(rMax-v)/(rMax-rMin)*lineH;
@@ -1673,9 +1770,16 @@ function renderCashBars(){
         .map(([key,lab,c])=>`<i class="sw" style="background:${c}"></i>${lab} ${fmt(src[key]/k)}`), out=[];
       for(let j=0;j<it.length;j+=2) out.push(it.slice(j,j+2).join(' \u00b7 '));
       return out.map(s=>`<br><span style="color:#9aa6bd">&nbsp;&nbsp;${s}</span>`).join(''); };
-    const html=`<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`+
+    const head=`<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`+
       `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`+
-      `${deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:''}`+
+      `${deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:''}`;
+    /* series mode: the picked entry, its value and its share of that year's income
+       (or of safe income for Safe savings) */
+    const baseV=info && info.base==='safe' ? r.safe : r.income;
+    const html= ser ? head+
+      `<br><i class="sw" style="background:${info.color}"></i>${info.label} <b>${fmt(sv[i])}</b>`+
+      (info.base && baseV>0 ? `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc((ser[r.year]||0)/baseV*100)} of ${info.base==='safe'?'safe income':'income'}</span>` : '')
+    : head+
       `<br>Income <b>${fmt(r.income/k)}</b>${part(CF_INC,r.inc)}`+
       `<br>Expenses <b>${fmt(r.expenses/k)}</b>${part(CF_EXP,r.exp)}`+
       `<br>Saved <b>${fmt((r.income-r.expenses)/k)}</b> \u00b7 safe <b>${fmt((r.safe-r.expenses)/k)}</b>`+
@@ -1840,6 +1944,9 @@ function initControlsOnce(){
   document.getElementById('lastMonth').addEventListener('click',()=>oneMonth(lastCompleteMi()));
   monthlyEl.addEventListener('change',()=>{ build(); renderCashBars(); });
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); renderCashBars(); });
+  /* chart picker: Overview, or one category / label / detail per year */
+  const cfSelEl=document.getElementById('cfSel');
+  cfSelEl.addEventListener('change',()=>{ cfSel=cfSelEl.value; cfSelEl.classList.toggle('on',!!cfSel); hideTip(); renderCashBars(); });
   /* the yearly bars are drawn at the frame's real width, so redraw when it changes */
   let cfRT=null;
   window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
@@ -1921,7 +2028,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear };
 }
 </script>
 </body>

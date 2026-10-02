@@ -40,6 +40,23 @@ year is labelled `YTD` under its year; any other part year shows its month count
   rates; "Include all" restores it. `renderCashBars()` runs from every `build()` but
   only redraws when data, exclusions, Avg/m, K or the width changed (signature
   check), so dragging the range bar does not rebuild it.
+- **Picker (`#cfSel`, right of the chart title):** `Overview` (the stacks + savings
+  % lines) or any single entry plotted as one bar per year, in which case **the
+  savings % lines disappear**. Options, in Sankey order: Income (Total income, Safe
+  income, each income group and its leaves), Savings (Savings, Safe savings, which
+  can go negative and then draw downwards in red), Expenses (Total expenses), then
+  one group per macro group (Needs, Wants, ...) with "All needs", each label and,
+  indented under it, its DETAIL sub-categories (only when a label has more than
+  one). Leaves and details use the Stable_Order rank. The select turns green while
+  an entry is picked. Avg/m and K apply; the tooltip shows the value and its share of
+  that year's income (Safe savings: of safe income).
+  - Exclusions in series mode: totals honour every exclusion, a group honours the
+    exclusions of its own leaves (not of itself, since you picked it), a label or a
+    detail ignores exclusions. Avg/m month counts never change with exclusions.
+  - Code: pure `cfSeriesByYear(sel, DATA, DETAIL, lastMi, excluded)` (exported in
+    the test shim) returns `{year: value}`; `buildCfOptions()` rebuilds the list
+    once per data load (`CF_OPTS` = key -> label / colour / share base) and keeps the
+    pick across refreshes when it still exists.
 - **No legend.** The colour keys show only in the hover (desktop) / tap (phone)
   tooltip: a swatch per tier, the solid / dashed line keys next to the two rates,
   plus total and safe savings and an "N excluded" note. Tap elsewhere hides it.
