@@ -52,7 +52,18 @@
   .status{margin:16px 26px; color:var(--muted); font-size:13px;}
   .status.err{color:#e58a8a;}
   .framed{border:1px solid var(--grid); background:var(--panel); border-radius:12px;}
-  .wrap{margin:10px 26px 40px; padding:12px 16px; max-width:940px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .wrap{margin:10px 26px 0; padding:12px 16px; max-width:940px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  /* Cash Flow vs Savings: yearly stacked income / expense bars + two savings-rate lines.
+     Drawn at the frame's real pixel width (no scaling), so text stays legible on phones. */
+  .cfbwrap{margin:10px 26px 40px; padding:10px 14px 6px; max-width:940px;}
+  .cflegend{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--muted); margin-bottom:2px;}
+  .cflegend span{display:inline-flex; align-items:center; gap:5px; white-space:nowrap;}
+  .cflegend i{display:inline-block; width:10px; height:10px; border-radius:2px;}
+  .cflegend i.ln{width:16px; height:0; border-top:2px solid; border-radius:0;}
+  .cflegend i.ln.dash{border-top-style:dashed;}
+  #cfbars text{font-variant-numeric:tabular-nums;}
+  #cfbars .hit{fill:transparent; cursor:pointer;}
+  #cfbars .hit:hover{fill:rgba(255,255,255,.035);}
   svg{width:100%; height:auto; display:block; overflow:visible;}
   .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
   .node .nval{fill:var(--muted); font-size:10px;}
@@ -249,7 +260,9 @@
     .dual .track{top:15px;} .dual .fill{top:13px;}
     .dual .handle{top:7px; width:20px; height:20px; margin-left:-10px;}
     .dual .handle::before{content:""; position:absolute; top:-14px; left:-14px; right:-14px; bottom:-14px;}
-    .wrap{margin:10px 14px 8px; padding:8px;}
+    .wrap{margin:10px 14px 0; padding:8px;}
+    .cfbwrap{margin:10px 14px 24px; padding:8px 6px 4px; max-width:100%;}
+    .cflegend{font-size:10.5px; gap:3px 9px; padding:0 4px;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
     /* both card rows stay three across, just tighter */
@@ -375,6 +388,16 @@
 <div class="totals" id="totals"></div>
 <div class="swipehint" id="swipehint">Swipe the diagram sideways to see it all →</div>
 <div class="wrap framed"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+
+<!-- 4) cash flow vs savings: one stacked bar per year (income up, expenses down) and the
+     savings rate on total income and on safe income (Base + TFR + Food tickets) -->
+<div class="nwhead" id="cfbhead" style="display:none">
+  <h2>Cash Flow vs Savings</h2>
+</div>
+<div class="cfbwrap framed" id="cfbwrap" style="display:none">
+  <div class="cflegend" id="cfLegend"></div>
+  <svg id="cfbars" viewBox="0 0 900 360"></svg>
+</div>
 
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
@@ -1515,6 +1538,144 @@ function buildNetWorth(){
   }));
 }
 
+/* ---- Cash Flow vs Savings (yearly bars + savings-rate lines) --------------
+   One column per calendar year, actuals only (from the first year of data up to
+   the current month; nothing after today is drawn, no forecast years).
+     up   = income, stacked Safe (Base + TFR + Food tickets) / Stocks / Other
+     down = expenses, stacked Needs / Wants / Liberality / Taxes (/ Other)
+     lines= savings rate on total income  ((income - expenses) / income)
+            and on safe income            ((safe - expenses) / safe)
+   Window-independent like the Yearly trend: it ignores the range bar and the
+   exclusions. Avg/m divides each year by the months of that year present in the
+   data (keeps the in-progress year comparable); K applies to every label. */
+const CF_SAFE=new Set(['BASE','TFR','FOODTICKETS']);
+const CF_INC=[['safe','Safe','#2e8b57','Base + TFR + Food tickets'],
+              ['stocks','Stocks','#63c28b','Stock vesting'],
+              ['other','Other','#b5e3c6','Every other income (commute, one-off, heritage, passion, real estate, bonus, ...)']];
+const CF_EXP=[['Needs','Needs','#b03a3a'],['Wants','Wants','#dc5b55'],['Liberality','Liberality','#ec958f'],
+              ['Taxes','Taxes','#f6c4c0'],['Other','Other exp.','#c9a7a7']];
+const CF_LINE_TOT='#e7ecf5', CF_LINE_SAFE='#9aa6bd';
+/* pure: DATA rows -> [{year, months, inc:{safe,stocks,other}, exp:{group:spend}, income, safe,
+   expenses, rateTot, rateSafe}] oldest -> newest, rows after lastMi ignored. Rates are %
+   (null when their base income is <= 0); expenses are positive spend. */
+function cashFlowByYear(data, lastMi){
+  const by={};
+  (data||[]).forEach(([mi,k,grp,leaf,val])=>{
+    if(mi>lastMi) return;
+    const y=Math.floor(mi/12);
+    const b=by[y]||(by[y]={mset:{}, inc:{safe:0,stocks:0,other:0}, exp:{}});
+    b.mset[mi]=1;
+    if(k==='I') b.inc[CF_SAFE.has(leaf)?'safe':leaf==='STOCKS'?'stocks':'other']+=val;
+    else b.exp[grp]=(b.exp[grp]||0)-val;          // expenses stored negative -> positive spend
+  });
+  return Object.keys(by).map(Number).sort((a,b)=>a-b).map(y=>{
+    const b=by[y], income=b.inc.safe+b.inc.stocks+b.inc.other,
+          expenses=Object.values(b.exp).reduce((a,v)=>a+v,0);
+    return {year:y, months:Object.keys(b.mset).length, inc:b.inc, exp:b.exp, income, safe:b.inc.safe, expenses,
+      rateTot:  income>0     ? (income-expenses)/income*100         : null,
+      rateSafe: b.inc.safe>0 ? (b.inc.safe-expenses)/b.inc.safe*100 : null};
+  }).filter(r=>r.income||r.expenses);             // drops blank-date rows (Dec 1899)
+}
+let cfLastW=0;
+function renderCashBars(){
+  const svgEl=document.getElementById('cfbars'), legEl=document.getElementById('cfLegend');
+  if(!svgEl || !DATA.length) return;
+  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
+  const rows=cashFlowByYear(DATA, Math.min(META.maxMi, nowMi));
+  const perMonth=monthlyEl.checked, dv=r=> perMonth ? Math.max(1,r.months) : 1;
+  const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900)); cfLastW=W;
+  const narrow=W<560, n=rows.length;
+  /* legend: only the stack tiers that have data */
+  const hasExp=g=> rows.some(r=>(r.exp[g]||0)>0);
+  const incT=CF_INC.filter(([k])=>rows.some(r=>r.inc[k]>0)), expT=CF_EXP.filter(([g])=>hasExp(g));
+  legEl.innerHTML=
+    incT.map(([,lab,c,t])=>`<span title="${t}"><i style="background:${c}"></i>${lab}</span>`).join('')+
+    expT.map(([,lab,c])=>`<span><i style="background:${c}"></i>${lab}</span>`).join('')+
+    `<span title="(Income - Expenses) / Income"><i class="ln" style="border-color:${CF_LINE_TOT}"></i>Saved % income</span>`+
+    `<span title="(Safe income - Expenses) / Safe income, safe = Base + TFR + Food tickets"><i class="ln dash" style="border-color:${CF_LINE_SAFE}"></i>Saved % safe</span>`;
+  if(!n){ svgEl.innerHTML=''; return; }
+  /* geometry (CSS px, viewBox = real width) */
+  const padL=4, padR=4, slot=(W-padL-padR)/n, barW=Math.min(58, slot*0.62);
+  const cx=i=> padL+slot*i+slot/2;
+  const vals=rows.map(r=>({inc:r.income/dv(r), exp:r.expenses/dv(r)}));
+  const maxPos=Math.max(1,...vals.map(v=>Math.max(0,v.inc))), maxNeg=Math.max(0,...vals.map(v=>Math.max(0,v.exp)));
+  const lineH=narrow?54:70, barsH=narrow?170:220;
+  const lineTop=16, lineBot=lineTop+lineH, barsTop=lineBot+14+18;
+  const sc=barsH/(maxPos+maxNeg||1), baseY=barsTop+maxPos*sc, negBot=baseY+maxNeg*sc;
+  const yLab=negBot+16+14, H=yLab+(rows.some(r=>r.months<12)?14:4)+4;
+  /* label font: shrink when the longest value label would not fit its column */
+  const labs=vals.flatMap(v=>[fmt(v.inc),fmt(-v.exp)]);
+  const maxCh=Math.max(...labs.map(s=>s.length));
+  const fsV=Math.max(7.5, Math.min(narrow?10:11, (slot-4)/(maxCh*0.6)));
+  const fsP=Math.max(8, Math.min(narrow?10:11, (slot-2)/(4*0.62)));
+  const el=(tag,attrs,txt)=>{ const e=document.createElementNS(NS,tag);
+    for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; };
+  svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`); svgEl.setAttribute('height',H); svgEl.innerHTML='';
+  /* zero line */
+  svgEl.appendChild(el('line',{x1:padL,x2:W-padR,y1:baseY,y2:baseY,stroke:'#3a4d78','stroke-width':1}));
+  rows.forEach((r,i)=>{
+    const x=cx(i)-barW/2, v=vals[i];
+    /* income stack, upwards from the zero line */
+    let y=baseY;
+    CF_INC.forEach(([k,,c])=>{ const h=Math.max(0,r.inc[k]/dv(r))*sc; if(h<=0) return;
+      y-=h; svgEl.appendChild(el('rect',{x,y,width:barW,height:h,fill:c})); });
+    svgEl.appendChild(el('text',{x:cx(i),y:y-5,'text-anchor':'middle',fill:'#e7ecf5','font-size':fsV,'font-weight':700},fmt(v.inc)));
+    /* expense stack, downwards */
+    let yn=baseY;
+    CF_EXP.forEach(([g,,c])=>{ const h=Math.max(0,(r.exp[g]||0)/dv(r))*sc; if(h<=0) return;
+      svgEl.appendChild(el('rect',{x,y:yn,width:barW,height:h,fill:c})); yn+=h; });
+    if(v.exp>0) svgEl.appendChild(el('text',{x:cx(i),y:yn+fsV+3,'text-anchor':'middle',fill:'#e58a8a','font-size':fsV,'font-weight':600},fmt(-v.exp)));
+    /* year axis label (+ YTD / months on a second line for a part year) */
+    const yt=el('text',{x:cx(i),y:yLab,'text-anchor':'middle',fill:'#e7ecf5','font-size':narrow?10:11},String(r.year));
+    if(r.months<12){ const ts=el('tspan',{x:cx(i),dy:12,fill:'#9aa6bd','font-size':9},
+      r.year===d.getFullYear()?'YTD':r.months+'m'); yt.appendChild(ts); }
+    svgEl.appendChild(yt);
+  });
+  /* savings-rate lines: own % scale in the band above the bars */
+  const rates=rows.flatMap(r=>[r.rateTot,r.rateSafe]).filter(x=>x!=null);
+  if(rates.length){
+    let rMax=Math.max(...rates), rMin=Math.min(...rates); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
+    const ry=v=> lineTop+(rMax-v)/(rMax-rMin)*lineH;
+    const line=(key,color,dash,above)=>{
+      let dd='', pen=false;
+      rows.forEach((r,i)=>{ const v=r[key]; if(v==null){ pen=false; return; }
+        dd+=(pen?'L':'M')+cx(i).toFixed(1)+','+ry(v).toFixed(1); pen=true; });
+      const p=el('path',{d:dd,fill:'none',stroke:color,'stroke-width':above?2:1.6,'stroke-linejoin':'round'});
+      if(dash) p.setAttribute('stroke-dasharray','5 3');
+      svgEl.appendChild(p);
+      rows.forEach((r,i)=>{ const v=r[key]; if(v==null) return;
+        svgEl.appendChild(el('circle',{cx:cx(i),cy:ry(v),r:2.6,fill:color}));
+        svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,
+          'font-size':fsP,'font-weight':above?700:500},Math.round(v)+'%')); });
+    };
+    line('rateSafe',CF_LINE_SAFE,true,false);
+    line('rateTot',CF_LINE_TOT,false,true);
+  }
+  /* one hover / tap target per year: breakdown tooltip */
+  const pc=v=> v==null ? '\u2014' : Math.round(v)+'%';
+  rows.forEach((r,i)=>{
+    /* tiers two per line so the tooltip stays narrow enough for a phone */
+    const k=dv(r), part=(list,src)=>{ const it=list.filter(([key])=>(src[key]||0)>0)
+        .map(([key,lab])=>`${lab} ${fmt(src[key]/k)}`), out=[];
+      for(let j=0;j<it.length;j+=2) out.push(it.slice(j,j+2).join(' \u00b7 '));
+      return out.map(s=>`<br><span style="color:#9aa6bd">&nbsp;&nbsp;${s}</span>`).join(''); };
+    const html=`<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`+
+      `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`+
+      `<br>Income <b>${fmt(r.income/k)}</b>${part(CF_INC,r.inc)}`+
+      `<br>Expenses <b>${fmt(r.expenses/k)}</b>${part(CF_EXP,r.exp)}`+
+      `<br>Saved <b>${fmt((r.income-r.expenses)/k)}</b>`+
+      `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc(r.rateTot)} of income \u00b7 ${pc(r.rateSafe)} of safe</span>`;
+    const hit=el('rect',{class:'hit',x:padL+slot*i,y:0,width:slot,height:H});
+    const show=e=>{ showTip(e,html); const tw=tip.offsetWidth;
+      if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
+      const th=tip.offsetHeight; if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
+    hit.addEventListener('mousemove',show);
+    hit.addEventListener('mouseleave',hideTip);
+    hit.addEventListener('click',e=>{ e.stopPropagation(); show(e); });   // touch: tap shows, tap elsewhere hides
+    svgEl.appendChild(hit);
+  });
+}
+
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
@@ -1661,8 +1822,12 @@ function initControlsOnce(){
   const oneMonth=mi=>{ setAnchor(mi); modeEl.value='month'; t12El.checked=false; applyPreset(); };
   document.getElementById('thisMonth').addEventListener('click',()=>oneMonth(currentMi()));
   document.getElementById('lastMonth').addEventListener('click',()=>oneMonth(lastCompleteMi()));
-  monthlyEl.addEventListener('change',build);
-  document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
+  monthlyEl.addEventListener('change',()=>{ build(); renderCashBars(); });
+  document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); renderCashBars(); });
+  /* the yearly bars are drawn at the frame's real width, so redraw when it changes */
+  let cfRT=null;
+  window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
+    const s=document.getElementById('cfbars'); if(s && Math.round(s.getBoundingClientRect().width)!==cfLastW) renderCashBars(); },150); });
   const er=document.getElementById('exclReset');
   if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
@@ -1670,9 +1835,11 @@ function initControlsOnce(){
   document.getElementById('nwhead').style.display='';
   document.getElementById('nwwrap').style.display='';
   document.getElementById('cfhead').style.display='';
+  document.getElementById('cfbhead').style.display='';
+  document.getElementById('cfbwrap').style.display='';
   controlsReady=true;
 }
-function renderAll(){ build(); requestAnimationFrame(()=>buildNetWorth()); }   // Sankey first, table next frame
+function renderAll(){ build(); requestAnimationFrame(()=>{ buildNetWorth(); renderCashBars(); }); }   // Sankey first, table + yearly bars next frame
 function applyData(csv){
   aggregate(parseCSV(csv));
   if(!DATA.length) throw new Error("No usable rows (check the sheet is shared 'anyone with the link → Viewer' and named DB).");
@@ -1727,7 +1894,7 @@ function boot(){
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */
-document.addEventListener('click',()=>{ hideMini(); if(panel) closePanel(); });
+document.addEventListener('click',()=>{ hideMini(); hideTip(); if(panel) closePanel(); });
 boot();
 
 /* ---- test-only export shim ------------------------------------------------
@@ -1738,7 +1905,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear };
 }
 </script>
 </body>

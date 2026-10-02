@@ -17,6 +17,33 @@ browser.
    by category (Expand all / Collapse all cover both).
 4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
    Income / Expenses / Savings cards, then the money-flow **Sankey**.
+5. **Cash Flow vs Savings** chart (see below), under the Sankey.
+
+### Cash Flow vs Savings (yearly bars + savings-rate lines)
+One column per calendar year, **actuals only**: first year of data up to the
+current month (rows dated after today are ignored, no forecast years). The current
+year is labelled `YTD` under its year; any other part year shows its month count.
+- **Bars up = income**, stacked **Safe** (Base + TFR + Food tickets, dark green),
+  **Stocks** (mid green), **Other** (every other income, light green). Total on top.
+- **Bars down = expenses**, stacked **Needs / Wants / Liberality / Taxes** (dark to
+  light red; an "Other exp." tier appears only if the sheet has one). Total below
+  in red. Taxes are included, so the totals match the Expenses card and the Sankey
+  (the original sheet chart this replicates left them out, about 1 point of rate).
+- **Lines** in their own band above the bars, with their own % scale:
+  **Saved % income** = (income - expenses) / income (solid, label above) and
+  **Saved % safe** = (safe income - expenses) / safe income (dashed, label below).
+- **Toggles:** `Avg/m` divides each year by the months of that year present in the
+  data (same rule as the detail panel's Yearly trend), `K` applies to every label.
+  Rates do not change with Avg/m. Like the Yearly trend it is window-independent
+  (ignores the range bar and the exclusions).
+- Hover (desktop) or tap (phone) a year for a tooltip with every tier, savings and
+  both rates; tap elsewhere hides it.
+- Drawn at the frame's real pixel width (`viewBox` = measured width, redrawn on
+  resize), so text stays legible on phones without a sideways scroll; value labels
+  shrink only when they would not fit their column.
+- Code: pure `cashFlowByYear(DATA, lastMi)` (exported in the test shim) plus
+  `renderCashBars()`; tiers and colours in `CF_SAFE`, `CF_INC`, `CF_EXP`. To change
+  what counts as safe income, edit `CF_SAFE` (DB `DETAIL` names, upper case).
 
 The section frames (`#nwwrap`) and titles (`#nwhead`, `#cfhead`) stay hidden until
 the data has loaded, so no empty box shows above the skeleton; the skeleton mirrors
