@@ -8,18 +8,30 @@ browser.
 **Live:** https://stefanoamato93-wq.github.io/finance-sankey/
 
 ## Page order
-1. Title (**Personal finance**).
-2. **Headline cards: Net worth / Total assets / Total liabilities** (top of the page).
-3. Period controls + the money-flow **Sankey**.
-4. **Assets** table and **Liabilities** table (side by side on wide screens,
-   stacked on phones), both collapsed by category (Expand all / Collapse all cover both).
+1. Title (**Personal Finance**, title case; section titles too).
+2. **Net worth hero card**: the only headline box. Big net-worth value, a sub-line
+   with the latest month and the **12-month change** (green up / red down), and a
+   **trend sparkline** of month-end net worth on the right.
+3. **Assets & Liabilities** section: the Assets and Liabilities tables (side by
+   side on wide screens, stacked on phones), each with its total on top, collapsed
+   by category (Expand all / Collapse all cover both).
+4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
+   Income / Expenses / Savings cards, then the money-flow **Sankey**.
 
-**One shared column.** Both card rows (net worth row, income/expenses/savings row),
-the range bar, the Sankey frame and the assets & liabilities frame all use the same
-26px left margin and **940px max width**, so their left and right edges line up.
-Both card rows are a **3-column grid** (`.nwcards`, `.totals`) with one shared card
-style (label, value, muted sub-line with a reserved height), so cards align column
-by column and have equal heights. Three across on phones too, just tighter.
+The section frames (`#nwwrap`) and titles (`#nwhead`, `#cfhead`) stay hidden until
+the data has loaded, so no empty box shows above the skeleton; the skeleton mirrors
+this order (hero, table rows, controls, range, cards, Sankey).
+
+**One shared column.** The hero card, the tables frame, the range bar, the
+Income/Expenses/Savings row and the Sankey frame all use the same 26px left margin
+and **940px max width**, so their left and right edges line up. The
+Income/Expenses/Savings row is a **3-column grid** (`.totals`) with equal-height
+cards (reserved sub-line height); three across on phones too, just tighter.
+
+**Sparkline series:** running sum of every holding's flows per month, starting at
+the cash-flow history start (`META.minMi`) with anything earlier carried into the
+opening balance. It deliberately does NOT start at `META.allMinMi`, because a blank
+sheet date parses as Dec 1899 and would flatten the line.
 
 **Favicon:** an inline SVG data-URI `<link rel="icon">` in `<head>` (a mini Sankey:
 green income bar splitting into needs / wants / savings bands on a dark tile), so
@@ -185,12 +197,11 @@ liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall column
 their calculations were removed (they were unreliable); the table is a clean
 value-only view.
 
-- **Three headline cards at the top of the page**, in one row: **Net worth**
-  (sub-line "assets − liabilities"), **Total assets** (green) and **Total
-  liabilities** (red, sub-line "x,x% of assets"). Liabilities = the `LIABILITIES`
-  category only, not "every negative row", so a negative cash balance such as a
-  credit-card line reduces assets rather than counting as a liability. The cards
-  stay three across on mobile too.
+- **Only a Net worth box above the tables** (see Page order); the Total assets and
+  Total liabilities boxes were removed because each table now opens with its total.
+  Liabilities = the `LIABILITIES` category only, not "every negative row", so a
+  negative cash balance such as a credit-card line reduces assets rather than
+  counting as a liability.
 - **Two columns only, so it fits a phone.** The table is `Category / account | Value`
   with a fixed layout, wrapping names and no horizontal scroll at any width; the
   asset-class detail rides as a small muted second line under the account name

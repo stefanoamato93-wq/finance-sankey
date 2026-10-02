@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Personal finance</title>
+<title>Personal Finance</title>
 <!-- favicon (inline SVG, keeps the file self-contained): a mini Sankey, income bar on
      the left splitting into needs / wants / savings. Shows on pinned Chrome tabs. -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f1420'/%3E%3Cpath d='M8 6C16 6 16 4 24 4V10C16 10 16 12 8 12Z' fill='%235b8fd0' opacity='.8'/%3E%3Cpath d='M8 13H24V19H8Z' fill='%23e08a3c' opacity='.8'/%3E%3Cpath d='M8 20C16 20 16 22 24 22V28C16 28 16 26 8 26Z' fill='%23e7c14a' opacity='.8'/%3E%3Crect x='4' y='6' width='4' height='20' rx='1' fill='%233aa86a'/%3E%3Crect x='24' y='4' width='4' height='6' rx='1' fill='%235b8fd0'/%3E%3Crect x='24' y='13' width='4' height='6' rx='1' fill='%23e08a3c'/%3E%3Crect x='24' y='22' width='4' height='6' rx='1' fill='%23e7c14a'/%3E%3C/svg%3E">
@@ -40,7 +40,7 @@
   .status{margin:16px 26px; color:var(--muted); font-size:13px;}
   .status.err{color:#e58a8a;}
   .framed{border:1px solid var(--grid); background:var(--panel); border-radius:12px;}
-  .wrap{margin:10px 26px 8px; padding:12px 16px; max-width:940px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .wrap{margin:10px 26px 40px; padding:12px 16px; max-width:940px; overflow-x:auto; -webkit-overflow-scrolling:touch;}
   svg{width:100%; height:auto; display:block; overflow:visible;}
   .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
   .node .nval{fill:var(--muted); font-size:10px;}
@@ -115,13 +115,24 @@
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
-  /* headline cards: Net worth / Total assets / Total liabilities (layout shared above) */
-  .nwcard.net{border-color:#3a4d78; background:linear-gradient(180deg,#1c2947,#141d31);}
-  .nwcard.assets .big{color:#7fd0a3;}
-  .nwcard.liab .big{color:#e58a8a;}
+  /* hero net worth card: full column width, value on the left, trend sparkline on the right */
+  .nwcards{grid-template-columns:minmax(0,1fr); margin-top:14px;}
+  .nwcard.net{display:flex; align-items:center; gap:22px; padding:14px 18px; border-radius:14px;
+              border-color:#3a4d78; background:linear-gradient(135deg,#1f2e52,#141d31 70%);}
+  .nwcard.net .nwmain{flex:0 0 auto;}
+  .nwcard.net .big{font-size:32px; margin-top:4px;}
+  .nwcard.net .pct{font-size:12px; margin-top:4px;}
+  .nwcard.net .up{color:#7fd0a3; font-weight:700;} .nwcard.net .dn{color:#e58a8a; font-weight:700;}
+  .nwcard.net .nwtrend{flex:1 1 auto; min-width:0; max-width:520px; margin-left:auto;}
+  .nwcard.net .spark{display:block; width:100%; height:58px;}
+  .sparklab{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:3px;}
+  /* section titles (Assets & Liabilities, Cash Flow) */
+  .nwhead{max-width:940px;}
+  .nwhead h2{font-size:15px; letter-spacing:.2px;}
+  .cfhead{margin-top:6px; padding-top:18px; border-top:1px solid var(--grid);}
   /* two-column table (name | value) so it always fits the viewport, no sideways scroll;
      same 940px width as the Sankey frame and the card rows */
-  .nwwrap{margin:12px 26px 40px; padding:10px 12px; max-width:940px;}
+  .nwwrap{margin:12px 26px 24px; padding:10px 12px; max-width:940px;}
   /* assets and liabilities tables side by side on wide screens, stacked on narrow ones */
   .nwgrid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 22px; align-items:start;}
   .nwgrid > table:only-child{grid-column:1/-1;}
@@ -198,6 +209,10 @@
     .nwcard,.tot{padding:8px 9px;}
     .nwcard .big,.tot .val{font-size:16.5px;}
     .nwcard .pct,.tot .pct{font-size:10px;}
+    .nwcard.net{gap:12px; padding:12px 12px;}
+    .nwcard.net .big{font-size:25px;}
+    .nwcard.net .pct{font-size:11px; white-space:normal;}
+    .nwcard.net .spark{height:46px;}
     /* assets table: fits the screen, never scrolls sideways */
     .nwwrap{margin-left:14px; margin-right:14px; max-width:100%; padding:4px 2px;}
     table.nw{font-size:12px;}
@@ -223,6 +238,8 @@
   .sk-cards{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:16px;}
   .sk-card{flex:1 1 180px; height:84px; border-radius:14px;} .sk-card.big{flex:1.4 1 220px;}
   .sk-sankey{height:360px; margin-bottom:18px; border-radius:12px;}
+  .sk-hero{height:92px; border-radius:14px; margin-bottom:16px;}
+  .sk-table{margin-bottom:22px;}
   .sk-table{display:flex; flex-direction:column; gap:10px;}
   .sk-row{height:26px; width:100%; border-radius:6px;}
   @media (prefers-reduced-motion:reduce){ .sk::after{animation:none;} }
@@ -230,11 +247,46 @@
 </head>
 <body>
 <header>
-  <h1>Personal finance</h1>
+  <h1>Personal Finance</h1>
 </header>
 
-<!-- headline net worth / total assets / total liabilities: top of the page, above the flow -->
+<div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
+<div class="badge" id="dataBadge" style="display:none"></div>
+
+<!-- skeleton Loading_State: visible at first paint, hidden the moment real content
+     renders; mirrors the page order (net worth, tables, then cash flow) -->
+<div id="skeleton" aria-hidden="true">
+  <div class="sk sk-hero"></div>
+  <div class="sk-table">
+    <span class="sk sk-row"></span><span class="sk sk-row"></span><span class="sk sk-row"></span>
+    <span class="sk sk-row"></span><span class="sk sk-row"></span>
+  </div>
+  <div class="sk-controls">
+    <span class="sk sk-pill"></span><span class="sk sk-pill"></span>
+    <span class="sk sk-pill sk-sm"></span><span class="sk sk-pill sk-sm"></span>
+  </div>
+  <div class="sk sk-range"></div>
+  <div class="sk-cards">
+    <span class="sk sk-card"></span><span class="sk sk-card"></span><span class="sk sk-card"></span>
+  </div>
+  <div class="sk sk-sankey"></div>
+</div>
+
+<!-- 1) net worth: one hero card (value, 12-month change, trend sparkline) -->
 <div class="nwcards" id="nwcards"></div>
+
+<!-- 2) assets & liabilities tables -->
+<div class="nwhead" id="nwhead" style="display:none">
+  <h2>Assets &amp; Liabilities</h2>
+  <div class="nwsub">Tap a category to see the accounts inside it.</div>
+</div>
+<div class="nwwrap framed" id="nwwrap" style="display:none"></div>
+
+<!-- 3) cash flow: period controls, income / expenses / savings, Sankey -->
+<div class="nwhead cfhead" id="cfhead" style="display:none">
+  <h2>Cash Flow</h2>
+  <div class="nwsub">Income, expenses and savings for the selected period.</div>
+</div>
 
 <div class="controls" id="controls" style="display:none">
   <label>Quick set
@@ -263,38 +315,10 @@
   </div>
 </div>
 
-<!-- skeleton Loading_State: visible at first paint, hidden the moment real content renders -->
-<div id="skeleton" aria-hidden="true">
-  <div class="sk-controls">
-    <span class="sk sk-pill"></span><span class="sk sk-pill"></span>
-    <span class="sk sk-pill sk-sm"></span><span class="sk sk-pill sk-sm"></span>
-  </div>
-  <div class="sk sk-range"></div>
-  <div class="sk-cards">
-    <span class="sk sk-card"></span><span class="sk sk-card"></span><span class="sk sk-card"></span>
-  </div>
-  <div class="sk sk-sankey"></div>
-  <div class="sk-cards">
-    <span class="sk sk-card big"></span><span class="sk sk-card"></span><span class="sk sk-card"></span>
-  </div>
-  <div class="sk-table">
-    <span class="sk sk-row"></span><span class="sk sk-row"></span><span class="sk sk-row"></span>
-    <span class="sk sk-row"></span><span class="sk sk-row"></span>
-  </div>
-</div>
-
-<div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
-<div class="badge" id="dataBadge" style="display:none"></div>
 <div class="period" id="periodLabel"></div>
 <div class="totals" id="totals"></div>
 <div class="swipehint" id="swipehint">Swipe the diagram sideways to see it all →</div>
 <div class="wrap framed"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
-
-<div class="nwhead" id="nwhead" style="display:none">
-  <h2>Assets &amp; liabilities</h2>
-  <div class="nwsub">Tap a category to see the accounts inside it.</div>
-</div>
-<div class="nwwrap framed" id="nwwrap"></div>
 
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
@@ -1262,18 +1286,39 @@ function buildNetWorth(){
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
-  // headline cards: net worth, total assets, total liabilities, one row of three.
-  // Liabilities = only the LIABILITIES category (not every negative row); assets = the rest.
+  // hero card: net worth only (assets / liabilities totals live on top of their tables).
+  // Month-end net worth series = running sum of every holding's flows, for the
+  // 12-month change and the trend sparkline.
   const gTot=sumV(rows);
-  const liab=sumV(rows.filter(r=>r.cat==="LIABILITIES"));
-  const assets=gTot-liab;
-  const liabPct = assets>0 ? (Math.abs(liab)/assets*100).toFixed(1).replace('.',',')+'% of assets' : '';
-  const card=(cls,lab,v,sub)=>`<div class="nwcard ${cls}"><div class="lab">${lab}</div>`+
-    `<div class="big">${money(v)}</div><div class="pct">${sub}</div></div>`;
-  cardsEl.innerHTML=
-    card('net','Net worth',gTot,'assets \u2212 liabilities')+
-    card('assets','Total assets',assets,'')+
-    card('liab','Total liabilities',liab,liabPct);
+  const byMi={}; holds.forEach(h=>{ for(const k in h.flows) byMi[k]=(byMi[k]||0)+h.flows[k]; });
+  // start the trend where the cash-flow history starts (META.minMi), NOT at allMinMi:
+  // a blank/zero sheet date parses as Dec 1899 and would squash the line flat.
+  // Anything booked before the start is carried into the opening balance.
+  const s0=Math.max(META.allMinMi, Math.min(META.minMi||cur, cur));
+  const series=[]; let run=0;
+  for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
+  for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
+  const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
+  let chg='';
+  if(series.length>12){
+    const d=gTot-series[series.length-13];
+    chg=` \u00B7 <span class="${d<0?'dn':'up'}">${d<0?'\u2212':'+'}${fmt(Math.abs(d))}</span> in 12 months`;
+  }
+  let spark='';
+  if(series.length>1){
+    const W=300,H=60,P=3, mn=Math.min(0,...series), mx=Math.max(...series), rg=(mx-mn)||1;
+    const pts=series.map((v,i)=>[(i/(series.length-1)*W).toFixed(1),(P+(H-2*P)*(1-(v-mn)/rg)).toFixed(1)]);
+    const line=pts.map(p=>p.join(',')).join(' ');
+    spark=`<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`+
+      `<defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd0a3" stop-opacity=".35"/>`+
+      `<stop offset="1" stop-color="#7fd0a3" stop-opacity="0"/></linearGradient></defs>`+
+      `<polygon points="0,${H} ${line} ${W},${H}" fill="url(#nwg)"/>`+
+      `<polyline points="${line}" fill="none" stroke="#7fd0a3" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`+
+      `<div class="sparklab"><span>${mLab(s0)}</span><span>${mLab(cur)}</span></div>`;
+  }
+  cardsEl.innerHTML=`<div class="nwcard net"><div class="nwmain"><div class="lab">Net worth</div>`+
+    `<div class="big">${money(gTot)}</div><div class="pct">${mLab(cur)}${chg}</div></div>`+
+    `<div class="nwtrend">${spark}</div></div>`;
 
   // assets table: group by category, ordered by absolute subtotal (biggest positions
   // first); the account rows inside a category are ordered by value (high -> low) and
@@ -1427,6 +1472,8 @@ function initControlsOnce(){
   document.getElementById('controls').style.display='';
   document.getElementById('rangeBox').style.display='';
   document.getElementById('nwhead').style.display='';
+  document.getElementById('nwwrap').style.display='';
+  document.getElementById('cfhead').style.display='';
   controlsReady=true;
 }
 function renderAll(){ build(); requestAnimationFrame(()=>buildNetWorth()); }   // Sankey first, table next frame
