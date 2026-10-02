@@ -134,7 +134,27 @@
   .nwcard.net .pct{font-size:12px; margin-top:4px;}
   .nwcard.net .up{color:#7fd0a3; font-weight:700;} .nwcard.net .dn{color:#e58a8a; font-weight:700;}
   .nwcard.net .nwtrend{flex:1 1 auto; min-width:0; max-width:520px; margin-left:auto;}
+  .nwcard.net{flex-wrap:wrap;}
   .nwcard.net .spark{display:block; width:100%; height:58px;}
+  /* sparkline scrubber */
+  .sparkbox{position:relative; cursor:crosshair; touch-action:pan-y;}
+  .scrubline{position:absolute; top:0; bottom:0; width:1px; margin-left:-.5px; background:rgba(231,236,245,.55);
+             opacity:0; pointer-events:none;}
+  .scrubdot{position:absolute; width:9px; height:9px; margin:-4.5px 0 0 -4.5px; border-radius:50%;
+            background:#7fd0a3; border:2px solid #0f1420; opacity:0; pointer-events:none;}
+  .sparkbox.on .scrubline,.sparkbox.on .scrubdot{opacity:1;}
+  .scrubval{color:var(--muted); opacity:.6; white-space:nowrap;}
+  .scrubval.on{color:var(--ink); opacity:1; font-size:11px;}
+  .scrubval b{color:#7fd0a3;}
+  /* investment gains strip: full-width second row of the hero card */
+  .nwinv{flex:1 1 100%; border-top:1px solid rgba(58,77,120,.6); padding-top:10px; margin-top:2px;}
+  .invhead{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:6px;}
+  .ichips{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px;}
+  .ichip{background:rgba(15,20,32,.45); border:1px solid rgba(58,77,120,.5); border-radius:9px; padding:6px 10px; min-width:0;}
+  .ichip .ilab{font-size:10px; color:var(--muted);}
+  .ichip .ival{font-size:16px; font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .ichip .ipct{font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .ichip .up{color:#7fd0a3;} .ichip .dn{color:#e58a8a;}
   /* LIVE tag: hero sub-line and live rows in the assets table */
   b.live{display:inline-block; font-size:8.5px; font-weight:800; letter-spacing:.6px; color:#0f1420;
          background:#7fd0a3; border-radius:3px; padding:0 4px; line-height:13px; vertical-align:1px;}
@@ -234,6 +254,9 @@
     .nwcard.net .big{font-size:25px;}
     .nwcard.net .pct{font-size:11px; white-space:normal;}
     .nwcard.net .spark{height:46px;}
+    .ichips{gap:6px;}
+    .ichip{padding:5px 7px;}
+    .ichip .ival{font-size:14px;}
     /* assets table: fits the screen, never scrolls sideways */
     .nwwrap{margin-left:14px; margin-right:14px; max-width:100%; padding:4px 2px;}
     table.nw{font-size:12px;}
@@ -1352,20 +1375,51 @@ function buildNetWorth(){
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const liveNote = LIVE ? `<b class="live">LIVE</b> ETF prices, ${hhmm(LIVE.at)}` : mLab(cur);
   let spark='';
+  const SW=300,SH=60,SP=3, smn=Math.min(0,...series), smx=Math.max(...series), srg=(smx-smn)||1;
+  const yOf=v=> SP+(SH-2*SP)*(1-(v-smn)/srg);              // viewBox y of a value
   if(series.length>1){
-    const W=300,H=60,P=3, mn=Math.min(0,...series), mx=Math.max(...series), rg=(mx-mn)||1;
-    const pts=series.map((v,i)=>[(i/(series.length-1)*W).toFixed(1),(P+(H-2*P)*(1-(v-mn)/rg)).toFixed(1)]);
+    const pts=series.map((v,i)=>[(i/(series.length-1)*SW).toFixed(1),yOf(v).toFixed(1)]);
     const line=pts.map(p=>p.join(',')).join(' ');
-    spark=`<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`+
+    // .sparkbox carries the scrubber: hover / drag shows the net worth of that month
+    spark=`<div class="sparkbox" id="sparkbox" title="Drag to see past net worth">`+
+      `<svg class="spark" viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" aria-hidden="true">`+
       `<defs><linearGradient id="nwg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fd0a3" stop-opacity=".35"/>`+
       `<stop offset="1" stop-color="#7fd0a3" stop-opacity="0"/></linearGradient></defs>`+
-      `<polygon points="0,${H} ${line} ${W},${H}" fill="url(#nwg)"/>`+
+      `<polygon points="0,${SH} ${line} ${SW},${SH}" fill="url(#nwg)"/>`+
       `<polyline points="${line}" fill="none" stroke="#7fd0a3" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`+
-      `<div class="sparklab"><span>${mLab(s0)}</span><span>${mLab(cur)}</span></div>`;
+      `<div class="scrubline" id="scrubline"></div><div class="scrubdot" id="scrubdot"></div></div>`+
+      `<div class="sparklab"><span>${mLab(s0)}</span><span class="scrubval" id="scrubval">drag the line</span><span>${mLab(cur)}</span></div>`;
   }
+  // investment gains from the NETWORTH tab totals row: month / year / all time
+  const sgn=v=>(v<0?'\u2212':'+')+fmt(Math.abs(v));
+  const spc=p=> p==null ? '' : (p<0?'\u2212':'+')+(Math.abs(p)*100).toFixed(1).replace('.',',')+'%';
+  const invChip=(lab,a)=> !a || a[0]==null ? '' :
+    `<div class="ichip"><div class="ilab">${lab}</div><div class="ival ${a[0]<0?'dn':'up'}">${sgn(a[0])}</div>`+
+    `<div class="ipct">${spc(a[1])}</div></div>`;
+  const inv = LIVE && LIVE.inv ? invChip('This month',LIVE.inv.m)+invChip('This year',LIVE.inv.y)+invChip('All time',LIVE.inv.a) : '';
   cardsEl.innerHTML=`<div class="nwcard net"><div class="nwmain"><div class="lab">Net worth</div>`+
     `<div class="big">${money(gTot)}</div><div class="pct">${liveNote}${chg}</div></div>`+
-    `<div class="nwtrend">${spark}</div></div>`;
+    `<div class="nwtrend">${spark}</div>`+
+    (inv ? `<div class="nwinv"><div class="invhead">Investment gains</div><div class="ichips">${inv}</div></div>` : '')+
+    `</div>`;
+
+  // scrubber: pointer x -> nearest month; shows a guide line, a dot on the curve
+  // and "Mon YYYY · value" in the label row. Mouse: follows hover, clears on leave.
+  // Touch / pen: tap or drag horizontally (vertical swipes still scroll the page).
+  const box=document.getElementById('sparkbox');
+  if(box){
+    const ln=document.getElementById('scrubline'), dot=document.getElementById('scrubdot'), val=document.getElementById('scrubval');
+    const show=x=>{ const r=box.getBoundingClientRect(); if(!r.width) return;
+      const f=Math.min(1,Math.max(0,(x-r.left)/r.width)), i=Math.round(f*(series.length-1)), v=series[i];
+      const px=i/(series.length-1)*100, py=yOf(v)/SH*100;
+      ln.style.left=px+'%'; dot.style.left=px+'%'; dot.style.top=py+'%';
+      box.classList.add('on'); val.classList.add('on');
+      val.innerHTML=`${mLab(s0+i)} \u00B7 <b>${money(v)}</b>`; };
+    const hide=()=>{ box.classList.remove('on'); val.classList.remove('on'); val.textContent='drag the line'; };
+    box.addEventListener('pointerdown',e=>{ show(e.clientX); });
+    box.addEventListener('pointermove',e=>{ if(e.pointerType==='mouse' || e.buttons) show(e.clientX); });
+    box.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse') hide(); });
+  }
 
   // assets table: group by category, ordered by absolute subtotal (biggest positions
   // first); the account rows inside a category are ordered by value (high -> low) and
@@ -1533,7 +1587,12 @@ let liveBusy=false;
 async function loadLive(){
   if(liveBusy) return; liveBusy=true;
   try{
-    const [list,nw]=await Promise.all([fetchGviz(gvizURL('LIST','V2:Y60')), fetchGviz(gvizURL('NETWORTH','A12:F80'))]);
+    const [list,nw]=await Promise.all([fetchGviz(gvizURL('LIST','V2:Y60')), fetchGviz(gvizURL('NETWORTH','A11:O80'))]);
+    /* investment gains = the NETWORTH totals row (A = "VARIABILITY"): H/I month,
+       K/L year, N/O all time (sum of the per-holding deltas, GOOGLEFINANCE-live) */
+    const num=x=> typeof x==='number' && isFinite(x) ? x : null;
+    const tr=nw.find(r=>norm(r[0])==='VARIABILITY');
+    const inv = tr ? {m:[num(tr[7]),num(tr[8])], y:[num(tr[10]),num(tr[11])], a:[num(tr[13]),num(tr[14])]} : null;
     const shares={};
     list.forEach(r=>{ const br=norm(r[1]), etf=norm(r[2]), n=Number(r[3]);
       if(br && etf && isFinite(n) && n>0) shares[br+'|'+etf]=n; });
@@ -1543,7 +1602,7 @@ async function loadLive(){
       const k=acct+'|'+etf;
       if(shares[k]) hold[k]={shares:shares[k], price:v/shares[k], value:v};
       if(acct==='CAPGAIN' && cat==='LIABILITIES') capgain=v; });
-    if(Object.keys(hold).length){ LIVE={hold,capgain,at:Date.now()}; if(controlsReady) buildNetWorth(); }
+    if(Object.keys(hold).length){ LIVE={hold,capgain,inv,at:Date.now()}; if(controlsReady) buildNetWorth(); }
   }catch(e){ /* keep the DB values on screen */ }
   finally{ liveBusy=false; }
 }

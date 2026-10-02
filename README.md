@@ -28,6 +28,21 @@ and **940px max width**, so their left and right edges line up. The
 Income/Expenses/Savings row is a **3-column grid** (`.totals`) with equal-height
 cards (reserved sub-line height); three across on phones too, just tighter.
 
+**Sparkline scrubber:** the trend line (`#sparkbox`) is draggable. Mouse: hover
+anywhere on it; touch / pen: tap or drag horizontally (`touch-action:pan-y`, so a
+vertical swipe still scrolls the page). It snaps to the nearest month, draws a
+guide line and a dot on the curve, and the middle of the label row shows
+`Mon YYYY · value` (otherwise a muted "drag the line" hint). Leaving with the mouse
+clears it. Values match the sheet's MONTHLYVIEW "NET WORTH (END OF MONTH)" row
+(e.g. Jan 2018 −31.338).
+
+**Investment gains strip:** a second row inside the hero card with three chips,
+**This month / This year / All time**, each with € gain and %. Read (read-only) from
+the NETWORTH totals row (the row whose column A is `VARIABILITY`): H/I month, K/L
+year, N/O all time, i.e. the sum of the per-holding deltas the sheet computes with
+`GOOGLEFINANCE`. Fetched in the same `loadLive()` call (`NETWORTH!A11:O80`), stored
+as `LIVE.inv`; the strip is hidden if the live read fails.
+
 **Sparkline series:** running sum of every holding's flows per month, starting at
 the cash-flow history start (`META.minMi`) with anything earlier carried into the
 opening balance. It deliberately does NOT start at `META.allMinMi`, because a blank
@@ -257,7 +272,8 @@ The DB tab only books ETF values at month end, so the table would lag the market
 export, the same access the DB load uses; the app never writes to the sheet):
 
 - **`LIST!V2:Y60`** = KEY | BROKER | ETF | **shares held**.
-- **`NETWORTH!A12:F80`** = the sheet's own net worth table; column F is
+- **`NETWORTH!A11:O80`** = the sheet's own net worth table (row 11 = totals, used for
+  the investment gains strip); column F is
   shares × `GOOGLEFINANCE` price, so **price per share = F / shares**.
 - Each ETF holding whose `ACCOUNT|ASSETCLASSDETAILS` matches a `BROKER|ETF` with
   shares > 0 is valued at **shares × live price**. The **CAPGAIN** liability (tax on
