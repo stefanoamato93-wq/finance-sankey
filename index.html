@@ -21,9 +21,19 @@
   h1{margin:0; font-size:19px; font-weight:700;}
   h2{margin:0; font-size:14px; font-weight:700;}
   .sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
-  .controls{margin:12px 26px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:12.5px;}
+  /* cash flow controls: one compact row (3 short selects + a segmented group of toggles) */
+  .controls{margin:10px 26px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12.5px; max-width:940px;}
   select{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 8px;}
+  .controls select{height:30px; padding:0 6px; font-size:12.5px; font-family:inherit;}
   .controls label{color:var(--muted); cursor:pointer;}
+  .pills{display:inline-flex; border:1px solid var(--grid); border-radius:8px; overflow:hidden; height:30px;}
+  .pill{display:inline-flex; align-items:center; padding:0 10px; font-size:12px; font-weight:600;
+        color:var(--muted); background:var(--panel); user-select:none; -webkit-tap-highlight-color:transparent;}
+  .pill + .pill{border-left:1px solid var(--grid);}
+  .pill input{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
+  .pill:hover{color:var(--ink);}
+  .pill:has(input:checked){color:#fff; background:#25603f;}
+  .pill:has(input:focus-visible){outline:2px solid var(--needs); outline-offset:-2px;}
   /* card rows (net worth row at the top, income/expenses/savings row above the Sankey):
      one shared 3-column grid, same width as the Sankey frame (940px), so every card
      lines up column by column and every block shares the same left AND right edge */
@@ -178,6 +188,14 @@
   .nw .tw{display:inline-block; width:13px; color:var(--muted); font-size:11px;}
   .nw .cnt{color:var(--muted); font-weight:400; font-size:11px; text-transform:none; letter-spacing:0;}
   .nw tr.kid td{background:#0e1524;}
+  /* CREDITS / DEBTS drill-down: tappable account row, then one line per DETAIL */
+  .nw tr.dexp{cursor:pointer;}
+  .nw tr.dexp:hover td{background:#141d30;}
+  .nw tr.dexp .tw{margin-left:-13px;}   /* hang the arrow so the name lines up with its siblings */
+  .nw tr.kdet td{background:#0b111d; font-size:11.5px; padding-top:5px; padding-bottom:5px;}
+  .nw tr.kdet td.val{font-weight:500; color:var(--muted);}
+  .nw tr.kdet td.val.neg{color:#e58a8a;}
+  .nw td.t3{text-align:left; color:var(--muted); padding-left:40px; word-break:break-word;}
   .nw .val{color:var(--ink); font-weight:600;}
   .nw .neg{color:#e58a8a;} .nw .pos{color:#7fd0a3;}
   /* data-source freshness badge (shown when displaying last-loaded/cached data) */
@@ -192,12 +210,12 @@
     header{padding:12px 16px 4px;}
     .controls,.totals,.period,.status,.badge,#rangeBox,.nwhead,.nwcards,#skeleton{margin-left:14px; margin-right:14px;}
     #skeleton{max-width:100%;}
-    /* controls: full-width, comfortable tap targets (>=44px), >=8px gaps */
-    .controls{gap:10px; font-size:14px;}
-    .controls > *{min-height:44px;}
-    .controls label{display:flex; align-items:center; gap:8px; min-height:44px;}
-    .controls select, #year, #month{min-height:44px; padding:8px 10px; font-size:14px; flex:1 1 auto;}
-    .controls input[type=checkbox]{width:22px; height:22px;}
+    /* controls: still one compact row, slightly taller tap targets */
+    .controls{gap:6px;}
+    .controls{gap:5px;}
+    .controls select{height:36px; font-size:13px; padding:0 2px 0 5px; flex:0 0 auto;}
+    .pills{height:36px; margin-left:auto;}
+    .pill{padding:0 9px; font-size:12.5px;}
     /* range slider: enlarge the invisible hit area of each handle to ~48px for touch */
     #rangeBox{max-width:100%;}
     .dual{height:34px;}
@@ -292,19 +310,20 @@
 </div>
 
 <div class="controls" id="controls" style="display:none">
-  <label>Quick set
-    <select id="mode">
-      <option value="trailing">Trailing 12 months</option>
-      <option value="month">Single month</option>
-      <option value="year">Full year</option>
-      <option value="all">All time</option>
-    </select>
-  </label>
-  <select id="year"></select>
-  <select id="month"></select>
-  <label><input type="checkbox" id="t12"> trailing 12 months</label>
-  <label><input type="checkbox" id="tMonthly"> per month (avg)</label>
-  <label><input type="checkbox" id="tK"> values in K</label>
+  <select id="mode" aria-label="Quick set period" title="Quick set period">
+    <option value="trailing">T12M</option>
+    <option value="month">Month</option>
+    <option value="year">Year</option>
+    <option value="all">All time</option>
+  </select>
+  <select id="year" aria-label="Year"></select>
+  <select id="month" aria-label="Month"></select>
+  <!-- compact toggle pills: the real checkboxes stay (same ids, same logic), visually hidden -->
+  <span class="pills">
+    <label class="pill" title="Trailing 12 months"><input type="checkbox" id="t12">T12M</label>
+    <label class="pill" title="Per month (average)"><input type="checkbox" id="tMonthly">Avg/m</label>
+    <label class="pill" title="Values in thousands"><input type="checkbox" id="tK">K</label>
+  </span>
   <span id="exclBox"><span id="exclCount"></span><button id="exclReset" type="button">Include all</button></span>
 </div>
 
@@ -357,6 +376,7 @@ const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=ou
 const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
 const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
 const norm=s=> s==null ? "" : String(s).trim().toUpperCase();
+const DETAIL_ACCTS=new Set(["CREDITS","DEBTS"]);   // accounts that drill down by DETAIL
 const MOBILE_BP=680;
 const isMobile=w=> (w==null?window.innerWidth:w) <= MOBILE_BP;   // <=680px resolves to mobile
 const noHover=()=> typeof window.matchMedia==='function' && window.matchMedia('(hover:none)').matches;
@@ -405,6 +425,12 @@ function aggregate(rows){
     const hk=vary+"|"+acd+"|"+acct+"|"+cat;
     let h=HOLD.get(hk); if(!h){ h={vary,acd,acct,cat,flows:{}}; HOLD.set(hk,h); }
     h.flows[mi]=(h.flows[mi]||0)+val;
+    /* CREDITS / DEBTS only: keep flows per DETAIL (who owes / what for), so the
+       net worth table can drill into them (Andrew 3.000, HousingDeposit 2.265, ...) */
+    if(DETAIL_ACCTS.has(acct)){
+      const dn=(detail!=null && String(detail).trim()!=="") ? String(detail).trim() : "\u2014";
+      const d=(h.det=h.det||{}); const f=(d[dn]=d[dn]||{}); f[mi]=(f[mi]||0)+val;
+    }
     /* cash flow (income/expenses only) */
     let kind,group,leaf;
     if(typ==="INCOME"){ kind="I"; group=INCGRP[c1]||"Other income"; leaf=norm(detail); incByMi[mi]=(incByMi[mi]||0)+val; }
@@ -1277,12 +1303,19 @@ function applyPreset(){ const [f,t]=presetRange(); setSlider(f-META.minMi, t-MET
    `nwOpen` lives at module scope so the expanded set survives a re-render (e.g.
    toggling "values in K"). */
 let nwOpen=new Set();
+let nwDetOpen=new Set();   // CREDITS / DEBTS account rows whose DETAIL lines are open
 function buildNetWorth(){
   const holds=NWHOLD; const wrap=document.getElementById('nwwrap'); const cardsEl=document.getElementById('nwcards');
   if(!holds.length){ if(cardsEl) cardsEl.innerHTML=''; wrap.innerHTML=''; return; }
   const cur=META.allMaxMi;
   const cumAt=(h,mi)=>{ let s=0; const f=h.flows; for(const k in f){ if(+k<=mi) s+=f[k]; } return s; };
-  const rows=holds.map(h=>({vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v:cumAt(h,cur)}))
+  const rows=holds.map(h=>{
+      // drill-down lines for CREDITS / DEBTS: balance per DETAIL, largest first
+      const det = !h.det ? null : Object.keys(h.det)
+        .map(n=>{ let s=0; const f=h.det[n]; for(const k in f){ if(+k<=cur) s+=f[k]; } return {n,v:s}; })
+        .filter(d=>Math.abs(d.v)>0.5).sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+      return {vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v:cumAt(h,cur),
+              hk:h.vary+'|'+h.acd+'|'+h.acct+'|'+h.cat, det:det&&det.length?det:null}; })
                   .filter(r=> Math.abs(r.v)>0.5);
   // live overlay: ETF holdings = shares x live price, CAPGAIN = live tax on gains
   if(LIVE) rows.forEach(r=>{
@@ -1367,7 +1400,12 @@ function buildNetWorth(){
         const liveTxt = r.live ? '<b class="live">LIVE</b> \u00B7 ' : '';
         const qtyTxt = r.live && !r.live.capgain ? ` \u00B7 ${qty(r.live.shares)} \u00D7 ${px(r.live.price)}` : '';
         const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${liveTxt}${esc(cap(r.acd))}${qtyTxt}</span>` : '';
-        t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
+        if(!r.det){ t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`; return; }
+        // CREDITS / DEBTS: the account row itself toggles its DETAIL lines
+        const dOpen=nwDetOpen.has(r.hk);
+        t+=`<tr class="kid dexp" data-hk="${esc(r.hk)}" tabindex="0" role="button" aria-expanded="${dOpen}">`+
+           `<td class="t2"><span class="tw">${dOpen?'\u25BE':'\u25B8'}</span>${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
+        if(dOpen) r.det.forEach(d=>{ t+=`<tr class="kdet"><td class="t3">${esc(d.n)}</td>`+vcell(d.v)+`</tr>`; });
       });
     });
     return t+`</tbody></table>`;
@@ -1384,9 +1422,18 @@ function buildNetWorth(){
     tr.addEventListener('click',()=>toggleCat(cat));
     tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleCat(cat); } });
   });
-  // expand all / collapse all categories at once
+  // CREDITS / DEBTS account rows: tap to show / hide their DETAIL lines
+  const toggleDet=hk=>{ if(nwDetOpen.has(hk)) nwDetOpen.delete(hk); else nwDetOpen.add(hk); buildNetWorth(); };
+  wrap.querySelectorAll('tr.dexp').forEach(tr=>{
+    const hk=tr.getAttribute('data-hk');
+    tr.addEventListener('click',()=>toggleDet(hk));
+    tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); toggleDet(hk); } });
+  });
+  // expand all / collapse all categories at once (collapse also closes detail lines)
   wrap.querySelectorAll('button[data-nwall]').forEach(b=>b.addEventListener('click',()=>{
-    nwOpen = b.getAttribute('data-nwall')==='open' ? new Set(catOrder) : new Set();
+    const open=b.getAttribute('data-nwall')==='open';
+    nwOpen = open ? new Set(catOrder) : new Set();
+    if(!open) nwDetOpen=new Set();
     buildNetWorth();
   }));
 }

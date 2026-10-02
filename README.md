@@ -154,7 +154,15 @@ Needs / Wants / Liberality / Taxes → category`.
   sheet (or the full span if fewer than 12 months exist). Set in
   `initControlsOnce()` via `presetRange()`; a data refresh keeps whatever window
   the user has moved to.
-- **Trailing 12 months flag:** a checkbox next to the toggles switches between the
+- **Compact controls (one row, phone included):** Quick set select (`T12M` / `Month`
+  / `Year` / `All time`, no "Quick set" label), Year, Month, then a segmented toggle
+  group **T12M | Avg/m | K** (`.pills`). Each pill is a `<label>` wrapping the
+  original checkbox (`#t12`, `#tMonthly`, `#tK`, visually hidden), so all toggle
+  logic is unchanged; a checked pill turns green (`:has(input:checked)`), and the
+  full meaning is in its tooltip (Trailing 12 months / Per month (average) / Values
+  in thousands). On phones the selects keep their natural width and the pills sit
+  at the right end of the same row.
+- **Trailing 12 months flag (T12M pill):** switches between the
   current month and the trailing-12-month window. It is two-way bound to the Quick
   set dropdown (ticking it selects Trailing 12 months, and choosing a mode in the
   dropdown updates the tick), so the same Comparison_Mode drives both.
@@ -213,6 +221,14 @@ value-only view.
   underneath. Clicking again collapses it. Rows are keyboard-operable (Enter /
   Space) and the expanded set survives a re-render, so toggling **values in K** does
   not collapse everything.
+- **CREDITS / DEBTS drill-down by DETAIL.** Only the `CREDITS` and `DEBTS` accounts
+  (`DETAIL_ACCTS`) carry per-`DETAIL` flows (`h.det`, built in `aggregate()`). Their
+  account row has a ▸ and is tappable (click / Enter / Space): it opens one muted
+  line per DETAIL with its current balance, largest first, zero balances hidden
+  (e.g. Andrew 3.000, HousingDeposit 2.265, Andrew_Phone 147; Debts: IJPACapGain
+  (394), Argentina-Jan27 (311), Presents (200)). DETAIL names keep the sheet's
+  spelling. The open set (`nwDetOpen`) survives re-renders; **Collapse all** also
+  closes it.
 - **Expand all / Collapse all.** Two small buttons above the table open or close
   every category in one click (each is disabled when it would do nothing).
 - **Ordering:** categories by absolute subtotal (largest positions first), accounts
