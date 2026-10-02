@@ -125,6 +125,9 @@
   .nwcard.net .up{color:#7fd0a3; font-weight:700;} .nwcard.net .dn{color:#e58a8a; font-weight:700;}
   .nwcard.net .nwtrend{flex:1 1 auto; min-width:0; max-width:520px; margin-left:auto;}
   .nwcard.net .spark{display:block; width:100%; height:58px;}
+  /* LIVE tag: hero sub-line and live rows in the assets table */
+  b.live{display:inline-block; font-size:8.5px; font-weight:800; letter-spacing:.6px; color:#0f1420;
+         background:#7fd0a3; border-radius:3px; padding:0 4px; line-height:13px; vertical-align:1px;}
   .sparklab{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:3px;}
   /* section titles (Assets & Liabilities, Cash Flow) */
   .nwhead{max-width:940px;}
@@ -1281,6 +1284,14 @@ function buildNetWorth(){
   const cumAt=(h,mi)=>{ let s=0; const f=h.flows; for(const k in f){ if(+k<=mi) s+=f[k]; } return s; };
   const rows=holds.map(h=>({vary:h.vary,acd:h.acd,acct:h.acct,cat:h.cat, v:cumAt(h,cur)}))
                   .filter(r=> Math.abs(r.v)>0.5);
+  // live overlay: ETF holdings = shares x live price, CAPGAIN = live tax on gains
+  if(LIVE) rows.forEach(r=>{
+    const L=LIVE.hold[r.acct+'|'+r.acd];
+    if(L){ r.v=L.value; r.live=L; }
+    else if(LIVE.capgain!=null && r.acct==='CAPGAIN' && r.cat==='LIABILITIES'){ r.v=LIVE.capgain; r.live={capgain:true}; }
+  });
+  const qty=n=>{ const [i,d]=String(+Number(n).toFixed(4)).split('.'); return grp(i)+(d?','+d:''); };
+  const px=n=>{ const c=Math.round(n*100); return grp(Math.floor(c/100))+','+String(c%100).padStart(2,'0'); };
   const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
   const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
@@ -1298,12 +1309,15 @@ function buildNetWorth(){
   const series=[]; let run=0;
   for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
+  if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
   const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
   let chg='';
   if(series.length>12){
     const d=gTot-series[series.length-13];
     chg=` \u00B7 <span class="${d<0?'dn':'up'}">${d<0?'\u2212':'+'}${fmt(Math.abs(d))}</span> in 12 months`;
   }
+  const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+  const liveNote = LIVE ? `<b class="live">LIVE</b> ETF prices, ${hhmm(LIVE.at)}` : mLab(cur);
   let spark='';
   if(series.length>1){
     const W=300,H=60,P=3, mn=Math.min(0,...series), mx=Math.max(...series), rg=(mx-mn)||1;
@@ -1317,7 +1331,7 @@ function buildNetWorth(){
       `<div class="sparklab"><span>${mLab(s0)}</span><span>${mLab(cur)}</span></div>`;
   }
   cardsEl.innerHTML=`<div class="nwcard net"><div class="nwmain"><div class="lab">Net worth</div>`+
-    `<div class="big">${money(gTot)}</div><div class="pct">${mLab(cur)}${chg}</div></div>`+
+    `<div class="big">${money(gTot)}</div><div class="pct">${liveNote}${chg}</div></div>`+
     `<div class="nwtrend">${spark}</div></div>`;
 
   // assets table: group by category, ordered by absolute subtotal (biggest positions
@@ -1350,7 +1364,10 @@ function buildNetWorth(){
          `<span class="cnt">(${cl.length})</span></td>`+vcell(sumV(cl))+`</tr>`;
       if(open) cl.forEach(r=>{
         // sub-line always shown, even when it repeats the account (e.g. Cash / Cash)
-        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
+        // live rows: "LIVE · Vwce · 1.091 × 170,61" (shares from LIST, price from GOOGLEFINANCE)
+        const liveTxt = r.live ? '<b class="live">LIVE</b> \u00B7 ' : '';
+        const qtyTxt = r.live && !r.live.capgain ? ` \u00B7 ${qty(r.live.shares)} \u00D7 ${px(r.live.price)}` : '';
+        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${liveTxt}${esc(cap(r.acd))}${qtyTxt}</span>` : '';
         t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
       });
     });
@@ -1443,6 +1460,48 @@ async function fetchSheet(){
   throw lastErr || new Error("fetch failed");
 }
 
+/* ---- live ETF values: READ-ONLY GETs of the public gviz export, never a write ----
+   LIST!V:Y     = KEY | BROKER | ETF | shares held.
+   NETWORTH!A:Q = the sheet's own net worth table; column F is shares x GOOGLEFINANCE
+                  price for the live rows, so price per share = F / shares.
+   The assets table then values each ETF holding as shares x live price, and the
+   CAPGAIN liability (tax on unrealised gains) takes its live value from the same
+   table, since it moves with the prices. Best-effort: on any failure the DB values
+   stay on screen. Refreshed every 5 min while the page is visible. */
+const gvizURL=(sheet,range)=>`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&headers=0`+
+  `&sheet=${encodeURIComponent(sheet)}&range=${encodeURIComponent(range)}`;
+let LIVE=null;   // {hold:{'DEGIRO|VWCE':{shares,price,value}}, capgain:number|null, at:ms}
+async function fetchGviz(url){
+  let signal,to;
+  if(typeof AbortController==='function'){ const c=new AbortController(); signal=c.signal; to=setTimeout(()=>c.abort(),10000); }
+  const resp=await fetch(url, signal?{cache:"no-store",signal}:{cache:"no-store"});
+  if(to) clearTimeout(to);
+  if(!resp.ok) throw new Error("HTTP "+resp.status);
+  const t=await resp.text(), a=t.indexOf('{'), b=t.lastIndexOf('}');
+  if(a<0||b<a) throw new Error("not a gviz response");
+  const j=JSON.parse(t.slice(a,b+1));
+  if(j.status!=='ok' || !j.table) throw new Error("gviz "+j.status);
+  return j.table.rows.map(r=>(r.c||[]).map(c=> c==null ? null : c.v));
+}
+let liveBusy=false;
+async function loadLive(){
+  if(liveBusy) return; liveBusy=true;
+  try{
+    const [list,nw]=await Promise.all([fetchGviz(gvizURL('LIST','V2:Y60')), fetchGviz(gvizURL('NETWORTH','A12:F80'))]);
+    const shares={};
+    list.forEach(r=>{ const br=norm(r[1]), etf=norm(r[2]), n=Number(r[3]);
+      if(br && etf && isFinite(n) && n>0) shares[br+'|'+etf]=n; });
+    const hold={}; let capgain=null;
+    nw.forEach(r=>{ const etf=norm(r[2]), acct=norm(r[3]), cat=norm(r[4]), v=r[5];
+      if(typeof v!=='number' || !isFinite(v)) return;
+      const k=acct+'|'+etf;
+      if(shares[k]) hold[k]={shares:shares[k], price:v/shares[k], value:v};
+      if(acct==='CAPGAIN' && cat==='LIABILITIES') capgain=v; });
+    if(Object.keys(hold).length){ LIVE={hold,capgain,at:Date.now()}; if(controlsReady) buildNetWorth(); }
+  }catch(e){ /* keep the DB values on screen */ }
+  finally{ liveBusy=false; }
+}
+
 /* ---- rendering / control wiring ------------------------------------------ */
 const statusEl=document.getElementById('status'), badgeEl=document.getElementById('dataBadge');
 let controlsReady=false;
@@ -1505,6 +1564,9 @@ function showError(msg,timedOut){
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
 function boot(){
+  loadLive();                                  // live ETF values, in parallel with the DB load
+  setInterval(()=>{ if(!document.hidden) loadLive(); }, 5*60*1000);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) loadLive(); });
   const cached=SheetCache.read(), now=Date.now();
   let renderedFromCache=false, settled=false;
   if(cached.ok && SheetCache.isFresh(cached.entry,now)){

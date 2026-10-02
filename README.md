@@ -235,6 +235,28 @@ value-only view.
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).
 
+### Live ETF values (real-time net worth)
+The DB tab only books ETF values at month end, so the table would lag the market.
+`loadLive()` overlays live values, **read-only** (plain GETs of the public gviz JSON
+export, the same access the DB load uses; the app never writes to the sheet):
+
+- **`LIST!V2:Y60`** = KEY | BROKER | ETF | **shares held**.
+- **`NETWORTH!A12:F80`** = the sheet's own net worth table; column F is
+  shares × `GOOGLEFINANCE` price, so **price per share = F / shares**.
+- Each ETF holding whose `ACCOUNT|ASSETCLASSDETAILS` matches a `BROKER|ETF` with
+  shares > 0 is valued at **shares × live price**. The **CAPGAIN** liability (tax on
+  unrealised gains) takes its live NETWORTH value too, since it moves with prices.
+- Live rows show a green **LIVE** tag and `shares × price` on the sub-line (e.g.
+  `LIVE · Vwce · 1.091 × 170,80`); the hero card says `LIVE ETF prices, HH:MM`, and
+  the sparkline's last point becomes the live net worth.
+- Runs in parallel with the DB load, then every **5 minutes** while the tab is
+  visible and on returning to the tab. Any failure is silent and the DB values stay.
+- Freshness is whatever Google last computed for `GOOGLEFINANCE` (usually up to
+  ~20 min delayed). A LIST entry with no matching NETWORTH row (e.g. `DIRECTA|AMZN`,
+  not yet in DB/NETWORTH) has no price and is ignored.
+- Reconciled Oct 2026: app total vs `NETWORTH!F11` differs by ~1 € (rounding of
+  DB rows).
+
 ## Performance / loading
 
 The page used to block on the live Google Sheet fetch, so a cold network could
