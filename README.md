@@ -165,6 +165,10 @@ Needs / Wants / Liberality / Taxes → category`.
   switches the true-scale reference to a single-month basis.
 - **Values in K** toggle (applies to the Sankey and the net-worth table). Default
   is **off** (full values); when on, K values are shown to **one decimal**.
+- **Number format** is fixed Italian style, independent of the browser locale:
+  `fmt()` uses the `grp()` helper to put a **dot on every thousand** (`5.139`,
+  `1.234.567`, including 4-digit numbers, which `toLocaleString()` left ungrouped
+  in some locales) and a **comma for the K decimal** (`15,3K`).
 
 ### Assets & liabilities table
 One row per **holding**, keyed by `VARIABLE` × `ASSETCLASSDETAILS` × `ACCOUNT` ×
@@ -184,7 +188,8 @@ value-only view.
 - **Two columns only, so it fits a phone.** The table is `Category / account | Value`
   with a fixed layout, wrapping names and no horizontal scroll at any width; the
   asset-class detail rides as a small muted second line under the account name
-  (suppressed when it just repeats the account).
+  (always shown, even when it repeats the account, e.g. `Cash / Cash`,
+  `Credits / Credits`, `Realestate / Realestate`).
 - **Collapsed by category, expand on click.** The table lists **accounts and their
   values**, grouped by `CATEGORY3`. Only the category rows (with their subtotal and
   account count) show by default; **clicking a category** reveals its account rows
@@ -204,6 +209,9 @@ value-only view.
   start **fully collapsed**, and **Expand all / Collapse all** act on both tables
   at once. Liability accounts sort largest debt first. Built by the `table()`
   helper inside `buildNetWorth()`; a table is skipped when it has no rows.
+- **Total row** (`tfoot tr.tot`) closes each table: **Total assets** and **Total
+  liabilities**, summing every category in that table whether open or collapsed.
+  Total assets matches the headline card.
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).

@@ -136,6 +136,9 @@
   .nw tr.sub .val{font-size:13.5px;}
   .nw tr.cat td{background:#0e1524; font-weight:600; color:var(--muted);}
   .nw tr:last-child td{border-bottom:none;}
+  /* total row closing the assets / liabilities tables */
+  .nw tr.tot td{font-weight:800; font-size:13.5px; text-transform:uppercase; letter-spacing:.5px;
+                border-top:2px solid var(--muted); background:#18223a; padding-top:9px; padding-bottom:9px;}
   /* liabilities: own table, always below the assets table */
   table.nw.liab{margin-top:22px;}
   .nw.liab tr.sub td.t{border-left-color:#e58a8a;}
@@ -508,7 +511,15 @@ function toggleEntry(key){
   build();   // synchronous re-render off the mutated Selection_State
 }
 
-const fmt=v=> showK ? (v/1000).toLocaleString(undefined,{maximumFractionDigits:1})+"K" : Math.round(v).toLocaleString();
+/* fixed Italian-style number format: dot for thousands on EVERY number (incl. 4-digit
+   ones, which toLocaleString leaves ungrouped in some locales), comma for the K decimal */
+const grp=n=> String(n).replace(/\B(?=(\d{3})+(?!\d))/g,'.');
+const fmt=v=>{
+  const neg=v<0, a=Math.abs(v);
+  if(showK){ const r=Math.round(a/100), i=Math.floor(r/10), d=r%10;
+    const s=grp(i)+(d?','+d:'')+'K'; return (neg&&r?'-':'')+s; }
+  const r=Math.round(a); return (neg&&r?'-':'')+grp(r);
+};
 function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; tip.style.left=(e.clientX+12)+'px'; tip.style.top=(e.clientY+12)+'px'; }
 function hideTip(){ tip.style.opacity=0; }
 const miLabel=mi=> ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][((mi%12)+12)%12]+' '+Math.floor(mi/12);
@@ -1277,11 +1288,15 @@ function buildNetWorth(){
          `<td class="t"><span class="tw">${open?'\u25BE':'\u25B8'}</span>${cap(cat)} `+
          `<span class="cnt">(${cl.length})</span></td>`+vcell(sumV(cl))+`</tr>`;
       if(open) cl.forEach(r=>{
-        const acd=r.acd && r.acd!=='\u2014' && norm(r.acd)!==norm(r.acct) ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
+        // sub-line always shown, even when it repeats the account (e.g. Cash / Cash)
+        const acd=r.acd && r.acd!=='\u2014' ? `<span class="acd">${esc(cap(r.acd))}</span>` : '';
         t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
       });
     });
-    return t+`</tbody></table>`;
+    // total row at the bottom of each table (all categories in it, open or not)
+    const tot=G.order.reduce((s,c)=>s+sumV(G.m[c]),0);
+    return t+`</tbody><tfoot><tr class="tot"><td class="t">Total ${title.toLowerCase()}</td>`+
+      vcell(tot)+`</tr></tfoot></table>`;
   };
   const allOpen=catOrder.every(c=>nwOpen.has(c)), noneOpen=catOrder.every(c=>!nwOpen.has(c));
   wrap.innerHTML=`<div class="nwtools">`+
