@@ -322,14 +322,12 @@
 <!-- 2) assets & liabilities tables -->
 <div class="nwhead" id="nwhead" style="display:none">
   <h2>Assets &amp; Liabilities</h2>
-  <div class="nwsub">Tap a category to see the accounts inside it.</div>
 </div>
 <div class="nwwrap framed" id="nwwrap" style="display:none"></div>
 
 <!-- 3) cash flow: period controls, income / expenses / savings, Sankey -->
 <div class="nwhead cfhead" id="cfhead" style="display:none">
   <h2>Cash Flow</h2>
-  <div class="nwsub">Income, expenses and savings for the selected period.</div>
 </div>
 
 <div class="controls" id="controls" style="display:none">
@@ -1367,13 +1365,8 @@ function buildNetWorth(){
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
   if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
   const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
-  let chg='';
-  if(series.length>12){
-    const d=gTot-series[series.length-13];
-    chg=` \u00B7 <span class="${d<0?'dn':'up'}">${d<0?'\u2212':'+'}${fmt(Math.abs(d))}</span> in 12 months`;
-  }
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
-  const liveNote = LIVE ? `<b class="live">LIVE</b> ETF prices, ${hhmm(LIVE.at)}` : mLab(cur);
+  const liveNote = LIVE ? `<b class="live">LIVE</b> ${hhmm(LIVE.at)}` : mLab(cur);
   let spark='';
   const SW=300,SH=60,SP=3, smn=Math.min(0,...series), smx=Math.max(...series), srg=(smx-smn)||1;
   const yOf=v=> SP+(SH-2*SP)*(1-(v-smn)/srg);              // viewBox y of a value
@@ -1398,7 +1391,7 @@ function buildNetWorth(){
     `<div class="ipct">${spc(a[1])}</div></div>`;
   const inv = LIVE && LIVE.inv ? invChip('This month',LIVE.inv.m)+invChip('This year',LIVE.inv.y)+invChip('All time',LIVE.inv.a) : '';
   cardsEl.innerHTML=`<div class="nwcard net"><div class="nwmain"><div class="lab">Net worth</div>`+
-    `<div class="big">${money(gTot)}</div><div class="pct">${liveNote}${chg}</div></div>`+
+    `<div class="big">${money(gTot)}</div><div class="pct">${liveNote}</div></div>`+
     `<div class="nwtrend">${spark}</div>`+
     (inv ? `<div class="nwinv"><div class="invhead">Investment gains</div><div class="ichips">${inv}</div></div>` : '')+
     `</div>`;

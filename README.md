@@ -10,7 +10,7 @@ browser.
 ## Page order
 1. Title (**Personal Finance**, title case; section titles too).
 2. **Net worth hero card**: the only headline box. Big net-worth value, a sub-line
-   with the latest month and the **12-month change** (green up / red down), and a
+   with just `LIVE HH:MM` (or the latest month when live prices are unavailable), a
    **trend sparkline** of month-end net worth on the right.
 3. **Assets & Liabilities** section: the Assets and Liabilities tables (side by
    side on wide screens, stacked on phones), each with its total on top, collapsed
@@ -152,7 +152,8 @@ Needs / Wants / Liberality / Taxes → category`.
   income. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
-  header; the assets & liabilities section keeps a one-line "tap a category" hint).
+  header and from the section titles: no "tap a category" or "income, expenses and
+  savings" hints).
 - **Mobile:** on narrow screens (≤680px) the whole page adapts, not just the
   Sankey. The Sankey still renders at a fixed wider width (min 720px) inside its
   own horizontally scrollable frame (with a "swipe sideways" hint) so labels stay
@@ -279,7 +280,8 @@ export, the same access the DB load uses; the app never writes to the sheet):
   shares > 0 is valued at **shares × live price**. The **CAPGAIN** liability (tax on
   unrealised gains) takes its live NETWORTH value too, since it moves with prices.
 - Live rows show a green **LIVE** tag and `shares × price` on the sub-line (e.g.
-  `LIVE · Vwce · 1.091 × 170,80`); the hero card says `LIVE ETF prices, HH:MM`, and
+  `LIVE · Vwce · 1.091 × 170,80`); the hero card's sub-line is just `LIVE HH:MM`
+  (no "ETF prices" text, no 12-month change), and
   the sparkline's last point becomes the live net worth.
 - Runs in parallel with the DB load, then every **5 minutes** while the tab is
   visible and on returning to the tab. Any failure is silent and the DB values stay.
