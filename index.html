@@ -32,7 +32,9 @@
   .pill + .pill{border-left:1px solid var(--grid);}
   .pill input{position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;}
   .pill:hover{color:var(--ink);}
-  .pill:has(input:checked){color:#fff; background:#25603f;}
+  .pill:has(input:checked), .pill.on{color:#fff; background:#25603f;}
+  button.pill{border:0; font-family:inherit; cursor:pointer; height:100%;}
+  button.pill:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
   .pill:has(input:focus-visible){outline:2px solid var(--needs); outline-offset:-2px;}
   /* card rows (net worth row at the top, income/expenses/savings row above the Sankey):
      one shared 3-column grid, same width as the Sankey frame (940px), so every card
@@ -232,10 +234,15 @@
     #skeleton{max-width:100%;}
     /* controls: still one compact row, slightly taller tap targets */
     .controls{gap:6px;}
-    .controls{gap:5px;}
-    .controls select{height:36px; font-size:13px; padding:0 2px 0 5px; flex:0 0 auto;}
-    .pills{height:36px; margin-left:auto;}
-    .pill{padding:0 9px; font-size:12.5px;}
+    /* phone: row 1 = presets (left) + view toggles (right), row 2 = the three
+       selects sharing the width; slim custom-arrow selects */
+    .controls{gap:6px 4px; flex-wrap:wrap;}
+    .controls .presets{order:-2;} .controls .toggles{order:-1; margin-left:auto;}
+    .controls select{height:36px; font-size:12.5px; flex:1 1 28%; min-width:0; -webkit-appearance:none; appearance:none;
+      padding:0 15px 0 7px; background-repeat:no-repeat; background-position:right 5px center; background-size:7px 5px;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 5'%3E%3Cpath d='M0 0h7L3.5 5z' fill='%239aa6bd'/%3E%3C/svg%3E");}
+    .pills{height:36px; flex:0 0 auto;}
+    .pill{padding:0 10px; font-size:12.5px;}
     /* range slider: enlarge the invisible hit area of each handle to ~48px for touch */
     #rangeBox{max-width:100%;}
     .dual{height:34px;}
@@ -340,8 +347,14 @@
   <select id="year" aria-label="Year"></select>
   <select id="month" aria-label="Month"></select>
   <!-- compact toggle pills: the real checkboxes stay (same ids, same logic), visually hidden -->
-  <span class="pills">
-    <label class="pill" title="Trailing 12 months"><input type="checkbox" id="t12">T12M</label>
+  <!-- period presets: this month / last complete month / trailing 12 complete months -->
+  <span class="pills presets">
+    <button type="button" class="pill" id="thisMonth" title="Current month (in progress)">This M</button>
+    <button type="button" class="pill" id="lastMonth" title="Last complete month">Last M</button>
+    <label class="pill" title="Trailing 12 complete months"><input type="checkbox" id="t12">T12M</label>
+  </span>
+  <!-- view toggles -->
+  <span class="pills toggles">
     <label class="pill" title="Per month (average)"><input type="checkbox" id="tMonthly">Avg/m</label>
     <label class="pill" title="Values in thousands"><input type="checkbox" id="tK">K</label>
   </span>
@@ -1252,7 +1265,24 @@ function updateSliderUI(){
   const N=maxIdx()||1, lp=loIdx/N*100, hp=hiIdx/N*100;
   hLo.style.left=lp+'%'; hHi.style.left=hp+'%'; rFill.style.left=lp+'%'; rFill.style.width=(hp-lp)+'%';
   rLoL.textContent=miLabel(META.minMi+loIdx); rHiL.textContent=miLabel(META.minMi+hiIdx);
+  // "This M" / "Last M" light up while the window is exactly that single month
+  [['thisMonth',currentMi],['lastMonth',lastCompleteMi]].forEach(([id,f])=>{
+    const b=document.getElementById(id); if(!b) return;
+    const c=f()-META.minMi; b.classList.toggle('on', loIdx===c && hiIdx===c); });
 }
+/* current calendar month (still in progress), clamped to the data */
+function currentMi(){
+  const d=new Date(), now=d.getFullYear()*12+d.getMonth();
+  return Math.max(META.minMi, Math.min(META.maxMi, now));
+}
+/* latest COMPLETE month = the calendar month before today, clamped to the data
+   (if the sheet lags behind, its latest month is used). T12M and "Last month" both
+   anchor here, so on 2 Oct 2026 T12M = Oct 2025 - Sep 2026 and Last month = Sep 2026. */
+function lastCompleteMi(){
+  const d=new Date(), prev=d.getFullYear()*12+d.getMonth()-1;
+  return Math.max(META.minMi, Math.min(META.maxMi, prev));
+}
+function setAnchor(mi){ yearEl.value=Math.floor(mi/12); monthEl.value=mi%12+1; }
 function setSlider(lo,hi){ const N=maxIdx(); loIdx=Math.max(0,Math.min(N,Math.round(lo))); hiIdx=Math.max(0,Math.min(N,Math.round(hi)));
   if(loIdx>hiIdx)[loIdx,hiIdx]=[hiIdx,loIdx]; updateSliderUI(); }
 function idxFromX(clientX){ const r=dualEl.getBoundingClientRect(), N=maxIdx(); let f=(clientX-r.left)/r.width; f=Math.max(0,Math.min(1,f)); return Math.round(f*N); }
@@ -1612,16 +1642,25 @@ function syncYearOptions(){
 function initControlsOnce(){
   if(controlsReady) return;
   MONTHS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i+1; o.textContent=m; monthEl.appendChild(o); });
-  monthEl.value=META.maxMi%12+1;
-  /* open on the trailing 12 months ending on the latest month in the sheet */
+  /* open on the trailing 12 COMPLETE months (ending on last month, not the current
+     part-month), e.g. Oct 2025 - Sep 2026 when today is in Oct 2026 */
+  setAnchor(lastCompleteMi());
   modeEl.value='trailing';
   t12El.checked=true;
   { const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi); }
   [yearEl,monthEl].forEach(el=>el.addEventListener('change',applyPreset));
   /* quick-set and the trailing-12 flag are two views of the same Comparison_Mode,
      so each keeps the other in sync */
-  modeEl.addEventListener('change',()=>{ t12El.checked=(modeEl.value==='trailing'); applyPreset(); });
-  t12El.addEventListener('change',()=>{ modeEl.value=t12El.checked?'trailing':'month'; applyPreset(); });
+  /* switching TO T12M (select or pill) snaps to the latest 12 COMPLETE months; the
+     Year / Month pickers can still re-anchor it afterwards */
+  modeEl.addEventListener('change',()=>{ t12El.checked=(modeEl.value==='trailing');
+    if(t12El.checked) setAnchor(lastCompleteMi()); applyPreset(); });
+  t12El.addEventListener('change',()=>{ modeEl.value=t12El.checked?'trailing':'month';
+    if(t12El.checked) setAnchor(lastCompleteMi()); applyPreset(); });
+  /* This M / Last M: single-month view of the current month / last complete month */
+  const oneMonth=mi=>{ setAnchor(mi); modeEl.value='month'; t12El.checked=false; applyPreset(); };
+  document.getElementById('thisMonth').addEventListener('click',()=>oneMonth(currentMi()));
+  document.getElementById('lastMonth').addEventListener('click',()=>oneMonth(lastCompleteMi()));
   monthlyEl.addEventListener('change',build);
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); });
   const er=document.getElementById('exclReset');

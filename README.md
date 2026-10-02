@@ -165,19 +165,24 @@ Needs / Wants / Liberality / Taxes → category`.
   panel, which scrolls inside itself (capped at 88vh). Desktop layout is unchanged.
 
 ### Period selection
-- **Default view: trailing 12 months.** The app opens in Trailing 12 months mode
-  (flag ticked), on the 12-month window ending on the most recent month in the
-  sheet (or the full span if fewer than 12 months exist). Set in
-  `initControlsOnce()` via `presetRange()`; a data refresh keeps whatever window
-  the user has moved to.
-- **Compact controls (one row, phone included):** Quick set select (`T12M` / `Month`
-  / `Year` / `All time`, no "Quick set" label), Year, Month, then a segmented toggle
-  group **T12M | Avg/m | K** (`.pills`). Each pill is a `<label>` wrapping the
-  original checkbox (`#t12`, `#tMonthly`, `#tK`, visually hidden), so all toggle
-  logic is unchanged; a checked pill turns green (`:has(input:checked)`), and the
-  full meaning is in its tooltip (Trailing 12 months / Per month (average) / Values
-  in thousands). On phones the selects keep their natural width and the pills sit
-  at the right end of the same row.
+- **Default view: T12M = the latest 12 COMPLETE months.** The app opens in T12M
+  ending on the **last complete month** (`lastCompleteMi()` = the calendar month
+  before today, clamped to the data), not the current part-month: on 2 Oct 2026 it
+  shows **Oct 2025 - Sep 2026**. Switching to T12M again (pill or select) snaps back
+  to that window; the Year / Month pickers can still re-anchor it afterwards. A data
+  refresh keeps whatever window the user has moved to.
+- **Compact controls:** Quick set select (`T12M` / `Month` / `Year` / `All time`, no
+  "Quick set" label), Year, Month, then two segmented groups (`.pills`):
+  - **Presets** `This M | Last M | T12M`: *This M* = the current (in-progress)
+    month (`currentMi()`), *Last M* = the last complete month, both as a single-month
+    view; each lights green while the window is exactly that month. *T12M* is the
+    trailing-12 toggle.
+  - **Toggles** `Avg/m | K`.
+  Toggle pills are `<label>`s wrapping the original checkboxes (`#t12`, `#tMonthly`,
+  `#tK`, visually hidden), so the toggle logic is unchanged; a checked pill turns
+  green (`:has(input:checked)`), and the full meaning is in each tooltip. Desktop:
+  one row. Phone: row 1 = presets (left) + toggles (right), row 2 = the three
+  selects sharing the width (slim custom-arrow selects).
 - **Trailing 12 months flag (T12M pill):** switches between the
   current month and the trailing-12-month window. It is two-way bound to the Quick
   set dropdown (ticking it selects Trailing 12 months, and choosing a mode in the
