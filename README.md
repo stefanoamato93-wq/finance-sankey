@@ -57,6 +57,26 @@ year is labelled `YTD` under its year; any other part year shows its month count
     the test shim) returns `{year: value}`; `buildCfOptions()` rebuilds the list
     once per data load (`CF_OPTS` = key -> label / colour / share base) and keeps the
     pick across refreshes when it still exists.
+- **R12M pill (left of the picker):** swaps the yearly bars for a **rolling 12-month
+  stacked area chart** with one point per month, from the first month of data to the
+  **last complete month** (so the last point equals the T12M cards, e.g. Sep 2026 =
+  101.468 income / 52.960 expenses). Each point = sum of the last 12 months, so 2018
+  ramps up from zero; with **Avg/m** it is that sum / 12. Translucent ("blended")
+  layers with a solid edge, y grid with values, one x label per year. What is
+  stacked follows the picker:
+  - Overview: income tiers up (Safe / Stocks / Other), expense groups down, plus the
+    rolling Saved % income (solid) and % safe (dashed) in a band above, last value
+    labelled at the right end.
+  - Total income, Safe income, an income group: its income leaves.
+  - Total expenses, a macro group: its labels (biggest at the bottom, Stable_Order).
+    More than 12 layers fold the tail into one grey "Other (n)" layer (`CF_ROLL_MAX`).
+  - A label: its DETAIL sub-categories.
+  - An income leaf, a detail, Savings, Safe savings: one signed area.
+  Exclusions follow the picker rules above. Hover / tap snaps to the nearest month
+  with a guide line; the tooltip lists every layer (value and % of the stack; in
+  Overview the income, expense and savings split with both rolling rates). Pure
+  helpers `cfRollLayers()` and `rolling12()` are exported in the test shim; the
+  yearly helper `cfSeriesByYear()` takes an optional `bucket` (`mi=>mi` for monthly).
 - **No legend.** The colour keys show only in the hover (desktop) / tap (phone)
   tooltip: a swatch per tier, the solid / dashed line keys next to the two rates,
   plus total and safe savings and an "N excluded" note. Tap elsewhere hides it.

@@ -62,7 +62,9 @@
   .tip i.ln{display:inline-block; width:13px; height:0; border-top:2px solid; vertical-align:middle; margin-right:4px;}
   .tip i.ln.dash{border-top-style:dashed;}
   .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:10px;}
-  #cfSel{height:28px; padding:0 6px; font-size:12px; font-family:inherit; max-width:min(260px,55%); min-width:0;}
+  .cfbtools{display:flex; align-items:center; gap:6px; min-width:0; flex:0 1 auto;}
+  #cfSel{height:30px; padding:0 6px; font-size:12px; font-family:inherit; width:220px; max-width:100%; min-width:0; flex:0 1 auto;}
+  @media (max-width:680px){ #cfSel{width:150px;} .cfbhead h2{white-space:nowrap;} }
   #cfSel.on{border-color:#25603f; color:#fff; background:#1b3a2b;}
   #cfbars text{font-variant-numeric:tabular-nums;}
   #cfbars .hit{fill:transparent; cursor:pointer;}
@@ -401,8 +403,12 @@
      savings rate on total income and on safe income (Base + TFR + Food tickets) -->
 <div class="nwhead cfbhead" id="cfbhead" style="display:none">
   <h2>Cash Flow vs Savings</h2>
-  <!-- Overview (stacks + savings %) or one category / label / detail plotted per year -->
-  <select id="cfSel" aria-label="Plot one category" title="Plot one category, label or detail"></select>
+  <div class="cfbtools">
+    <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
+    <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label></span>
+    <!-- Overview (stacks + savings %) or one category / label / detail -->
+    <select id="cfSel" aria-label="Plot one category" title="Plot one category, label or detail"></select>
+  </div>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
@@ -1609,9 +1615,11 @@ function cashFlowByYear(data, lastMi, excluded){
    Totals honour every exclusion; a group honours the exclusions of its leaves (not
    of itself, it was picked explicitly); a leaf or a detail ignores exclusions.
    Pure: returns {year: raw value} (income positive, spend positive, savings signed). */
-function cfSeriesByYear(sel, data, detail, lastMi, excluded){
+function cfSeriesByYear(sel, data, detail, lastMi, excluded, bucket){
+  /* bucket(mi) picks the output key: calendar year by default, mi=>mi for monthly */
+  const bk=bucket||(mi=>Math.floor(mi/12));
   const out={}, ds=excluded||new Set(), p=sel.indexOf('|'), kind=sel.slice(0,p), name=sel.slice(p+1);
-  const add=(mi,v)=>{ if(mi>lastMi) return; const y=Math.floor(mi/12); out[y]=(out[y]||0)+v; };
+  const add=(mi,v)=>{ if(mi>lastMi) return; const y=bk(mi); out[y]=(out[y]||0)+v; };
   if(kind==='D'){
     const q=name.indexOf('|'), lf=name.slice(0,q), dn=name.slice(q+1);
     (detail||[]).forEach(([mi,l,d,v])=>{ if(l===lf && d===dn) add(mi,v); });
@@ -1673,6 +1681,186 @@ function buildCfOptions(){
   if(cfSel && !CF_OPTS.has(cfSel)) cfSel='';      // the picked entry vanished on a data refresh
   sel.value=cfSel; sel.classList.toggle('on',!!cfSel);
 }
+/* ---- R12M mode: rolling 12-month stacked areas, one point per month ---------
+   The R12M pill next to the picker swaps the yearly bars for a monthly x axis where
+   each point = the sum of the last 12 months (Avg/m: that sum / 12), so the first
+   year ramps up from zero. What is stacked follows the picker:
+     Overview          income tiers up (Safe / Stocks / Other), expense groups down,
+                       plus the rolling savings % on income and on safe income
+     Total income, Safe income, an income group   -> its income leaves
+     Total expenses, a macro group                -> its labels
+     a label           -> its DETAIL sub-categories
+     an income leaf, a detail, Savings, Safe savings -> one (signed) area
+   Exclusions follow the yearly picker rules (totals honour all, a group honours
+   its leaves, a label / detail ignores them). Ends on the last COMPLETE month, so
+   the last point equals the T12M cards. */
+const CF_PAL=['#f28b82','#fbbc04','#81c995','#78d9ec','#a7b6f5','#d7aefb','#f6aea9','#e6c9a8',
+              '#ccff90','#aecbfa','#fde293','#fdcfe8'];
+const CF_ROLL_MAX=12;                              // stacked layers before the rest fold into "Other"
+/* pure: monthly raw layers [{key, label, neg, m:{mi:value}}] for a picker key */
+function cfRollLayers(sel, data, detail, lastMi, excluded){
+  const ds=excluded||new Set(), L=new Map();
+  const get=(key,label,neg)=>{ let l=L.get(key); if(!l){ l={key,label,neg:!!neg,m:{}}; L.set(key,l); } return l; };
+  const put=(l,mi,v)=>{ l.m[mi]=(l.m[mi]||0)+v; };
+  const p=sel.indexOf('|'), kind=p<0?'':sel.slice(0,p), name=p<0?'':sel.slice(p+1);
+  if(kind==='E'){                                  // a label -> its details
+    (detail||[]).forEach(([mi,lf,dn,v])=>{ if(lf===name && mi<=lastMi) put(get('D|'+lf+'|'+dn,dn),mi,v); });
+    return [...L.values()];
+  }
+  const multi = kind==='' || kind==='IG' || kind==='EG' || (kind==='T' && /^(inc|safe|exp)$/.test(name));
+  if(!multi){                                      // one signed series, same rules as the yearly bars
+    return [{key:sel, label:sel, neg:false, single:true, m:cfSeriesByYear(sel,data,detail,lastMi,ds,mi=>mi)}];
+  }
+  (data||[]).forEach(([mi,k,grp,leaf,val])=>{
+    if(mi>lastMi) return;
+    if(ds.has((k==='I'?'I|':'E|')+leaf)) return;
+    if(kind!=='IG' && kind!=='EG' && ds.has((k==='I'?'IG|':'EG|')+grp)) return;
+    if(kind===''){
+      if(k==='I'){ const t=CF_SAFE.has(leaf)?'safe':leaf==='STOCKS'?'stocks':'other'; put(get('t|'+t,t),mi,val); }
+      else put(get('g|'+grp,grp,true),mi,-val);
+      return;
+    }
+    if(k==='I' && (kind==='IG' ? grp===name : name==='inc' || (name==='safe' && CF_SAFE.has(leaf))))
+      put(get('I|'+leaf,leaf),mi,val);
+    else if(k==='E' && (kind==='EG' ? grp===name : name==='exp'))
+      put(get('E|'+leaf,leaf),mi,-val);
+  });
+  return [...L.values()];
+}
+/* pure: rolling 12-month sums over [m0, m1] -> array (months before m0 count as 0
+   only when they hold no data; the window reads whatever exists) */
+function rolling12(m, m0, m1){
+  const out=[]; let s=0;
+  for(let mi=m0-11; mi<m0; mi++) s+=m[mi]||0;
+  for(let mi=m0; mi<=m1; mi++){ s+=m[mi]||0; out.push(s); s-=m[mi-11]||0; }
+  return out;
+}
+const niceStep=x=>{ if(!(x>0)) return 1; const p=Math.pow(10,Math.floor(Math.log10(x))), f=x/p;
+  return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*p; };
+function renderRolling(svgEl, W, narrow, perMonth){
+  const m0=META.minMi, m1=lastCompleteMi(), N=m1-m0+1;
+  const el=(tag,attrs,txt)=>{ const e=document.createElementNS(NS,tag);
+    for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; };
+  svgEl.innerHTML='';
+  if(N<2) return;
+  const info=cfSel ? CF_OPTS.get(cfSel) : null, ov=!cfSel, div=perMonth?12:1;
+  let layers=cfRollLayers(cfSel, DATA, DETAIL, m1, deselected)
+    .map(l=>Object.assign(l,{r:rolling12(l.m,m0,m1).map(v=>v/div)}));
+  const single=layers.length===1 && !ov;
+  /* order (first = closest to the zero line) and colours */
+  if(ov){
+    const ti=k=>CF_INC.findIndex(x=>'t|'+x[0]===k), gi=k=>CF_EXP.findIndex(x=>'g|'+x[0]===k);
+    layers.forEach(l=>{ if(l.neg){ const i=gi(l.key); l.color=(CF_EXP[i]||CF_EXP[4])[2]; l.label=(CF_EXP[i]||[0,l.label])[1]; l.o=i<0?99:i; }
+      else { const i=ti(l.key); l.color=CF_INC[i][2]; l.label=CF_INC[i][1]; l.o=i; } });
+    layers.sort((a,b)=>a.o-b.o);
+  } else if(single){
+    layers[0].color=info.color; layers[0].label=info.label;
+  } else {
+    layers.sort((a,b)=>rankCmp(a.key,b.key));
+    if(layers.length>CF_ROLL_MAX){                  // fold the tail into one "Other" layer
+      const keep=layers.slice(0,CF_ROLL_MAX-1), rest=layers.slice(CF_ROLL_MAX-1);
+      keep.push({key:'other', label:`Other (${rest.length})`, neg:false, color:'#9aa6bd',
+        r:rest[0].r.map((_,i)=>rest.reduce((a,l)=>a+l.r[i],0))});
+      layers=keep;
+    }
+    layers.forEach((l,i)=>{ if(!l.color) l.color=CF_PAL[i%CF_PAL.length]; });
+  }
+  /* stacking: positive side up, negative side down; a single series stays signed */
+  const posT=new Array(N).fill(0), negT=new Array(N).fill(0);
+  layers.forEach(l=>{ l.base=[]; l.top=[];
+    for(let i=0;i<N;i++){
+      if(single){ l.base.push(0); l.top.push(l.r[i]); continue; }
+      const v=Math.max(0,l.r[i]);
+      if(l.neg){ l.base.push(-negT[i]); negT[i]+=v; l.top.push(-negT[i]); }
+      else { l.base.push(posT[i]); posT[i]+=v; l.top.push(posT[i]); }
+    } });
+  const maxPos=Math.max(1e-9,...layers.flatMap(l=>l.top), ...posT), minNeg=Math.min(0,...layers.flatMap(l=>l.top), ...negT.map(v=>-v));
+  /* savings-rate lines (overview only): rolling income vs rolling expenses */
+  let rTot=null, rSafe=null;
+  if(ov){
+    const inc=posT, exp=negT, safeL=layers.find(l=>l.key==='t|safe');
+    rTot=inc.map((v,i)=> v>0 ? (v-exp[i])/v*100 : null);
+    rSafe=inc.map((_,i)=>{ const s=safeL?Math.max(0,safeL.r[i]):0; return s>0 ? (s-exp[i])/s*100 : null; });
+  }
+  /* geometry */
+  const fs=narrow?9.5:10.5, padL=narrow?38:46, padR=ov?(narrow?30:34):8;
+  const lineH=ov?(narrow?50:62):0, lineTop=ov?10:0, plotTop=ov?lineTop+lineH+16:8;
+  const plotH=narrow?190:240, plotBot=plotTop+plotH, H=plotBot+22;
+  const innerW=W-padL-padR, xOf=i=> padL+i/(N-1)*innerW;
+  const span=(maxPos-minNeg)||1, yOf=v=> plotTop+(maxPos-v)/span*plotH;
+  svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`); svgEl.setAttribute('height',H);
+  /* y grid + labels */
+  const step=niceStep(span/5);
+  for(let t=Math.ceil(minNeg/step)*step; t<=maxPos+step*1e-6; t+=step){
+    const y=yOf(t);
+    svgEl.appendChild(el('line',{x1:padL,x2:W-padR,y1:y,y2:y,stroke:Math.abs(t)<step*1e-6?'#3a4d78':'#243049','stroke-width':1}));
+    svgEl.appendChild(el('text',{x:padL-5,y:y+3.5,'text-anchor':'end',fill:'#9aa6bd','font-size':fs},fmt(t)));
+  }
+  /* x labels: one per January (every other year when columns get tight) */
+  const yrs=[]; for(let i=0;i<N;i++) if((m0+i)%12===0 || i===0) yrs.push(i);
+  const every=(innerW/Math.max(1,yrs.length))<30 ? 2 : 1;
+  yrs.forEach((i,j)=>{ if(j%every) return;
+    svgEl.appendChild(el('line',{x1:xOf(i),x2:xOf(i),y1:plotBot,y2:plotBot+4,stroke:'#3a4d78'}));
+    /* a mid-year first month is left-anchored so it does not spill into the y labels */
+    svgEl.appendChild(el('text',{x:xOf(i),y:plotBot+15,'text-anchor':(i===0 && m0%12)?'start':'middle',fill:'#e7ecf5','font-size':fs},String(Math.floor((m0+i)/12)))); });
+  /* areas (translucent, "blended") + a solid edge on each layer's outer side */
+  const pts=(arr)=>arr.map((v,i)=>xOf(i).toFixed(1)+','+yOf(v).toFixed(1));
+  layers.forEach(l=>{
+    const top=pts(l.top), base=pts(l.base).reverse();
+    svgEl.appendChild(el('path',{d:'M'+top.join('L')+'L'+base.join('L')+'Z',fill:l.color,'fill-opacity':ov?.5:.62,stroke:'none'}));
+    svgEl.appendChild(el('path',{d:'M'+top.join('L'),fill:'none',stroke:l.color,'stroke-width':1.4,'stroke-linejoin':'round'}));
+  });
+  /* rolling savings % (overview): own band above the areas, last value labelled */
+  if(ov){
+    const all=[...rTot,...rSafe].filter(v=>v!=null);
+    if(all.length){
+      let rMax=Math.max(...all), rMin=Math.min(...all); if(rMax-rMin<1){ rMax+=1; rMin-=1; }
+      const ry=v=> lineTop+(rMax-v)/(rMax-rMin)*lineH;
+      [[rSafe,CF_LINE_SAFE,true],[rTot,CF_LINE_TOT,false]].forEach(([arr,c,dash])=>{
+        let dd='', pen=false, last=null;
+        arr.forEach((v,i)=>{ if(v==null){ pen=false; return; } dd+=(pen?'L':'M')+xOf(i).toFixed(1)+','+ry(v).toFixed(1); pen=true; last=i; });
+        const pth=el('path',{d:dd,fill:'none',stroke:c,'stroke-width':dash?1.4:1.8,'stroke-linejoin':'round'});
+        if(dash) pth.setAttribute('stroke-dasharray','5 3');
+        svgEl.appendChild(pth);
+        if(last!=null) svgEl.appendChild(el('text',{x:xOf(last)+4,y:ry(arr[last])+3.5,fill:c,'font-size':fs,'font-weight':dash?500:700},Math.round(arr[last])+'%'));
+      });
+    }
+  }
+  /* hover / tap: snap to the nearest month, guide line + tooltip */
+  const guide=el('line',{x1:0,x2:0,y1:ov?lineTop:plotTop,y2:plotBot,stroke:'rgba(231,236,245,.55)','stroke-width':1,visibility:'hidden'});
+  svgEl.appendChild(guide);
+  const pc=v=> v==null ? '\u2014' : Math.round(v)+'%';
+  const sw=c=>`<i class="sw" style="background:${c}"></i>`, mut=s=>`<span style="color:#9aa6bd">${s}</span>`;
+  const tipHtml=i=>{
+    let h=`<b>${miLabel(m0+i)}</b> ${mut('R12M'+(perMonth?' avg/m':''))}`+
+      (deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:'');
+    if(ov){
+      const sideTxt=neg=>layers.filter(l=>l.neg===neg && l.r[i]).map(l=>`${sw(l.color)}${l.label} ${fmt(l.r[i])}`);
+      const two=a=>{ const o=[]; for(let j=0;j<a.length;j+=2) o.push('<br>&nbsp;&nbsp;'+mut(a.slice(j,j+2).join(' \u00b7 '))); return o.join(''); };
+      h+=`<br>Income <b>${fmt(posT[i])}</b>${two(sideTxt(false))}<br>Expenses <b>${fmt(negT[i])}</b>${two(sideTxt(true))}`+
+         `<br>Saved <b>${fmt(posT[i]-negT[i])}</b><br>&nbsp;&nbsp;`+
+         mut(`<i class="ln" style="border-color:${CF_LINE_TOT}"></i>${pc(rTot[i])} of income \u00b7 <i class="ln dash" style="border-color:${CF_LINE_SAFE}"></i>${pc(rSafe[i])} of safe`);
+    } else if(single){
+      h+=`<br>${sw(layers[0].color)}${layers[0].label} <b>${fmt(layers[0].r[i])}</b>`;
+    } else {
+      h+=`<br>${info.label} <b>${fmt(posT[i])}</b>`;
+      [...layers].reverse().forEach(l=>{ if(l.r[i]) h+=`<br>&nbsp;&nbsp;${sw(l.color)}${l.label} ${fmt(l.r[i])}`+
+        mut(posT[i]>0?` \u00b7 ${Math.round(l.r[i]/posT[i]*100)}%`:''); });
+    }
+    return h; };
+  const hit=el('rect',{class:'hit',x:padL,y:0,width:innerW,height:H});
+  const show=e=>{ const r=svgEl.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width);
+    const i=Math.max(0,Math.min(N-1,Math.round((x-padL)/innerW*(N-1))));
+    guide.setAttribute('x1',xOf(i)); guide.setAttribute('x2',xOf(i)); guide.setAttribute('visibility','visible');
+    showTip(e,tipHtml(i)); const tw=tip.offsetWidth, th=tip.offsetHeight;
+    if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
+    if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
+  hit.addEventListener('mousemove',show);
+  hit.addEventListener('mouseleave',()=>{ hideTip(); guide.setAttribute('visibility','hidden'); });
+  hit.addEventListener('click',e=>{ e.stopPropagation(); show(e); });
+  svgEl.appendChild(hit);
+}
+let cfRoll=false;
 let cfLastW=0, cfSig=null, cfData=null;
 /* called from every build(); redraws only when an input changed (data, exclusions,
    Avg/m, K, width), so dragging the range bar does not rebuild the chart */
@@ -1682,9 +1870,10 @@ function renderCashBars(){
   const perMonth=monthlyEl.checked, dv=r=> perMonth ? Math.max(1,r.months) : 1;
   const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
   if(DATA!==cfOptData) buildCfOptions();
-  const sig=[W,perMonth,showK,cfSel,[...deselected].sort().join(',')].join('#');
+  const sig=[W,perMonth,showK,cfSel,cfRoll,[...deselected].sort().join(',')].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
+  if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
   const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth(), lastMi=Math.min(META.maxMi, nowMi);
   const rows=cashFlowByYear(DATA, lastMi, deselected);
   const narrow=W<560, n=rows.length;
@@ -1947,6 +2136,7 @@ function initControlsOnce(){
   /* chart picker: Overview, or one category / label / detail per year */
   const cfSelEl=document.getElementById('cfSel');
   cfSelEl.addEventListener('change',()=>{ cfSel=cfSelEl.value; cfSelEl.classList.toggle('on',!!cfSel); hideTip(); renderCashBars(); });
+  document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; hideTip(); renderCashBars(); });
   /* the yearly bars are drawn at the frame's real width, so redraw when it changes */
   let cfRT=null;
   window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
@@ -2028,7 +2218,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12 };
 }
 </script>
 </body>
