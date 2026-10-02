@@ -41,6 +41,7 @@
      lines up column by column and every block shares the same left AND right edge */
   .nwcards,.totals{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;
                    margin:12px 26px 0; max-width:940px;}
+  .totals{grid-template-columns:repeat(4,minmax(0,1fr));}   /* Income / Expenses / Savings / Safe savings */
   .nwcard,.tot{min-width:0; background:linear-gradient(180deg,#182135,#141a28);
                border:1px solid var(--grid); border-radius:12px; padding:10px 14px;}
   .nwcard .lab,.tot .lab{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px;}
@@ -56,11 +57,10 @@
   /* Cash Flow vs Savings: yearly stacked income / expense bars + two savings-rate lines.
      Drawn at the frame's real pixel width (no scaling), so text stays legible on phones. */
   .cfbwrap{margin:10px 26px 40px; padding:10px 14px 6px; max-width:940px;}
-  .cflegend{display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--muted); margin-bottom:2px;}
-  .cflegend span{display:inline-flex; align-items:center; gap:5px; white-space:nowrap;}
-  .cflegend i{display:inline-block; width:10px; height:10px; border-radius:2px;}
-  .cflegend i.ln{width:16px; height:0; border-top:2px solid; border-radius:0;}
-  .cflegend i.ln.dash{border-top-style:dashed;}
+  /* colour keys live in the hover / tap tooltip only (no legend row) */
+  .tip i.sw{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px;}
+  .tip i.ln{display:inline-block; width:13px; height:0; border-top:2px solid; vertical-align:middle; margin-right:4px;}
+  .tip i.ln.dash{border-top-style:dashed;}
   #cfbars text{font-variant-numeric:tabular-nums;}
   #cfbars .hit{fill:transparent; cursor:pointer;}
   #cfbars .hit:hover{fill:rgba(255,255,255,.035);}
@@ -262,7 +262,6 @@
     .dual .handle::before{content:""; position:absolute; top:-14px; left:-14px; right:-14px; bottom:-14px;}
     .wrap{margin:10px 14px 0; padding:8px;}
     .cfbwrap{margin:10px 14px 24px; padding:8px 6px 4px; max-width:100%;}
-    .cflegend{font-size:10.5px; gap:3px 9px; padding:0 4px;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
     /* both card rows stay three across, just tighter */
@@ -270,6 +269,12 @@
     .nwcard,.tot{padding:8px 9px;}
     .nwcard .big,.tot .val{font-size:16.5px;}
     .nwcard .pct,.tot .pct{font-size:10px;}
+    /* four cards across a phone: tighter type so values fit without ellipsis */
+    .totals{gap:6px;}
+    .tot{padding:7px 7px;}
+    .tot .lab{font-size:9px; letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+    .tot .val{font-size:14.5px;}
+    .tot .pct{font-size:9.5px;}
     .nwcard.net{gap:12px; padding:12px 12px;}
     .nwcard.net .big{font-size:25px;}
     .nwcard.net .pct{font-size:11px; white-space:normal;}
@@ -395,7 +400,6 @@
   <h2>Cash Flow vs Savings</h2>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
-  <div class="cflegend" id="cfLegend"></div>
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
 </div>
 
@@ -1268,10 +1272,19 @@ function paintTotals(res){
      Savings card when selected income <= 0 so the "—" placeholder is visible in
      the all-income-deselected case. */
   if(sav>0 || !(income>0)) cards.push(["Savings",sav,GROUPCOL.Savings]);
+  /* Safe savings = safe income (Base + TFR + Food tickets, CF_SAFE) - expenses, over
+     the same selection-adjusted links (income leaf links are [leaf, group, v]); can be
+     negative, shown in red then. Sub-line = % of safe income. */
+  const incGroups=new Set((res.links||[]).filter(l=>l[1]==='Total income').map(l=>l[0]));
+  const safeInc=(res.links||[]).reduce((a,[s,t,v])=> a+(incGroups.has(t) && CF_SAFE.has(s) ? v : 0), 0);
+  const safeSav=safeInc-totExp, safePct=savingsPercentage(safeInc,totExp);
+  cards.push(["Safe savings",safeSav, safeSav<0 ? '#e58a8a' : GROUPCOL.Savings,
+    safePct===null ? '\u2014' : safePct.toFixed(1).replace('.',',')+'% of safe']);
   const pct=v=> income>0 ? (v/income*100).toFixed(0)+'% of income' : '';   // unchanged: per-income "% of income" for Income/Expenses cards
-  document.getElementById('totals').innerHTML=cards.map(([lab,v,c],i)=>{
-    const sub = lab==='Savings' ? savPctLabel : (i===0?'':pct(v));
-    return `<div class="tot"><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${sub}</div></div>`;
+  document.getElementById('totals').innerHTML=cards.map(([lab,v,c,sub4],i)=>{
+    const sub = sub4!=null ? sub4 : lab==='Savings' ? savPctLabel : (i===0?'':pct(v));
+    const tt = lab==='Safe savings' ? ' title="(Base + TFR + Food tickets) - Expenses"' : '';
+    return `<div class="tot"${tt}><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${sub}</div></div>`;
   }).join('');
 }
 
@@ -1545,9 +1558,11 @@ function buildNetWorth(){
      down = expenses, stacked Needs / Wants / Liberality / Taxes (/ Other)
      lines= savings rate on total income  ((income - expenses) / income)
             and on safe income            ((safe - expenses) / safe)
-   Window-independent like the Yearly trend: it ignores the range bar and the
-   exclusions. Avg/m divides each year by the months of that year present in the
-   data (keeps the in-progress year comparable); K applies to every label. */
+   Window-independent like the Yearly trend (ignores the range bar), but it honours
+   the exclusions: an excluded income / expense leaf or macro group drops out of
+   the bars and both rates. Avg/m divides each year by the months of that year
+   present in the data (keeps the in-progress year comparable); K applies to every
+   label. No legend: the colour keys show in the hover / tap tooltip. */
 const CF_SAFE=new Set(['BASE','TFR','FOODTICKETS']);
 const CF_INC=[['safe','Safe','#2e8b57','Base + TFR + Food tickets'],
               ['stocks','Stocks','#63c28b','Stock vesting'],
@@ -1558,10 +1573,12 @@ const CF_LINE_TOT='#e7ecf5', CF_LINE_SAFE='#9aa6bd';
 /* pure: DATA rows -> [{year, months, inc:{safe,stocks,other}, exp:{group:spend}, income, safe,
    expenses, rateTot, rateSafe}] oldest -> newest, rows after lastMi ignored. Rates are %
    (null when their base income is <= 0); expenses are positive spend. */
-function cashFlowByYear(data, lastMi){
-  const by={};
+function cashFlowByYear(data, lastMi, excluded){
+  const by={}, ds=excluded||new Set();
   (data||[]).forEach(([mi,k,grp,leaf,val])=>{
     if(mi>lastMi) return;
+    /* same Entry keys as the Sankey's Selection_State */
+    if(k==='I' ? (ds.has('I|'+leaf)||ds.has('IG|'+grp)) : (ds.has('E|'+leaf)||ds.has('EG|'+grp))) return;
     const y=Math.floor(mi/12);
     const b=by[y]||(by[y]={mset:{}, inc:{safe:0,stocks:0,other:0}, exp:{}});
     b.mset[mi]=1;
@@ -1576,23 +1593,20 @@ function cashFlowByYear(data, lastMi){
       rateSafe: b.inc.safe>0 ? (b.inc.safe-expenses)/b.inc.safe*100 : null};
   }).filter(r=>r.income||r.expenses);             // drops blank-date rows (Dec 1899)
 }
-let cfLastW=0;
+let cfLastW=0, cfSig=null, cfData=null;
+/* called from every build(); redraws only when an input changed (data, exclusions,
+   Avg/m, K, width), so dragging the range bar does not rebuild the chart */
 function renderCashBars(){
-  const svgEl=document.getElementById('cfbars'), legEl=document.getElementById('cfLegend');
+  const svgEl=document.getElementById('cfbars');
   if(!svgEl || !DATA.length) return;
-  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
-  const rows=cashFlowByYear(DATA, Math.min(META.maxMi, nowMi));
   const perMonth=monthlyEl.checked, dv=r=> perMonth ? Math.max(1,r.months) : 1;
-  const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900)); cfLastW=W;
+  const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
+  const sig=[W,perMonth,showK,[...deselected].sort().join(',')].join('#');
+  if(sig===cfSig && DATA===cfData) return;
+  cfSig=sig; cfData=DATA; cfLastW=W;
+  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
+  const rows=cashFlowByYear(DATA, Math.min(META.maxMi, nowMi), deselected);
   const narrow=W<560, n=rows.length;
-  /* legend: only the stack tiers that have data */
-  const hasExp=g=> rows.some(r=>(r.exp[g]||0)>0);
-  const incT=CF_INC.filter(([k])=>rows.some(r=>r.inc[k]>0)), expT=CF_EXP.filter(([g])=>hasExp(g));
-  legEl.innerHTML=
-    incT.map(([,lab,c,t])=>`<span title="${t}"><i style="background:${c}"></i>${lab}</span>`).join('')+
-    expT.map(([,lab,c])=>`<span><i style="background:${c}"></i>${lab}</span>`).join('')+
-    `<span title="(Income - Expenses) / Income"><i class="ln" style="border-color:${CF_LINE_TOT}"></i>Saved % income</span>`+
-    `<span title="(Safe income - Expenses) / Safe income, safe = Base + TFR + Food tickets"><i class="ln dash" style="border-color:${CF_LINE_SAFE}"></i>Saved % safe</span>`;
   if(!n){ svgEl.innerHTML=''; return; }
   /* geometry (CSS px, viewBox = real width) */
   const padL=4, padR=4, slot=(W-padL-padR)/n, barW=Math.min(58, slot*0.62);
@@ -1656,15 +1670,17 @@ function renderCashBars(){
   rows.forEach((r,i)=>{
     /* tiers two per line so the tooltip stays narrow enough for a phone */
     const k=dv(r), part=(list,src)=>{ const it=list.filter(([key])=>(src[key]||0)>0)
-        .map(([key,lab])=>`${lab} ${fmt(src[key]/k)}`), out=[];
+        .map(([key,lab,c])=>`<i class="sw" style="background:${c}"></i>${lab} ${fmt(src[key]/k)}`), out=[];
       for(let j=0;j<it.length;j+=2) out.push(it.slice(j,j+2).join(' \u00b7 '));
       return out.map(s=>`<br><span style="color:#9aa6bd">&nbsp;&nbsp;${s}</span>`).join(''); };
     const html=`<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`+
       `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`+
+      `${deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:''}`+
       `<br>Income <b>${fmt(r.income/k)}</b>${part(CF_INC,r.inc)}`+
       `<br>Expenses <b>${fmt(r.expenses/k)}</b>${part(CF_EXP,r.exp)}`+
-      `<br>Saved <b>${fmt((r.income-r.expenses)/k)}</b>`+
-      `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc(r.rateTot)} of income \u00b7 ${pc(r.rateSafe)} of safe</span>`;
+      `<br>Saved <b>${fmt((r.income-r.expenses)/k)}</b> \u00b7 safe <b>${fmt((r.safe-r.expenses)/k)}</b>`+
+      `<br><span style="color:#9aa6bd">&nbsp;&nbsp;<i class="ln" style="border-color:${CF_LINE_TOT}"></i>${pc(r.rateTot)} of income`+
+      ` \u00b7 <i class="ln dash" style="border-color:${CF_LINE_SAFE}"></i>${pc(r.rateSafe)} of safe</span>`;
     const hit=el('rect',{class:'hit',x:padL+slot*i,y:0,width:slot,height:H});
     const show=e=>{ showTip(e,html); const tw=tip.offsetWidth;
       if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
@@ -1693,7 +1709,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res); syncExclUI();
+  paintTotals(res); render(res); syncExclUI(); renderCashBars();
   /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
      Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
      drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing

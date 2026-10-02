@@ -16,7 +16,7 @@ browser.
    side on wide screens, stacked on phones), each with its total on top, collapsed
    by category (Expand all / Collapse all cover both).
 4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
-   Income / Expenses / Savings cards, then the money-flow **Sankey**.
+   Income / Expenses / Savings / Safe savings cards, then the money-flow **Sankey**.
 5. **Cash Flow vs Savings** chart (see below), under the Sankey.
 
 ### Cash Flow vs Savings (yearly bars + savings-rate lines)
@@ -34,10 +34,15 @@ year is labelled `YTD` under its year; any other part year shows its month count
   **Saved % safe** = (safe income - expenses) / safe income (dashed, label below).
 - **Toggles:** `Avg/m` divides each year by the months of that year present in the
   data (same rule as the detail panel's Yearly trend), `K` applies to every label.
-  Rates do not change with Avg/m. Like the Yearly trend it is window-independent
-  (ignores the range bar and the exclusions).
-- Hover (desktop) or tap (phone) a year for a tooltip with every tier, savings and
-  both rates; tap elsewhere hides it.
+  Rates do not change with Avg/m. Like the Yearly trend it ignores the range bar.
+- **Exclusions count:** an entry excluded from metrics (income or expense leaf, or a
+  macro group, same `deselected` keys as the Sankey) drops out of the bars and both
+  rates; "Include all" restores it. `renderCashBars()` runs from every `build()` but
+  only redraws when data, exclusions, Avg/m, K or the width changed (signature
+  check), so dragging the range bar does not rebuild it.
+- **No legend.** The colour keys show only in the hover (desktop) / tap (phone)
+  tooltip: a swatch per tier, the solid / dashed line keys next to the two rates,
+  plus total and safe savings and an "N excluded" note. Tap elsewhere hides it.
 - Drawn at the frame's real pixel width (`viewBox` = measured width, redrawn on
   resize), so text stays legible on phones without a sideways scroll; value labels
   shrink only when they would not fit their column.
@@ -52,8 +57,9 @@ this order (hero, table rows, controls, range, cards, Sankey).
 **One shared column.** The hero card, the tables frame, the range bar, the
 Income/Expenses/Savings row and the Sankey frame all use the same 26px left margin
 and **940px max width**, so their left and right edges line up. The
-Income/Expenses/Savings row is a **3-column grid** (`.totals`) with equal-height
-cards (reserved sub-line height); three across on phones too, just tighter.
+totals row is a **4-column grid** (`.totals`: Income / Expenses / Savings / Safe
+savings) with equal-height cards (reserved sub-line height); four across on phones
+too, with tighter type (9px labels, 14.5px values).
 
 **Sparkline scrubber:** the trend line (`#sparkbox`) is draggable. Mouse: hover
 anywhere on it; touch / pen: tap or drag horizontally (`touch-action:pan-y`, so a
@@ -175,8 +181,11 @@ Needs / Wants / Liberality / Taxes → category`.
 - **Hover an expense category** (desktop) for a quick floating preview of its detail
   breakdown, each detail with its % of the category. It is a preview only — click to
   get the full panel.
-- Totals cards on top: **Income, Expenses, Savings** only, each with its % of
-  income. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
+- Totals cards on top: **Income, Expenses, Savings, Safe savings**, each with its %
+  of income. **Safe savings** = safe income (Base + TFR + Food tickets, `CF_SAFE`)
+  minus expenses, sub-line `% of safe` (one decimal); it follows the window, Avg/m
+  and exclusions like the other cards (safe income is read from the
+  selection-adjusted income leaf links), and turns red when negative. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
   header and from the section titles: no "tap a category" or "income, expenses and
