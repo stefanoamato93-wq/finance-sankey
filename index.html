@@ -24,11 +24,18 @@
   .controls{margin:12px 26px 0; display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:12.5px;}
   select{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 8px;}
   .controls label{color:var(--muted); cursor:pointer;}
-  .totals{display:flex; gap:12px; margin:12px 26px 0; flex-wrap:wrap;}
-  .tot{background:var(--panel); border:1px solid var(--grid); border-radius:10px; padding:8px 12px; min-width:96px;}
-  .tot .lab{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
-  .tot .val{font-size:18px; font-weight:700; margin-top:2px;}
-  .tot .pct{font-size:11px; color:var(--muted); margin-top:1px;}
+  /* card rows (net worth row at the top, income/expenses/savings row above the Sankey):
+     one shared 3-column grid, same width as the Sankey frame (940px), so every card
+     lines up column by column and every block shares the same left AND right edge */
+  .nwcards,.totals{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px;
+                   margin:12px 26px 0; max-width:940px;}
+  .nwcard,.tot{min-width:0; background:linear-gradient(180deg,#182135,#141a28);
+               border:1px solid var(--grid); border-radius:12px; padding:10px 14px;}
+  .nwcard .lab,.tot .lab{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px;}
+  .nwcard .big,.tot .val{font-size:22px; font-weight:800; line-height:1.15; margin-top:3px; color:var(--ink);
+               font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .nwcard .pct,.tot .pct{font-size:11px; color:var(--muted); margin-top:2px; min-height:14px;
+               white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .period{margin:8px 26px 0; color:var(--muted); font-size:12px;}
   .status{margin:16px 26px; color:var(--muted); font-size:13px;}
   .status.err{color:#e58a8a;}
@@ -89,9 +96,10 @@
   #exclReset{background:var(--panel); color:#e7c14a; border:1px solid rgba(231,193,74,.4);
         border-radius:8px; padding:5px 10px; cursor:pointer; font-size:12px; font-family:inherit;}
   /* draggable month-range slider */
-  #rangeBox{margin:10px 26px 0; max-width:640px;}
+  #rangeBox{margin:10px 26px 0; max-width:940px;}
   .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
-  .dual{position:relative; height:26px; user-select:none; touch-action:none;}
+  /* inset by half a handle so the end handles sit inside the shared 940px column edge */
+  .dual{position:relative; height:26px; user-select:none; touch-action:none; margin:0 10px;}
   /* touch-action is NOT inherited, so it has to be set on the draggable children too,
      otherwise a touch/pen drag that starts on a handle or on the band is taken over by
      the browser as a pan gesture and the range bar never moves (the "horizontal drag
@@ -107,18 +115,17 @@
   /* net worth */
   .nwhead{margin:18px 26px 0;}
   .nwsub{color:var(--muted); font-size:12px; margin-top:2px;}
-  /* headline cards: just Net worth + Total assets, side by side, compact */
-  .nwcards{display:flex; gap:10px; margin:10px 26px 0; max-width:560px;}
-  .nwcard{flex:1 1 0; min-width:0; background:linear-gradient(180deg,#182135,#141a28);
-          border:1px solid var(--grid); border-radius:11px; padding:8px 12px;}
-  .nwcard .lab{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px;}
-  .nwcard .big{font-size:21px; font-weight:800; line-height:1.1; margin-top:1px; color:var(--ink);
-               font-variant-numeric:tabular-nums;}
+  /* headline cards: Net worth / Total assets / Total liabilities (layout shared above) */
   .nwcard.net{border-color:#3a4d78; background:linear-gradient(180deg,#1c2947,#141d31);}
-  .nwcard.net .big{font-size:24px;}
   .nwcard.assets .big{color:#7fd0a3;}
-  /* two-column table (name | value) so it always fits the viewport, no sideways scroll */
-  .nwwrap{margin:12px 26px 40px; padding:6px 8px; max-width:560px;}
+  .nwcard.liab .big{color:#e58a8a;}
+  /* two-column table (name | value) so it always fits the viewport, no sideways scroll;
+     same 940px width as the Sankey frame and the card rows */
+  .nwwrap{margin:12px 26px 40px; padding:10px 12px; max-width:940px;}
+  /* assets and liabilities tables side by side on wide screens, stacked on narrow ones */
+  .nwgrid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px 22px; align-items:start;}
+  .nwgrid > table:only-child{grid-column:1/-1;}
+  @media (max-width:760px){ .nwgrid{grid-template-columns:minmax(0,1fr);} }
   table.nw{border-collapse:collapse; font-size:12.5px; width:100%; table-layout:fixed;
            font-variant-numeric:tabular-nums;}
   .nw th,.nw td{padding:7px 10px; text-align:right; border-bottom:1px solid var(--grid);}
@@ -136,11 +143,12 @@
   .nw tr.sub .val{font-size:13.5px;}
   .nw tr.cat td{background:#0e1524; font-weight:600; color:var(--muted);}
   .nw tr:last-child td{border-bottom:none;}
-  /* total row closing the assets / liabilities tables */
-  .nw tr.tot td{font-weight:800; font-size:13.5px; text-transform:uppercase; letter-spacing:.5px;
-                border-top:2px solid var(--muted); background:#18223a; padding-top:9px; padding-bottom:9px;}
-  /* liabilities: own table, always below the assets table */
-  table.nw.liab{margin-top:22px;}
+  /* header row of each table = its total (Total assets / Total liabilities), on top */
+  .nw tr.nwtotal th{font-size:12px; font-weight:800; color:var(--ink); background:#18223a;
+                    padding-top:10px; padding-bottom:10px; border-bottom:2px solid #3a4d78;}
+  .nw tr.nwtotal th.v{font-size:15px; letter-spacing:0;}
+  .nw tr.nwtotal th.pos{color:#7fd0a3;} .nw tr.nwtotal th.neg{color:#e58a8a;}
+  .nw.liab tr.nwtotal th{border-bottom-color:#7a3b3b;}
   .nw.liab tr.sub td.t{border-left-color:#e58a8a;}
   /* collapsible category groups: the category row is the only thing shown until it is
      clicked, then its account / asset-class rows appear underneath */
@@ -185,10 +193,11 @@
     .wrap{margin:10px 14px 8px; padding:8px;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
-    /* headline cards stay side by side (they are only two now), just tighter */
-    .nwcards{gap:8px; max-width:100%;}
-    .nwcard{padding:8px 10px;}
-    .nwcard .big{font-size:19px;} .nwcard.net .big{font-size:21px;}
+    /* both card rows stay three across, just tighter */
+    .nwcards,.totals{gap:8px; max-width:100%;}
+    .nwcard,.tot{padding:8px 9px;}
+    .nwcard .big,.tot .val{font-size:16.5px;}
+    .nwcard .pct,.tot .pct{font-size:10px;}
     /* assets table: fits the screen, never scrolls sideways */
     .nwwrap{margin-left:14px; margin-right:14px; max-width:100%; padding:4px 2px;}
     table.nw{font-size:12px;}
@@ -1143,7 +1152,7 @@ function paintTotals(res){
      outflow == totExp). Returns null when selected income <= 0 (e.g. all income
      deselected) -> show a non-numeric placeholder instead of a number/NaN. */
   const savPct=savingsPercentage(income,totExp);
-  const savPctLabel = savPct===null ? '\u2014' : savPct.toFixed(1)+'% saved';
+  const savPctLabel = savPct===null ? '\u2014' : savPct.toFixed(1).replace('.',',')+'% saved';
   const cards=[["Income",income,INCOME],["Expenses",totExp,EXPC]];
   /* keep the pre-feature card set (Savings shown when sav>0); also surface a
      Savings card when selected income <= 0 so the "—" placeholder is visible in
@@ -1253,14 +1262,18 @@ function buildNetWorth(){
   const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
-  // headline cards: net worth + total assets only, side by side and compact.
+  // headline cards: net worth, total assets, total liabilities, one row of three.
   // Liabilities = only the LIABILITIES category (not every negative row); assets = the rest.
   const gTot=sumV(rows);
   const liab=sumV(rows.filter(r=>r.cat==="LIABILITIES"));
   const assets=gTot-liab;
+  const liabPct = assets>0 ? (Math.abs(liab)/assets*100).toFixed(1).replace('.',',')+'% of assets' : '';
+  const card=(cls,lab,v,sub)=>`<div class="nwcard ${cls}"><div class="lab">${lab}</div>`+
+    `<div class="big">${money(v)}</div><div class="pct">${sub}</div></div>`;
   cardsEl.innerHTML=
-    `<div class="nwcard net"><div class="lab">Net worth</div><div class="big">${money(gTot)}</div></div>`+
-    `<div class="nwcard assets"><div class="lab">Total assets</div><div class="big">${money(assets)}</div></div>`;
+    card('net','Net worth',gTot,'assets \u2212 liabilities')+
+    card('assets','Total assets',assets,'')+
+    card('liab','Total liabilities',liab,liabPct);
 
   // assets table: group by category, ordered by absolute subtotal (biggest positions
   // first); the account rows inside a category are ordered by value (high -> low) and
@@ -1278,8 +1291,11 @@ function buildNetWorth(){
      Expand all / Collapse all act on both tables. */
   const table=(title,cls,G)=>{
     if(!G.order.length) return '';
-    let t=`<table class="nw ${cls}"><colgroup><col><col class="cval"></colgroup><thead><tr>`+
-          `<th class="grp">${title}</th><th>Value</th></tr></thead><tbody>`;
+    // the header row carries the table total (all categories, open or collapsed)
+    const tot=G.order.reduce((s,c)=>s+sumV(G.m[c]),0);
+    let t=`<table class="nw ${cls}"><colgroup><col><col class="cval"></colgroup><thead><tr class="nwtotal">`+
+          `<th class="grp">Total ${title.toLowerCase()}</th>`+
+          `<th class="v ${tot<0?'neg':'pos'}">${tot<0?'('+fmt(-tot)+')':fmt(tot)}</th></tr></thead><tbody>`;
     G.order.forEach(cat=>{
       // assets: high -> low; liabilities: largest debt first
       const cl=G.m[cat].slice().sort(cls==='liab' ? (a,b)=>a.v-b.v : (a,b)=>b.v-a.v);
@@ -1293,16 +1309,13 @@ function buildNetWorth(){
         t+=`<tr class="kid"><td class="t2">${esc(cap(r.acct))}${acd}</td>`+vcell(r.v)+`</tr>`;
       });
     });
-    // total row at the bottom of each table (all categories in it, open or not)
-    const tot=G.order.reduce((s,c)=>s+sumV(G.m[c]),0);
-    return t+`</tbody><tfoot><tr class="tot"><td class="t">Total ${title.toLowerCase()}</td>`+
-      vcell(tot)+`</tr></tfoot></table>`;
+    return t+`</tbody></table>`;
   };
   const allOpen=catOrder.every(c=>nwOpen.has(c)), noneOpen=catOrder.every(c=>!nwOpen.has(c));
   wrap.innerHTML=`<div class="nwtools">`+
     `<button type="button" data-nwall="open"${allOpen?' disabled':''}>Expand all</button>`+
     `<button type="button" data-nwall="close"${noneOpen?' disabled':''}>Collapse all</button></div>`+
-    table('Assets','assets',A)+table('Liabilities','liab',L);
+    `<div class="nwgrid">`+table('Assets','assets',A)+table('Liabilities','liab',L)+`</div>`;
   // expand / collapse a category (click or keyboard), then re-render off nwOpen
   const toggleCat=cat=>{ if(nwOpen.has(cat)) nwOpen.delete(cat); else nwOpen.add(cat); buildNetWorth(); };
   wrap.querySelectorAll('tr.cgroup').forEach(tr=>{

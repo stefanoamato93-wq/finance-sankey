@@ -9,10 +9,17 @@ browser.
 
 ## Page order
 1. Title (**Personal finance**).
-2. **Headline cards: Net worth / Total assets** (top of the page).
+2. **Headline cards: Net worth / Total assets / Total liabilities** (top of the page).
 3. Period controls + the money-flow **Sankey**.
-4. **Assets** table, then a separate **Liabilities** table, both collapsed by
-   category (Expand all / Collapse all cover both).
+4. **Assets** table and **Liabilities** table (side by side on wide screens,
+   stacked on phones), both collapsed by category (Expand all / Collapse all cover both).
+
+**One shared column.** Both card rows (net worth row, income/expenses/savings row),
+the range bar, the Sankey frame and the assets & liabilities frame all use the same
+26px left margin and **940px max width**, so their left and right edges line up.
+Both card rows are a **3-column grid** (`.nwcards`, `.totals`) with one shared card
+style (label, value, muted sub-line with a reserved height), so cards align column
+by column and have equal heights. Three across on phones too, just tighter.
 
 **Favicon:** an inline SVG data-URI `<link rel="icon">` in `<head>` (a mini Sankey:
 green income bar splitting into needs / wants / savings bands on a dark tile), so
@@ -178,13 +185,12 @@ liabilities, not just cash flow). The old Δ Month / Δ Year / Δ Overall column
 their calculations were removed (they were unreliable); the table is a clean
 value-only view.
 
-- **Two headline cards at the top of the page**, side by side and compact: **Net
-  worth** and **Total assets** (green). The Total liabilities card was dropped to
-  save vertical space; liabilities are still netted out of assets (liabilities = the
-  `LIABILITIES` category only, not "every negative row", so a negative cash balance
-  such as a credit-card line reduces assets rather than counting as a liability) and
-  liabilities are listed in their own table below. The cards stay side by side
-  on mobile too.
+- **Three headline cards at the top of the page**, in one row: **Net worth**
+  (sub-line "assets − liabilities"), **Total assets** (green) and **Total
+  liabilities** (red, sub-line "x,x% of assets"). Liabilities = the `LIABILITIES`
+  category only, not "every negative row", so a negative cash balance such as a
+  credit-card line reduces assets rather than counting as a liability. The cards
+  stay three across on mobile too.
 - **Two columns only, so it fits a phone.** The table is `Category / account | Value`
   with a fixed layout, wrapping names and no horizontal scroll at any width; the
   asset-class detail rides as a small muted second line under the account name
@@ -209,9 +215,11 @@ value-only view.
   start **fully collapsed**, and **Expand all / Collapse all** act on both tables
   at once. Liability accounts sort largest debt first. Built by the `table()`
   helper inside `buildNetWorth()`; a table is skipped when it has no rows.
-- **Total row** (`tfoot tr.tot`) closes each table: **Total assets** and **Total
-  liabilities**, summing every category in that table whether open or collapsed.
-  Total assets matches the headline card.
+- **Total on top.** The header row of each table (`thead tr.nwtotal`) is its total:
+  **Total assets** (green) and **Total liabilities** (red), summing every category
+  in that table whether open or collapsed. They match the headline cards.
+- **Layout:** the two tables sit in `.nwgrid`, side by side above 760px and stacked
+  below it; a lone table spans the full width.
 
 Liabilities show as negative values in parentheses (red). Both the Sankey and the
 net-worth table are wrapped in a **framed panel** (bordered, rounded).
