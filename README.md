@@ -68,8 +68,16 @@ year is labelled `YTD` under its year; any other part year shows its month count
     rolling Saved % income (solid) and % safe (dashed) in a band above, last value
     labelled at the right end.
   - Total income, Safe income, an income group: its income leaves.
-  - Total expenses, a macro group: its labels (biggest at the bottom, Stable_Order).
-    More than 12 layers fold the tail into one grey "Other (n)" layer (`CF_ROLL_MAX`).
+  - Total expenses, a macro group: its labels.
+  - **Stack order = Sankey order:** macro groups in `ORDER` from the zero line up
+    (Needs at the bottom, then Wants, Liberality, Taxes; Work income below
+    Non-work income), Stable_Order inside each group (biggest at the bottom of its
+    group). When several groups are stacked (Total expenses / Total income / Safe
+    income) each layer is tinted with its Sankey group colour (Needs blues, Wants
+    oranges, Liberality purples, Taxes reds), darker at the bottom of the group, so
+    the groups read as blocks; a single group or a label's details use the palette.
+    Past 12 layers (`CF_ROLL_MAX`) the smallest fold into one grey "Other <group>
+    (n)" layer per group, at the top of that group; a lone leftover keeps its name.
   - A label: its DETAIL sub-categories.
   - An income leaf, a detail, Savings, Safe savings: one signed area.
   Exclusions follow the picker rules above. Hover / tap snaps to the nearest month
