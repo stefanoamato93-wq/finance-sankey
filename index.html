@@ -1700,7 +1700,8 @@ const CF_ROLL_MAX=12;                              // stacked layers before the 
 /* pure: monthly raw layers [{key, label, neg, m:{mi:value}}] for a picker key */
 function cfRollLayers(sel, data, detail, lastMi, excluded){
   const ds=excluded||new Set(), L=new Map();
-  const get=(key,label,neg)=>{ let l=L.get(key); if(!l){ l={key,label,neg:!!neg,m:{}}; L.set(key,l); } return l; };
+  /* grp = the layer's macro group, used to keep the Sankey order when stacking */
+  const get=(key,label,neg,grp)=>{ let l=L.get(key); if(!l){ l={key,label,neg:!!neg,grp:grp||'',m:{}}; L.set(key,l); } return l; };
   const put=(l,mi,v)=>{ l.m[mi]=(l.m[mi]||0)+v; };
   const p=sel.indexOf('|'), kind=p<0?'':sel.slice(0,p), name=p<0?'':sel.slice(p+1);
   if(kind==='E'){                                  // a label -> its details
@@ -1721,9 +1722,9 @@ function cfRollLayers(sel, data, detail, lastMi, excluded){
       return;
     }
     if(k==='I' && (kind==='IG' ? grp===name : name==='inc' || (name==='safe' && CF_SAFE.has(leaf))))
-      put(get('I|'+leaf,leaf),mi,val);
+      put(get('I|'+leaf,leaf,false,grp),mi,val);
     else if(k==='E' && (kind==='EG' ? grp===name : name==='exp'))
-      put(get('E|'+leaf,leaf),mi,-val);
+      put(get('E|'+leaf,leaf,false,grp),mi,-val);
   });
   return [...L.values()];
 }
@@ -1756,12 +1757,33 @@ function renderRolling(svgEl, W, narrow, perMonth){
   } else if(single){
     layers[0].color=info.color; layers[0].label=info.label;
   } else {
-    layers.sort((a,b)=>rankCmp(a.key,b.key));
-    if(layers.length>CF_ROLL_MAX){                  // fold the tail into one "Other" layer
-      const keep=layers.slice(0,CF_ROLL_MAX-1), rest=layers.slice(CF_ROLL_MAX-1);
-      keep.push({key:'other', label:`Other (${rest.length})`, neg:false, color:'#9aa6bd',
-        r:rest[0].r.map((_,i)=>rest.reduce((a,l)=>a+l.r[i],0))});
+    /* Sankey order: macro groups in ORDER from the zero line up (Needs, Wants,
+       Liberality, Taxes / Work income, Non-work income), then Stable_Order inside each
+       group (biggest at the bottom of its group). Past CF_ROLL_MAX layers the smallest
+       fold into one grey "Other" layer per group, sitting at the top of that group. */
+    const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
+    const sankeyCmp=(a,b)=> gOrd(a.grp)-gOrd(b.grp) || (a.fold?1:0)-(b.fold?1:0) || rankCmp(a.key,b.key);
+    if(layers.length>CF_ROLL_MAX){
+      const byRank=[...layers].sort((a,b)=>rankCmp(a.key,b.key));
+      const keep=byRank.slice(0,CF_ROLL_MAX-1), rest=byRank.slice(CF_ROLL_MAX-1), fold=new Map();
+      rest.forEach(l=>{ const g=l.grp||''; if(!fold.has(g)) fold.set(g,[]); fold.get(g).push(l); });
+      const oneGroup=/^(EG|IG)\|/.test(cfSel) || /^E\|/.test(cfSel);
+      fold.forEach((ls,g)=> ls.length===1 ? keep.push(ls[0]) : keep.push({key:'other|'+g, grp:ls[0].grp, fold:true, neg:false, color:'#9aa6bd',
+        label:(g && !oneGroup ? 'Other '+g.toLowerCase() : 'Other')+` (${ls.length})`,
+        r:ls[0].r.map((_,i)=>ls.reduce((a,l)=>a+l.r[i],0))}));
       layers=keep;
+    }
+    layers.sort(sankeyCmp);
+    /* several groups stacked (Total expenses / Total income / Safe income): tint each
+       layer with its Sankey group colour, darker at the bottom of the group, lighter
+       towards the top, so the group bands read as blocks. One group: palette colours. */
+    const groups=[...new Set(layers.map(l=>l.grp))];
+    if(groups.length>1){
+      const hue=g=> GROUPCOL[g] || (g==='Work income' ? INCOME : g==='Non-work income' ? '#2fb7a6' : g==='Other income' ? '#7fc8a0' : '#9aa6bd');
+      const mix=(hex,t)=>{ const n=parseInt(hex.slice(1),16), c=[n>>16,(n>>8)&255,n&255]
+          .map(v=>Math.round(t<0 ? v*(1+t) : v+(255-v)*t)); return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''); };
+      groups.forEach(g=>{ const ls=layers.filter(l=>l.grp===g && !l.fold), n=ls.length;
+        ls.forEach((l,i)=>{ l.color=mix(hue(g), n>1 ? -0.3+0.75*i/(n-1) : 0); }); });
     }
     layers.forEach((l,i)=>{ if(!l.color) l.color=CF_PAL[i%CF_PAL.length]; });
   }
