@@ -208,7 +208,7 @@ value-only view.
   (always shown, even when it repeats the account, e.g. `Cash / Cash`,
   `Credits / Credits`, `Realestate / Realestate`).
 - **Collapsed by category, expand on click.** The table lists **accounts and their
-  values**, grouped by `CATEGORY3`. Only the category rows (with their subtotal and
+  values**, grouped by `CATEGORY3`. Only the category rows (name and subtotal; no
   account count) show by default; **clicking a category** reveals its account rows
   underneath. Clicking again collapses it. Rows are keyboard-operable (Enter /
   Space) and the expanded set survives a re-render, so toggling **values in K** does
