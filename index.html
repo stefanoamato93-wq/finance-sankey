@@ -23,6 +23,10 @@
   .sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
   /* cash flow controls: one compact row (3 short selects + a segmented group of toggles) */
   .controls{margin:10px 26px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12.5px; max-width:940px;}
+  /* sticky: the period presets (This M / Last M / T12M) and the Avg/m / K toggles stay
+     on screen while scrolling through the Sankey and the Cash Flow vs Savings chart */
+  .controls{position:sticky; top:0; z-index:15; background:var(--bg); padding:6px 0;}
+  .controls.stuck{box-shadow:0 1px 0 var(--grid), 0 6px 12px -6px rgba(0,0,0,.6);}
   select{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 8px;}
   .controls select{height:30px; padding:0 6px; font-size:12.5px; font-family:inherit;}
   .controls label{color:var(--muted); cursor:pointer;}
@@ -127,7 +131,7 @@
   #rangeBox{margin:10px 26px 0; max-width:940px;}
   .rangelabels{display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:3px;}
   /* inset by half a handle so the end handles sit inside the shared 940px column edge */
-  .dual{position:relative; height:26px; user-select:none; touch-action:none; margin:0 10px;}
+  .dual{position:relative; height:26px; user-select:none; touch-action:none; margin:0 10px; cursor:pointer;}
   /* touch-action is NOT inherited, so it has to be set on the draggable children too,
      otherwise a touch/pen drag that starts on a handle or on the band is taken over by
      the browser as a pan gesture and the range bar never moves (the "horizontal drag
@@ -245,6 +249,9 @@
   @media (max-width:680px){
     /* never let the whole page scroll sideways; only the diagram/table frames do */
     html,body{overflow-x:hidden; max-width:100%;}
+    /* clip (not hidden) where supported: overflow-x:hidden makes body a scroll
+       container, which silently disables the sticky controls bar */
+    @supports (overflow:clip){ html,body{overflow-x:clip;} }
     header{padding:12px 16px 4px;}
     .controls,.totals,.period,.status,.badge,#rangeBox,.nwhead,.nwcards,#skeleton{margin-left:14px; margin-right:14px;}
     #skeleton{max-width:100%;}
@@ -1279,10 +1286,10 @@ function paintTotals(res){
   const savPct=savingsPercentage(income,totExp);
   const savPctLabel = savPct===null ? '\u2014' : savPct.toFixed(1).replace('.',',')+'% saved';
   const cards=[["Income",income,INCOME],["Expenses",totExp,EXPC]];
-  /* keep the pre-feature card set (Savings shown when sav>0); also surface a
-     Savings card when selected income <= 0 so the "—" placeholder is visible in
-     the all-income-deselected case. */
-  if(sav>0 || !(income>0)) cards.push(["Savings",sav,GROUPCOL.Savings]);
+  /* Savings card is always shown, like Safe savings: in a part month (This M) the
+     expenses often run ahead of income, and the card used to vanish when sav <= 0.
+     Negative savings show in red. */
+  cards.push(["Savings",sav, sav<0 ? '#e58a8a' : GROUPCOL.Savings]);
   /* Safe savings = safe income (Base + TFR + Food tickets, CF_SAFE) - expenses, over
      the same selection-adjusted links (income leaf links are [leaf, group, v]); can be
      negative, shown in red then. Sub-line = % of safe income. */
@@ -1333,44 +1340,53 @@ function setAnchor(mi){ yearEl.value=Math.floor(mi/12); monthEl.value=mi%12+1; }
 function setSlider(lo,hi){ const N=maxIdx(); loIdx=Math.max(0,Math.min(N,Math.round(lo))); hiIdx=Math.max(0,Math.min(N,Math.round(hi)));
   if(loIdx>hiIdx)[loIdx,hiIdx]=[hiIdx,loIdx]; updateSliderUI(); }
 function idxFromX(clientX){ const r=dualEl.getBoundingClientRect(), N=maxIdx(); let f=(clientX-r.left)/r.width; f=Math.max(0,Math.min(1,f)); return Math.round(f*N); }
-/* one shared drag pipeline for both pointer and touch input, so the range bar
-   behaves identically whether dragged with a mouse or a finger */
-/* 1-month window: both handles sit on the same spot and hHi (painted last) always
-   wins the press. It was clamped to hi>=lo, so it could never move left, and the
-   zero-width band could not be grabbed, so the dragger looked frozen. Now:
-     - "Single month" quick set  -> pressing the handle slides the month (band drag),
-     - any other mode           -> 'split': the first move picks the side, left
-                                   widens the start, right widens the end. */
-function beginDrag(mode,clientX){
-  if((mode==='lo'||mode==='hi') && loIdx===hiIdx) mode = modeEl.value==='month' ? 'band' : 'split';
-  drag=mode; if(mode==='band'||mode==='split'){ dragStart=idxFromX(clientX); dragLo=loIdx; dragHi=hiIdx; } }
+/* ---- range bar: a FIXED-width window that moves in discrete steps ----------
+   The window keeps the size the period mode gives it and only slides:
+     Month (This M / Last M)  -> 1 month, steps of 1 month
+     T12M                     -> 12 months, steps of 1 month (earlier / later 12M)
+     Year                     -> one calendar year, steps of 1 year
+     All time                 -> covers everything, nothing to move
+   Pressing a handle or the band grabs the window; pressing the bare track jumps
+   the window so it ends on the pressed month, then keeps dragging. Every move goes
+   through the Year / Month anchor + presetRange(), so the pickers, the This M /
+   Last M highlight and the T12M flag always describe what is on screen. One shared
+   pipeline for pointer and touch input. */
+const anchorMi=()=> (+yearEl.value)*12 + (+monthEl.value) - 1;
+const dragStep=()=> modeEl.value==='year' ? 12 : 1;
+/* clamp the anchor so the window never shrinks against the start of the data */
+function clampAnchor(mi){
+  const lo = modeEl.value==='trailing' ? Math.min(META.maxMi, META.minMi+11) : META.minMi;
+  return Math.max(lo, Math.min(META.maxMi, mi));
+}
+/* move the window so its anchor (end month; any month of the year in Year mode) is mi */
+function moveWindowTo(mi){
+  if(modeEl.value==='all') return false;
+  const prev=loIdx+'|'+hiIdx;
+  setAnchor(clampAnchor(mi));
+  const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi);
+  if(loIdx+'|'+hiIdx===prev) return false;   // same months: skip the re-render, keeps the drag smooth
+  build(); return true;
+}
+let dragAnchor=0;
+function beginDrag(onTrack,clientX){
+  if(modeEl.value==='all') return;
+  if(onTrack) moveWindowTo(idxFromX(clientX)+META.minMi);
+  drag='band'; dragStart=idxFromX(clientX); dragAnchor=anchorMi(); }
 function moveDrag(clientX){
-  if(!drag) return; const idx=idxFromX(clientX), N=maxIdx();   // idxFromX already clamps to [0,N]
-  const pLo=loIdx, pHi=hiIdx;
-  if(drag==='split'){ if(idx<loIdx) drag='lo'; else if(idx>hiIdx) drag='hi'; else return; }
-  if(drag==='lo') loIdx=Math.min(idx,hiIdx);
-  else if(drag==='hi') hiIdx=Math.max(idx,loIdx);
-  else { const w=dragHi-dragLo; let nl=dragLo+(idx-dragStart), nh=nl+w; if(nl<0){nl=0;nh=w;} if(nh>N){nh=N;nl=N-w;} loIdx=nl; hiIdx=nh; }
-  if(loIdx===pLo && hiIdx===pHi) return;   // same months: skip the re-render, keeps the drag smooth
-  updateSliderUI(); build();
+  if(!drag) return;
+  const st=dragStep(), d=Math.round((idxFromX(clientX)-dragStart)/st)*st;   // whole months / whole years
+  moveWindowTo(dragAnchor+d);
 }
 function endDrag(){ drag=null; }
-/* Pointer path: capture the pointer on the element that was pressed, so the drag keeps
-   receiving moves even when the finger leaves the 26px-tall bar (which is what broke the
-   drag in landscape, where the bar is a small band in a wide viewport and the browser
-   reclaimed the gesture for panning). Captured moves still bubble to window. */
-function onDown(mode){
-  return e=>{
-    beginDrag(mode, e.clientX);
-    if(e.pointerId!=null && e.currentTarget.setPointerCapture){
-      try{ e.currentTarget.setPointerCapture(e.pointerId); }catch(_){}
-    }
-    e.preventDefault();
-  };
-}
-hLo.addEventListener('pointerdown',onDown('lo'));
-hHi.addEventListener('pointerdown',onDown('hi'));
-rFill.addEventListener('pointerdown',onDown('band'));
+/* Pointer path: capture the pointer on the bar, so the drag keeps receiving moves even
+   when the finger leaves the 26px-tall bar (which is what broke the drag in landscape,
+   where the browser reclaimed the gesture for panning). Captured moves still bubble. */
+const onWindow=t=> t===hLo || t===hHi || t===rFill;
+dualEl.addEventListener('pointerdown',e=>{
+  beginDrag(!onWindow(e.target), e.clientX);
+  if(e.pointerId!=null && dualEl.setPointerCapture){ try{ dualEl.setPointerCapture(e.pointerId); }catch(_){} }
+  e.preventDefault();
+});
 window.addEventListener('pointermove',e=>{ if(drag){ moveDrag(e.clientX); e.preventDefault(); } });
 window.addEventListener('pointerup',endDrag);
 window.addEventListener('pointercancel',endDrag);
@@ -1378,9 +1394,7 @@ window.addEventListener('pointercancel',endDrag);
    touchstart's preventDefault could cancel the in-flight pointer sequence and kill the drag */
 if(!window.PointerEvent){
   const tx=e=> e.touches && e.touches[0] ? e.touches[0].clientX : (e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);
-  hLo.addEventListener('touchstart',e=>{ beginDrag('lo',tx(e)); e.preventDefault(); },{passive:false});
-  hHi.addEventListener('touchstart',e=>{ beginDrag('hi',tx(e)); e.preventDefault(); },{passive:false});
-  rFill.addEventListener('touchstart',e=>{ beginDrag('band',tx(e)); e.preventDefault(); },{passive:false});
+  dualEl.addEventListener('touchstart',e=>{ beginDrag(!onWindow(e.target),tx(e)); e.preventDefault(); },{passive:false});
   window.addEventListener('touchmove',e=>{ if(drag){ moveDrag(tx(e)); e.preventDefault(); } },{passive:false});
   window.addEventListener('touchend',endDrag);
   window.addEventListener('touchcancel',endDrag);
@@ -1696,7 +1710,6 @@ function buildCfOptions(){
    the last point equals the T12M cards. */
 const CF_PAL=['#f28b82','#fbbc04','#81c995','#78d9ec','#a7b6f5','#d7aefb','#f6aea9','#e6c9a8',
               '#ccff90','#aecbfa','#fde293','#fdcfe8'];
-const CF_ROLL_MAX=12;                              // stacked layers before the rest fold into "Other"
 /* pure: monthly raw layers [{key, label, neg, m:{mi:value}}] for a picker key */
 function cfRollLayers(sel, data, detail, lastMi, excluded){
   const ds=excluded||new Set(), L=new Map();
@@ -1759,20 +1772,11 @@ function renderRolling(svgEl, W, narrow, perMonth){
   } else {
     /* Sankey order: macro groups in ORDER from the zero line up (Needs, Wants,
        Liberality, Taxes / Work income, Non-work income), then Stable_Order inside each
-       group (biggest at the bottom of its group). Past CF_ROLL_MAX layers the smallest
-       fold into one grey "Other" layer per group, sitting at the top of that group. */
+       group (biggest at the bottom of its group). Every label keeps its own layer:
+       small ones are NOT folded into an "Other" layer (Stefano's call, Oct 2026). */
     const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
-    const sankeyCmp=(a,b)=> gOrd(a.grp)-gOrd(b.grp) || (a.fold?1:0)-(b.fold?1:0) || rankCmp(a.key,b.key);
-    if(layers.length>CF_ROLL_MAX){
-      const byRank=[...layers].sort((a,b)=>rankCmp(a.key,b.key));
-      const keep=byRank.slice(0,CF_ROLL_MAX-1), rest=byRank.slice(CF_ROLL_MAX-1), fold=new Map();
-      rest.forEach(l=>{ const g=l.grp||''; if(!fold.has(g)) fold.set(g,[]); fold.get(g).push(l); });
-      const oneGroup=/^(EG|IG)\|/.test(cfSel) || /^E\|/.test(cfSel);
-      fold.forEach((ls,g)=> ls.length===1 ? keep.push(ls[0]) : keep.push({key:'other|'+g, grp:ls[0].grp, fold:true, neg:false, color:'#9aa6bd',
-        label:(g && !oneGroup ? 'Other '+g.toLowerCase() : 'Other')+` (${ls.length})`,
-        r:ls[0].r.map((_,i)=>ls.reduce((a,l)=>a+l.r[i],0))}));
-      layers=keep;
-    }
+    const sankeyCmp=(a,b)=> gOrd(a.grp)-gOrd(b.grp) || rankCmp(a.key,b.key);
+    layers=layers.filter(l=>l.r.some(v=>Math.abs(v)>0.5));   // drop layers that are empty over the whole axis
     layers.sort(sankeyCmp);
     /* several groups stacked (Total expenses / Total income / Safe income): tint each
        layer with its Sankey group colour, darker at the bottom of the group, lighter
@@ -1782,10 +1786,12 @@ function renderRolling(svgEl, W, narrow, perMonth){
       const hue=g=> GROUPCOL[g] || (g==='Work income' ? INCOME : g==='Non-work income' ? '#2fb7a6' : g==='Other income' ? '#7fc8a0' : '#9aa6bd');
       const mix=(hex,t)=>{ const n=parseInt(hex.slice(1),16), c=[n>>16,(n>>8)&255,n&255]
           .map(v=>Math.round(t<0 ? v*(1+t) : v+(255-v)*t)); return '#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''); };
-      groups.forEach(g=>{ const ls=layers.filter(l=>l.grp===g && !l.fold), n=ls.length;
+      groups.forEach(g=>{ const ls=layers.filter(l=>l.grp===g), n=ls.length;
         ls.forEach((l,i)=>{ l.color=mix(hue(g), n>1 ? -0.3+0.75*i/(n-1) : 0); }); });
     }
-    layers.forEach((l,i)=>{ if(!l.color) l.color=CF_PAL[i%CF_PAL.length]; });
+    /* one group: the fixed palette, then golden-angle hues once it runs out, so
+       neighbouring layers never share a colour */
+    layers.forEach((l,i)=>{ if(!l.color) l.color= i<CF_PAL.length ? CF_PAL[i] : `hsl(${Math.round((i*137.5)%360)},62%,70%)`; });
   }
   /* stacking: positive side up, negative side down; a single series stays signed */
   const posT=new Array(N).fill(0), negT=new Array(N).fill(0);
@@ -1866,8 +1872,12 @@ function renderRolling(svgEl, W, narrow, perMonth){
       h+=`<br>${sw(layers[0].color)}${layers[0].label} <b>${fmt(layers[0].r[i])}</b>`;
     } else {
       h+=`<br>${info.label} <b>${fmt(posT[i])}</b>`;
-      [...layers].reverse().forEach(l=>{ if(l.r[i]) h+=`<br>&nbsp;&nbsp;${sw(l.color)}${l.label} ${fmt(l.r[i])}`+
-        mut(posT[i]>0?` \u00b7 ${Math.round(l.r[i]/posT[i]*100)}%`:''); });
+      /* top of the stack first; with every label now its own layer the list can get
+         long, so past 12 entries they go two per line to keep the tooltip on screen */
+      const it=[...layers].reverse().filter(l=>Math.round(l.r[i])).map(l=>`${sw(l.color)}${l.label} ${fmt(l.r[i])}`+
+        mut(posT[i]>0?` \u00b7 ${Math.round(l.r[i]/posT[i]*100)}%`:''));
+      const per=it.length>12 ? 2 : 1;
+      for(let j=0;j<it.length;j+=per) h+=`<br>&nbsp;&nbsp;`+it.slice(j,j+per).join(mut(' \u00b7 '));
     }
     return h; };
   const hit=el('rect',{class:'hit',x:padL,y:0,width:innerW,height:H});
@@ -2166,6 +2176,9 @@ function initControlsOnce(){
   const er=document.getElementById('exclReset');
   if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
+  /* sticky controls bar: a soft shadow while it floats over the content */
+  { const c=document.getElementById('controls'), upd=()=>c.classList.toggle('stuck', c.getBoundingClientRect().top<=0.5 && window.scrollY>0);
+    window.addEventListener('scroll',upd,{passive:true}); window.addEventListener('resize',upd); upd(); }
   document.getElementById('rangeBox').style.display='';
   document.getElementById('nwhead').style.display='';
   document.getElementById('nwwrap').style.display='';

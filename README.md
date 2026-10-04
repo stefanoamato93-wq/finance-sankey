@@ -76,8 +76,11 @@ year is labelled `YTD` under its year; any other part year shows its month count
     income) each layer is tinted with its Sankey group colour (Needs blues, Wants
     oranges, Liberality purples, Taxes reds), darker at the bottom of the group, so
     the groups read as blocks; a single group or a label's details use the palette.
-    Past 12 layers (`CF_ROLL_MAX`) the smallest fold into one grey "Other <group>
-    (n)" layer per group, at the top of that group; a lone leftover keeps its name.
+    **Every label keeps its own layer**: small ones are no longer folded into an
+    "Other (n)" layer (removed Oct 2026, `CF_ROLL_MAX` is gone); only layers that are
+    zero over the whole axis are dropped. With one group, colours come from the
+    12-colour palette, then golden-angle hues. Past 12 entries the tooltip lists the
+    layers two per line so it stays on screen.
   - A label: its DETAIL sub-categories.
   - An income leaf, a detail, Savings, Safe savings: one signed area.
   Exclusions follow the picker rules above. Hover / tap snaps to the nearest month
@@ -230,7 +233,9 @@ Needs / Wants / Liberality / Taxes → category`.
   of income. **Safe savings** = safe income (Base + TFR + Food tickets, `CF_SAFE`)
   minus expenses, sub-line `% of safe` (one decimal); it follows the window, Avg/m
   and exclusions like the other cards (safe income is read from the
-  selection-adjusted income leaf links), and turns red when negative. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
+  selection-adjusted income leaf links), and turns red when negative. **Savings** is
+  always shown too (it used to disappear when savings were <= 0, e.g. in This M while
+  expenses run ahead of income) and turns red when negative. The Needs / Wants / Liberality / Taxes sub-boxes were removed; those
   splits still show on the Sankey and its mid-node labels.
 - The page shows the **title only** (descriptive subtitles removed from the
   header and from the section titles: no "tap a category" or "income, expenses and
@@ -259,6 +264,11 @@ Needs / Wants / Liberality / Taxes → category`.
     view; each lights green while the window is exactly that month. *T12M* is the
     trailing-12 toggle.
   - **Toggles** `Avg/m | K`.
+  The whole controls row is **sticky** (`position:sticky; top:0`, page-coloured
+  background, a soft shadow via `.stuck` once it floats), so This M / Last M / T12M
+  and Avg/m / K stay on screen while scrolling through the Sankey and the Cash Flow
+  vs Savings chart. On phones `html,body` use `overflow-x:clip` (with `hidden` as a
+  fallback): `hidden` turns body into a scroll container and silently kills sticky.
   Toggle pills are `<label>`s wrapping the original checkboxes (`#t12`, `#tMonthly`,
   `#tK`, visually hidden), so the toggle logic is unchanged; a checked pill turns
   green (`:has(input:checked)`), and the full meaning is in each tooltip. Desktop:
@@ -270,10 +280,18 @@ Needs / Wants / Liberality / Taxes → category`.
   dropdown updates the tick), so the same Comparison_Mode drives both.
 - **Quick set** dropdown: Trailing 12 months / Single month / Full year / All time
   (anchored by the Year and Month pickers).
-- **Draggable range bar** (always visible): drag either end to resize the window,
-  or drag the **middle band to shift the whole period** (e.g. slide a trailing-12
-  window across the years and watch the numbers update live). The on-screen usage
-  instructions under the bar were removed.
+- **Draggable range bar** (always visible): a **fixed-width window that moves in
+  discrete steps**, it never resizes. The width comes from the period mode: Month
+  (This M / Last M) = 1 month, T12M = 12 months, Year = one calendar year, All time
+  = everything (nothing to move). Dragging a handle or the band slides the window by
+  whole months (Year: whole years, a drag shorter than ~6 months stays put), e.g. in
+  T12M you step back through earlier 12-month windows, in Month mode through single
+  months. Pressing the bare track jumps the window so it ends on the pressed month,
+  then keeps dragging. Every move goes through the Year / Month anchor and
+  `presetRange()` (`moveWindowTo()`), so the pickers, the T12M flag and the This M /
+  Last M highlight always describe what is on screen. In T12M the anchor is clamped
+  to at least the 12th month of data, so the window never shrinks at the start. The
+  on-screen usage instructions under the bar were removed.
   - **Drag fix (landscape / touch):** `touch-action` is not inherited, so the
     handles and the middle band now set `touch-action:none` themselves — without it
     the browser claimed a horizontal drag as a pan gesture and the bar did not move.
@@ -283,12 +301,10 @@ Needs / Wants / Liberality / Taxes → category`.
     under 680px, and only falls back to the touch-event pipeline when
     `window.PointerEvent` is missing (running both pipelines let `touchstart`'s
     `preventDefault` cancel the in-flight pointer drag).
-  - **1-month window fix:** when the window is a single month the two handles sit
-    on top of each other and the top one was clamped so it could never move left,
-    which froze the bar. Now, in **Single month** mode, dragging the handle slides
-    the month back and forth; in any other mode, the first move decides the side
-    (drag left widens the start, drag right widens the end). Moves that do not
-    change the months skip the re-render, which keeps dragging smooth.
+  - One `pointerdown` listener on the whole bar (`#dual`) handles handles, band and
+    track alike, so the old 1-month "superposed handles" problem cannot occur. Moves
+    that do not change the months skip the re-render, which keeps dragging smooth.
+    To pick a custom start/end range, use the Quick set + Year / Month pickers.
 - **Per month (avg)** toggle divides every value by the number of months in the
   selected window (a partial current year divides by the elapsed months). It also
   switches the true-scale reference to a single-month basis.
