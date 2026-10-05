@@ -73,6 +73,42 @@
   #cfbars text{font-variant-numeric:tabular-nums;}
   #cfbars .hit{fill:transparent; cursor:pointer;}
   #cfbars .hit:hover{fill:rgba(255,255,255,.035);}
+  /* Period Comparison: period A vs period B per category, diverging change bars
+     (right = went up, left = went down; green = good for savings, red = bad) */
+  .cmphead{display:flex; align-items:center; justify-content:space-between; gap:8px 10px; flex-wrap:wrap;}
+  .cmptools{display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0;}
+  .cmptools select{height:30px; padding:0 6px; font-size:12px; font-family:inherit; min-width:0;}
+  .cmpvs{color:var(--muted); font-size:12px;}
+  .cmpwrap{margin:10px 26px 40px; padding:10px 12px; max-width:940px;}
+  .cmpwrap .nwtools{align-items:center;}
+  .cmpwrap .cmpexcl{margin-right:auto; color:#e7c14a; font-size:11.5px;}
+  table.cmp{border-collapse:collapse; width:100%; table-layout:fixed; font-size:12.5px; font-variant-numeric:tabular-nums;}
+  .cmp th,.cmp td{padding:6px 8px; text-align:right; border-bottom:1px solid var(--grid); white-space:nowrap;
+                  overflow:hidden; text-overflow:ellipsis;}
+  .cmp th{color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.3px;}
+  .cmp th.n{text-transform:uppercase;}
+  .cmp th.n,.cmp td.n{text-align:left; white-space:normal; word-break:break-word;}
+  .cmp th.bar{width:24%;} .cmp th.dl{width:84px;} .cmp th.pc{width:64px;} .cmp th.v{width:100px;}
+  .cmp td.v{color:var(--muted);}
+  .cmp tr.tot td{font-weight:700; background:#18223a;}
+  .cmp tr.tot.last td{border-bottom:2px solid #3a4d78;}
+  .cmp tr.g td{background:#141d30; font-weight:700;}
+  .cmp tr.g td.n{border-left:3px solid var(--budget); text-transform:uppercase; font-size:11.5px; letter-spacing:.4px;}
+  .cmp tr.g,.cmp tr.dx{cursor:pointer;}
+  .cmp tr.g:hover td,.cmp tr.dx:hover td{background:#18233a;}
+  .cmp tr.l td{background:#0e1524;} .cmp tr.l td.n{padding-left:24px;}
+  .cmp tr.d td{background:#0b111d; font-size:11.5px;} .cmp tr.d td.n{padding-left:40px; color:var(--muted);}
+  .cmp tr.dx .tw{margin-left:-13px;}
+  .cmp tr.excl td{opacity:.4;}
+  .cmp .tw{display:inline-block; width:13px; color:var(--muted); font-size:11px;}
+  .cmp td.up{color:#7fd0a3;} .cmp td.dn{color:#e58a8a;}
+  .cmp .sub,.cmp .ab{display:block; color:var(--muted); font-size:10.5px; font-weight:500; text-transform:none; letter-spacing:0;}
+  .cmp .ab{display:none;}
+  .bz{position:relative; height:12px;}
+  .bz::before{content:""; position:absolute; left:50%; top:-4px; bottom:-4px; width:1px; background:#3a4d78;}
+  .bz i{position:absolute; top:0; height:100%; border-radius:2px;}
+  .bz i.up{background:#3aa86a;} .bz i.dn{background:#c85c5c;}
+  .cmp .cmpmsg{text-align:center; color:var(--muted); padding:16px 8px;}
   svg{width:100%; height:auto; display:block; overflow:visible;}
   .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
   .node .nval{fill:var(--muted); font-size:10px;}
@@ -274,6 +310,19 @@
     .dual .handle::before{content:""; position:absolute; top:-14px; left:-14px; right:-14px; bottom:-14px;}
     .wrap{margin:10px 14px 0; padding:8px;}
     .cfbwrap{margin:10px 14px 24px; padding:8px 6px 4px; max-width:100%;}
+    /* period comparison on a phone: the two selects pairs share the width, A / B value
+       columns move under the name ("A vs B"), so the table never scrolls sideways */
+    .cmptools{flex:1 1 100%;}
+    .cmptools select{flex:1 1 20%; height:36px; font-size:12.5px;}
+    .cmptools .pills{height:36px;}
+    .cmpwrap{margin:10px 14px 24px; padding:6px 4px; max-width:100%;}
+    table.cmp{font-size:12px;}
+    .cmp th,.cmp td{padding:7px 5px;}
+    .cmp th.v,.cmp td.v{display:none;}
+    .cmp th.bar{width:22%;} .cmp th.dl{width:64px;} .cmp th.pc{width:56px;}
+    .cmp td.pc{padding-left:2px;}
+    .cmp tr.l td.n{padding-left:16px;} .cmp tr.d td.n{padding-left:28px;}
+    .cmp .ab{display:block;}
     .wrap svg{min-width:720px;}
     .node text{font-size:13px;} .node .nval{font-size:12px;} text.mid{font-size:12px;}
     /* both card rows stay three across, just tighter */
@@ -420,6 +469,20 @@
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
 </div>
+
+<!-- 5) period comparison: period A vs period B per category, what went up and down -->
+<div class="nwhead cmphead" id="cmphead" style="display:none">
+  <h2>Period Comparison</h2>
+  <div class="cmptools">
+    <select id="cmpModeA" aria-label="Period A type" title="Period A"></select>
+    <select id="cmpA" aria-label="Period A ends" title="Period A (end month / year)"></select>
+    <span class="cmpvs">vs</span>
+    <select id="cmpModeB" aria-label="Period B type" title="Period B"></select>
+    <select id="cmpB" aria-label="Period B ends" title="Period B (end month / year)"></select>
+    <span class="pills"><label class="pill" title="Sort each group by size of the change (off: Sankey order)"><input type="checkbox" id="cmpSort" checked>By &Delta;</label></span>
+  </div>
+</div>
+<div class="cmpwrap framed" id="cmpwrap" style="display:none"></div>
 
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
@@ -2017,6 +2080,192 @@ function renderCashBars(){
   });
 }
 
+/* ---- Period Comparison: period A vs period B, what went up and down ---------
+   Each period = type + anchor (the two selects per side):
+     T12M   12 months ending on the anchor month
+     YTD    January .. the anchor month of that year
+     Year   one calendar year (the current year runs up to today)
+     Month  the anchor month
+   One row per entry: change bar (right = went up, left = went down), change A - B,
+   % change vs B, then the A and B values (on a phone A vs B sits under the name).
+   Green = good for savings (income / savings up, spend down), red = bad.
+   Totals on top (Income, Expenses, Savings, Safe savings + savings rates), then
+   the Sankey groups (income groups, Needs, Wants, Liberality, Taxes), collapsed;
+   tap a group for its labels, a label for its DETAIL sub-categories.
+   Independent of the range bar. Avg/m divides each period by ITS OWN month count,
+   so periods of different length compare. Exclusions: totals and group rows drop
+   excluded entries, excluded rows stay listed but greyed. */
+const CMP_MODES=[['trailing','T12M'],['ytd','YTD'],['year','Year'],['month','Month']];
+let cmp=null, cmpOptData=null, cmpSig=null, cmpData=null, cmpSort=true;
+let cmpOpen=new Set(), cmpDetOpen=new Set();   // open group keys / labels whose details are open
+/* pure: sums per entry over [f, t]. Keys 'I|leaf', 'E|leaf' (spend positive),
+   'D|leaf|detail'; grpOf maps 'I|' / 'E|' keys to their group; months = months with data */
+function periodSums(data, detail, f, t){
+  const v={}, grpOf={}, ms={};
+  (data||[]).forEach(([mi,k,grp,leaf,val])=>{ if(mi<f||mi>t) return; ms[mi]=1;
+    const key=(k==='I'?'I|':'E|')+leaf; v[key]=(v[key]||0)+(k==='I'?val:-val); grpOf[key]=grp; });
+  (detail||[]).forEach(([mi,lf,dn,val])=>{ if(mi<f||mi>t) return; const key='D|'+lf+'|'+dn; v[key]=(v[key]||0)+val; });
+  return {v, grpOf, months:Object.keys(ms).length};
+}
+/* pure: rows for two periods pa=[f,t], pb=[f,t] -> {groups, tot, monthsA, monthsB}.
+   groups in Sankey ORDER: {key, name, kind, a, b, excl, leaves:[{key, name, kind, a, b,
+   excl, details:[{key, name, a, b}]}]}; tot.a / tot.b = {inc, exp, safe}. Raw values. */
+function comparePeriods(data, detail, pa, pb, excluded){
+  const ds=excluded||new Set(), A=periodSums(data,detail,pa[0],pa[1]), B=periodSums(data,detail,pb[0],pb[1]);
+  const grpOf=Object.assign({}, B.grpOf, A.grpOf), dets={};
+  [A.v,B.v].forEach(v=>{ for(const k in v){ if(k.slice(0,2)!=='D|') continue;
+    const r=k.slice(2), q=r.indexOf('|'), lf=r.slice(0,q); (dets[lf]=dets[lf]||new Set()).add(r.slice(q+1)); } });
+  const G=new Map(), tot={a:{inc:0,exp:0,safe:0}, b:{inc:0,exp:0,safe:0}};
+  Object.keys(grpOf).forEach(key=>{
+    const k=key[0], leaf=key.slice(2), g=grpOf[key], gk=(k==='I'?'IG|':'EG|')+g;
+    const a=A.v[key]||0, b=B.v[key]||0;
+    let gr=G.get(gk); if(!gr){ gr={key:gk, name:g, kind:k, a:0, b:0, excl:ds.has(gk), leaves:[]}; G.set(gk,gr); }
+    const exL=ds.has(key);
+    const details = k==='E' && dets[leaf] && dets[leaf].size>1 ? [...dets[leaf]].map(dn=>{ const dk='D|'+leaf+'|'+dn;
+      return {key:dk, name:dn, a:A.v[dk]||0, b:B.v[dk]||0}; }) : [];
+    gr.leaves.push({key, name:leaf, kind:k, a, b, excl:exL||gr.excl, details});
+    if(!exL){ gr.a+=a; gr.b+=b; }
+    if(exL || gr.excl) return;
+    if(k==='I'){ tot.a.inc+=a; tot.b.inc+=b; if(CF_SAFE.has(leaf)){ tot.a.safe+=a; tot.b.safe+=b; } }
+    else { tot.a.exp+=a; tot.b.exp+=b; }
+  });
+  const gOrd=g=>{ const i=ORDER.indexOf(g.name); return (g.kind==='I'?0:100)+(i<0?99:i); };
+  return {groups:[...G.values()].sort((x,y)=>gOrd(x)-gOrd(y) || (x.name<y.name?-1:1)), tot, monthsA:A.months, monthsB:B.months};
+}
+/* window of a period [f, t]; nothing after the current month (the sheet may hold future rows) */
+function cmpRange(mode, v){
+  const hi=currentMi();
+  if(mode==='year')  return [Math.max(META.minMi, v*12), Math.min(hi, v*12+11)];
+  if(mode==='month') return [v, v];
+  if(mode==='ytd')   return [Math.max(META.minMi, Math.floor(v/12)*12), v];
+  return [Math.max(META.minMi, v-11), v];
+}
+/* anchor options, newest first: [value, label]; month value = mi, Year value = year */
+function cmpAnchors(mode){
+  const hi=currentMi(), out=[];
+  if(mode==='year'){ for(let y=Math.floor(hi/12); y>=Math.floor(META.minMi/12); y--) out.push([y,String(y)]); return out; }
+  const lo = mode==='trailing' ? Math.min(hi, META.minMi+11) : META.minMi;   // a T12M never starts before the data
+  for(let mi=hi; mi>=lo; mi--) out.push([mi, miLabel(mi)]);
+  return out;
+}
+function cmpClamp(mode, v){
+  const L=cmpAnchors(mode); if(!L.length || L.some(x=>x[0]===v)) return v;
+  return L.reduce((b,x)=> Math.abs(x[0]-v)<Math.abs(b[0]-v) ? x : b)[0];
+}
+/* defaults: A = latest complete period (last complete month; Year = last complete year),
+   B = the same period one year earlier (Month: the month before) */
+function cmpDefaultA(mode){ const lc=lastCompleteMi();
+  return cmpClamp(mode, mode==='year' ? Math.floor(lc/12)-(lc%12===11?0:1) : lc); }
+function cmpDefaultB(mode, pa){ const end=pa[1];
+  return cmpClamp(mode, mode==='year' ? Math.floor(end/12)-1 : mode==='month' ? end-1 : end-12); }
+/* short column header for a window: "Oct 25\u2013Sep 26", "Jan\u2013Sep 26", "2025", "Sep 26" */
+function cmpShort(f,t){
+  const yy=mi=>String(Math.floor(mi/12)).slice(2);
+  if(f===t) return MONTHS[f%12]+' '+yy(f);
+  if(f%12===0 && t===f+11) return String(Math.floor(f/12));
+  if(Math.floor(f/12)===Math.floor(t/12)) return MONTHS[f%12]+'\u2013'+MONTHS[t%12]+' '+yy(t);
+  return MONTHS[f%12]+' '+yy(f)+'\u2013'+MONTHS[t%12]+' '+yy(t);
+}
+function syncCmpControls(){
+  const set=(id,html,val)=>{ const e=document.getElementById(id); if(!e) return; e.innerHTML=html; e.value=String(val); };
+  const modes=CMP_MODES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  const anc=m=>cmpAnchors(m).map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  set('cmpModeA',modes,cmp.modeA); set('cmpA',anc(cmp.modeA),cmp.a);
+  set('cmpModeB',modes,cmp.modeB); set('cmpB',anc(cmp.modeB),cmp.b);
+}
+/* once per data load: default T12M (last 12 complete months) vs the 12 months before;
+   on a refresh keep the picks, clamped to the new data */
+function cmpInit(){
+  if(!cmp){ const m='trailing', a=cmpDefaultA(m); cmp={modeA:m, a, modeB:m, b:cmpDefaultB(m, cmpRange(m,a))}; }
+  else { cmp.a=cmpClamp(cmp.modeA,cmp.a); cmp.b=cmpClamp(cmp.modeB,cmp.b); }
+  cmpOptData=DATA; syncCmpControls();
+}
+/* called from every build(); redraws only when an input changed */
+function renderCompare(){
+  const wrap=document.getElementById('cmpwrap');
+  if(!wrap || !DATA.length) return;
+  if(DATA!==cmpOptData) cmpInit();
+  const perMonth=monthlyEl.checked;
+  const sig=[cmp.modeA,cmp.a,cmp.modeB,cmp.b,perMonth,showK,cmpSort,[...deselected].sort().join(','),
+             [...cmpOpen].sort().join(','),[...cmpDetOpen].sort().join(',')].join('#');
+  if(sig===cmpSig && DATA===cmpData) return;
+  cmpSig=sig; cmpData=DATA;
+  const pa=cmpRange(cmp.modeA,cmp.a), pb=cmpRange(cmp.modeB,cmp.b);
+  const R=comparePeriods(DATA, DETAIL, pa, pb, deselected);
+  const da=perMonth?Math.max(1,R.monthsA):1, db=perMonth?Math.max(1,R.monthsB):1;
+  const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const zero=v=> /^-?0K?$/.test(fmt(Math.abs(v)));
+  const sgn=v=> (v<0?'\u2212':'+')+fmt(Math.abs(v));
+  const pctTxt=(a,b)=>{ if(zero(b)) return zero(a) ? '' : 'new';
+    const p=(a-b)/Math.abs(b)*100, q=Math.abs(p);
+    if(q>=1000) return '>999%';                    // only increases can get here (a drop stops at -100%)
+    return (p<0?'\u2212':'+')+(q<10 ? q.toFixed(1).replace('.',',') : Math.round(q))+'%'; };
+  const rate=(inc,exp)=> inc>0 ? Math.round((inc-exp)/inc*100)+'%' : '\u2014';
+  /* one row; good=+1 when up is good (income, savings), -1 when up is bad (spend) */
+  const row=o=>{
+    const d=o.a-o.b, z=zero(d), cls=z ? '' : ((d>0)===(o.good>0) ? 'up' : 'dn');
+    const w=o.scale>0 ? Math.min(50, Math.abs(d)/o.scale*50) : 0;
+    const bar=z ? '' : `<i class="${cls}" style="${d>0?'left':'right'}:50%;width:${w.toFixed(1)}%"></i>`;
+    return `<tr class="${o.cls}${o.excl?' excl':''}"${o.attrs||''}>`+
+      `<td class="n"${o.bl?` style="border-left-color:${o.bl}"`:''}>${o.name}<span class="ab">${fmt(o.a)} vs ${fmt(o.b)}</span>${o.sub||''}</td>`+
+      `<td class="bar"><div class="bz">${bar}</div></td><td class="dl ${cls}">${z?'0':sgn(d)}</td>`+
+      `<td class="pc ${cls}">${pctTxt(o.a,o.b)}</td><td class="v">${fmt(o.a)}</td><td class="v">${fmt(o.b)}</td></tr>`; };
+  /* totals block, on top, with its own bar scale */
+  const ta={inc:R.tot.a.inc/da, exp:R.tot.a.exp/da, safe:R.tot.a.safe/da},
+        tb={inc:R.tot.b.inc/db, exp:R.tot.b.exp/db, safe:R.tot.b.safe/db};
+  const tots=[
+    {name:'Income', a:ta.inc, b:tb.inc, good:1},
+    {name:'Expenses', a:ta.exp, b:tb.exp, good:-1},
+    {name:'Savings', a:ta.inc-ta.exp, b:tb.inc-tb.exp, good:1,
+     sub:`<span class="sub">${rate(ta.inc,ta.exp)} vs ${rate(tb.inc,tb.exp)} of income</span>`},
+    {name:'Safe savings', a:ta.safe-ta.exp, b:tb.safe-tb.exp, good:1,
+     sub:`<span class="sub">${rate(ta.safe,ta.exp)} vs ${rate(tb.safe,tb.exp)} of safe</span>`}];
+  const totScale=Math.max(...tots.map(t=>Math.abs(t.a-t.b)));
+  /* categories: per-period averages, rows that are zero in both periods dropped */
+  const live=x=> !(zero(x.a) && zero(x.b));
+  const groups=R.groups.map(g=>Object.assign({}, g, {a:g.a/da, b:g.b/db,
+    leaves:g.leaves.map(l=>Object.assign({}, l, {a:l.a/da, b:l.b/db,
+      details:l.details.map(x=>Object.assign({}, x, {a:x.a/da, b:x.b/db})).filter(live)})).filter(live)})).filter(g=>g.leaves.length);
+  const catScale=Math.max(0, ...groups.flatMap(g=>[Math.abs(g.a-g.b), ...g.leaves.map(l=>Math.abs(l.a-l.b))]));
+  const order=(list,keyOf)=> list.sort((x,y)=> cmpSort ? (Math.abs(y.a-y.b)-Math.abs(x.a-x.b) || rankCmp(keyOf(x),keyOf(y)))
+                                                         : rankCmp(keyOf(x),keyOf(y)));
+  const gcol=g=> g.kind==='I' ? INCOME : (GROUPCOL[g.name] || BUDGET);
+  let body=tots.map((t,i)=>row(Object.assign({cls:'tot'+(i===tots.length-1?' last':''), scale:totScale}, t))).join('');
+  groups.forEach(g=>{
+    const open=cmpOpen.has(g.key), good=g.kind==='I'?1:-1;
+    body+=row({cls:'g', name:`<span class="tw">${open?'\u25BE':'\u25B8'}</span>${esc(g.name)}`, a:g.a, b:g.b, good, excl:g.excl,
+      scale:catScale, bl:gcol(g), attrs:` data-g="${esc(g.key)}" tabindex="0" role="button" aria-expanded="${open}"`});
+    if(!open) return;
+    order(g.leaves, l=>l.key).forEach(l=>{
+      const hasD=l.details.length>1, dOpen=hasD && cmpDetOpen.has(l.key);
+      body+=row({cls:'l'+(hasD?' dx':''), name:(hasD?`<span class="tw">${dOpen?'\u25BE':'\u25B8'}</span>`:'')+esc(l.name),
+        a:l.a, b:l.b, good, excl:l.excl, scale:catScale,
+        attrs: hasD ? ` data-l="${esc(l.key)}" tabindex="0" role="button" aria-expanded="${dOpen}"` : ''});
+      if(dOpen) order(l.details, x=>x.key).forEach(x=>{
+        body+=row({cls:'d', name:esc(x.name), a:x.a, b:x.b, good:-1, excl:l.excl, scale:catScale}); });
+    });
+  });
+  const allOpen=groups.every(g=>cmpOpen.has(g.key)), noneOpen=!cmpOpen.size && !cmpDetOpen.size;
+  const sA=cmpShort(pa[0],pa[1])+(perMonth?' /m':''), sB=cmpShort(pb[0],pb[1])+(perMonth?' /m':'');
+  wrap.innerHTML=`<div class="nwtools">`+
+    (deselected.size ? `<span class="cmpexcl">${deselected.size} excluded</span>` : '')+
+    `<button type="button" data-cmpall="open"${allOpen?' disabled':''}>Expand all</button>`+
+    `<button type="button" data-cmpall="close"${noneOpen?' disabled':''}>Collapse all</button></div>`+
+    `<table class="cmp"><thead><tr><th class="n">Category</th><th class="bar"></th><th class="dl">\u0394</th>`+
+    `<th class="pc">%</th><th class="v" title="Period A">${esc(sA)}</th><th class="v" title="Period B">${esc(sB)}</th></tr></thead>`+
+    `<tbody>${body}</tbody></table>`;
+  const flip=(set,k)=>{ if(set.has(k)) set.delete(k); else set.add(k); renderCompare(); };
+  const bind=(sel,attr,set)=> wrap.querySelectorAll(sel).forEach(tr=>{ const k=tr.getAttribute(attr);
+    tr.addEventListener('click',e=>{ e.stopPropagation(); flip(set,k); });
+    tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); flip(set,k); } }); });
+  bind('tr[data-g]','data-g',cmpOpen);
+  bind('tr[data-l]','data-l',cmpDetOpen);
+  wrap.querySelectorAll('button[data-cmpall]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation();
+    if(b.getAttribute('data-cmpall')==='open') cmpOpen=new Set(groups.map(g=>g.key));
+    else { cmpOpen=new Set(); cmpDetOpen=new Set(); }
+    renderCompare(); }));
+}
+
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
@@ -2034,7 +2283,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res); syncExclUI(); renderCashBars();
+  paintTotals(res); render(res); syncExclUI(); renderCashBars(); renderCompare();
   /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
      Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
      drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing
@@ -2169,6 +2418,19 @@ function initControlsOnce(){
   const cfSelEl=document.getElementById('cfSel');
   cfSelEl.addEventListener('change',()=>{ cfSel=cfSelEl.value; cfSelEl.classList.toggle('on',!!cfSel); hideTip(); renderCashBars(); });
   document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; hideTip(); renderCashBars(); });
+  /* period comparison: changing A's type resets both sides (B = same type, one year
+     earlier; Month: the month before); changing B's type re-defaults B against A */
+  {
+    const mA=document.getElementById('cmpModeA'), aEl=document.getElementById('cmpA'),
+          mB=document.getElementById('cmpModeB'), bEl=document.getElementById('cmpB');
+    mA.addEventListener('change',()=>{ cmp.modeA=mA.value; cmp.a=cmpDefaultA(cmp.modeA); cmp.modeB=cmp.modeA;
+      cmp.b=cmpDefaultB(cmp.modeB, cmpRange(cmp.modeA,cmp.a)); syncCmpControls(); renderCompare(); });
+    aEl.addEventListener('change',()=>{ cmp.a=+aEl.value; renderCompare(); });
+    mB.addEventListener('change',()=>{ cmp.modeB=mB.value; cmp.b=cmpDefaultB(cmp.modeB, cmpRange(cmp.modeA,cmp.a));
+      syncCmpControls(); renderCompare(); });
+    bEl.addEventListener('change',()=>{ cmp.b=+bEl.value; renderCompare(); });
+    document.getElementById('cmpSort').addEventListener('change',e=>{ cmpSort=e.target.checked; renderCompare(); });
+  }
   /* the yearly bars are drawn at the frame's real width, so redraw when it changes */
   let cfRT=null;
   window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
@@ -2185,6 +2447,8 @@ function initControlsOnce(){
   document.getElementById('cfhead').style.display='';
   document.getElementById('cfbhead').style.display='';
   document.getElementById('cfbwrap').style.display='';
+  document.getElementById('cmphead').style.display='';
+  document.getElementById('cmpwrap').style.display='';
   controlsReady=true;
 }
 function renderAll(){ build(); requestAnimationFrame(()=>{ buildNetWorth(); renderCashBars(); }); }   // Sankey first, table + yearly bars next frame
@@ -2253,7 +2517,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12 };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods };
 }
 </script>
 </body>

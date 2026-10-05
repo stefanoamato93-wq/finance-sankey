@@ -18,6 +18,47 @@ browser.
 4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
    Income / Expenses / Savings / Safe savings cards, then the money-flow **Sankey**.
 5. **Cash Flow vs Savings** chart (see below), under the Sankey.
+6. **Period Comparison** (see below), at the bottom: period A vs period B, what went
+   up and down.
+
+### Period Comparison (A vs B, what went up and down)
+A diverging change chart in table form, under Cash Flow vs Savings. Added Oct 2026.
+- **Two periods**, each picked with a type + anchor select in the section header
+  (`#cmpModeA` / `#cmpA` vs `#cmpModeB` / `#cmpB`):
+  `T12M` = 12 months ending on the anchor month, `YTD` = January to the anchor month,
+  `Year` = a calendar year (the current year runs to today), `Month` = the anchor month.
+  Anchors run from the current month back to the start of the data (a T12M never starts
+  before the first month). Nothing after the current month is counted.
+- **Defaults:** A = T12M on the last complete month (Oct 2025 - Sep 2026 on 5 Oct 2026),
+  B = the 12 months before it. Changing A's type resets both sides: B takes the same
+  type, one year earlier (Month: the month before; Year: A = last complete year, B = the
+  year before). Changing B's type re-defaults B against A; anchor picks stick.
+- **Rows:** totals on top (Income, Expenses, Savings, Safe savings; the savings rows
+  carry `A% vs B%` of income / of safe income as a sub-line), then the Sankey groups in
+  `ORDER` (Work income, Non-work income, Needs, Wants, Liberality, Taxes, ...),
+  **collapsed by default**. Tap a group for its labels, tap a label marked ▸ for its
+  DETAIL sub-categories (only labels with more than one). Expand all / Collapse all
+  above the table. Rows zero in both periods are hidden. Leaf names are shown as in the
+  Sankey (upper case).
+- **Columns:** change bar (right = went up, left = went down), Δ = A - B, % change vs B
+  (`new` when B is zero, `>999%` above that), then the A and B values with a short period
+  header (`Oct 25–Sep 26`, `Jan–Sep 26`, `2025`, `Sep 26`). **Colour = good or bad for
+  savings**, not direction: income / savings up and spend down are green, the opposite
+  red. Totals have their own bar scale; groups, labels and details share one.
+- **Sort:** the `By Δ` pill (on by default) orders labels and details inside each group
+  by the size of the change; off = Stable_Order (same as the Sankey).
+- **Toggles:** independent of the range bar. `Avg/m` divides each period by **its own**
+  month count (months with data), so periods of different length compare (headers then
+  read `/m`); `K` applies. Exclusions: totals and group rows drop excluded entries,
+  excluded rows stay listed but greyed, with an "N excluded" note above the table.
+- **Phone:** the A / B columns move under the name as `A vs B`, the selects share the
+  width, no sideways scroll.
+- Code: pure `periodSums(data, detail, f, t)` and `comparePeriods(data, detail, pa, pb,
+  excluded)` (both in the test shim), plus `cmpRange()`, `cmpAnchors()`,
+  `cmpDefaultA/B()`, `syncCmpControls()` and `renderCompare()`. `renderCompare()` runs
+  from every `build()` but only redraws when its inputs change (signature check), so
+  dragging the range bar does not rebuild it.
+- Reconciled 5 Oct 2026: A = 101.468 income / 52.960 expenses, equal to the T12M cards.
 
 ### Cash Flow vs Savings (yearly bars + savings-rate lines)
 One column per calendar year, **actuals only**: first year of data up to the
