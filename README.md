@@ -98,6 +98,20 @@ year is labelled `YTD` under its year; any other part year shows its month count
     the test shim) returns `{year: value}`; `buildCfOptions()` rebuilds the list
     once per data load (`CF_OPTS` = key -> label / colour / share base) and keeps the
     pick across refreshes when it still exists.
+- **Month drill-down (added 5 Oct 2026):** click a year (touch: tap shows the
+  tooltip, a second tap on the same year drills; keyboard: Enter) to see that year's
+  months as the same bars, Jan..Dec in 12 fixed slots (missing months stay blank,
+  the in-progress month is labelled `MTD`). Works in Overview and with any picker
+  entry, honours exclusions and K; Avg/m changes nothing (a month is one month).
+  The savings % lines become monthly rates: their scale stops at -100% so one bad
+  month does not flatten the band, and the in-progress month gets no point (its
+  rate is noise early in the month; the tooltip still shows it). A green
+  `‹ YYYY` pill left of R12M (or Esc) goes back to the years; turning R12M on
+  leaves the drill. The year tooltip ends with a muted "Click for months" hint.
+  Code: `cfDrill` state; `cashFlowByYear()` and `cfSeriesByYear()` take a `bucket`
+  that may return `null` to skip a row (`mi=> year(mi)===Y ? mi : null`).
+  Check: `_verify_cfdrill.py` (untracked): months sum to the year (2024: 143.076 /
+  36.891), back pill, touch double tap, Esc, R12M reset, series mode.
 - **R12M pill (left of the picker):** swaps the yearly bars for a **rolling 12-month
   stacked area chart** with one point per month, from the first month of data to the
   **last complete month** (so the last point equals the T12M cards, e.g. Sep 2026 =
