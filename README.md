@@ -18,8 +18,48 @@ browser.
 4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
    Income / Expenses / Savings / Safe savings cards, then the money-flow **Sankey**.
 5. **Cash Flow vs Savings** chart (see below), under the Sankey.
-6. **Period Comparison** (see below), at the bottom: period A vs period B, what went
-   up and down.
+6. **Period Comparison** (see below): period A vs period B, what went up and down.
+7. **Years of Life Paid** (see below), at the bottom: net worth / T12M expenses per
+   month, with a flag list of which expenses count.
+
+### Years of Life Paid (net worth / T12M expenses)
+A monthly line chart under Period Comparison. Added 9 Oct 2026.
+- **Metric:** `years = month-end net worth / expenses of the 12 months ending that
+  month`, i.e. how many years the current net worth would pay at the last 12 months'
+  spending. One point per month, from the first month with 12 months of cash-flow
+  history (`META.minMi + 11`, Dec 2018) to the **last complete month**, so the last
+  T12M expenses equal the Expenses card in the default T12M view (Sep 2026: 460.166 /
+  52.960 = 8,7 years). Net worth is the same month-end series as the hero sparkline
+  (running sum of every holding, earlier rows carried into the opening balance), so
+  early points can be negative (Dec 2018: -2,8).
+- **Now point:** when live prices are in (`LIVE`), one extra point at the end = live
+  net worth (the hero value) / the T12M expenses of the last 12 complete months, drawn
+  as a ring. Without live prices the line ends on the last complete month.
+- **Expense flags:** the `Expenses` pill in the section header opens a checkbox list
+  under the chart, one row per expense label with its T12M amount, grouped by macro
+  group in Sankey `ORDER` (Needs, Wants, Liberality, Taxes) and Stable_Order inside a
+  group. A group checkbox flags / unflags all its labels (indeterminate when mixed);
+  `Select all` / `Select none` act on every label. A note on top shows `Counted X of Y
+  · T12M <period>`, and the pill reads e.g. `Expenses 16/17` while some are off. Flags
+  are kept in localStorage (`finance-sankey-ylp-off-v1`, the list of labels NOT
+  counted), so they survive a reload. All labels count by default.
+- **Exclusions:** an entry excluded from metrics in the Sankey (label or macro group)
+  is out of this chart too; in the flag list it shows struck through and locked, and
+  Select all / none leave it alone. "Include all" in the controls row brings it back.
+- **Toggles:** window-independent (ignores the range bar, signature check like the
+  other charts, so dragging does not rebuild it). K applies to the tooltip and the
+  flag amounts; Avg/m changes nothing (the value is a ratio of years).
+- **Display:** y axis in years (1 / 2 / 5 steps, `0y` line stronger), one x label per
+  January, last value labelled at the right end (`8,7y`). Hover / tap snaps to the
+  nearest month: tooltip with years paid, net worth and T12M expenses (+ per month),
+  plus "N expenses not counted" when flags are off. No legend. Drawn at the frame's
+  real pixel width, redrawn on resize. Phone: the flag list is one column.
+- Code: pure `ylpSeries(data, holds, minMi, lastMi, off, excluded)` (exported in the
+  test shim) returns `[{mi, nw, exp, years}]`; `renderYlp()` draws the chart and the
+  flag list; `NW_NOW` (set in `buildNetWorth()`) carries the live net worth.
+  Check: `_verify_ylp.py` (untracked) compares every month against a Python
+  reference computed straight from the sheet CSV, plus flags, groups, Select all /
+  none, persistence, Sankey exclusions, K, tooltip and the live Now point.
 
 ### Period Comparison (A vs B, what went up and down)
 A diverging change chart in table form, under Cash Flow vs Savings. Added Oct 2026.

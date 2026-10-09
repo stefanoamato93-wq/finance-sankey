@@ -110,6 +110,30 @@
   .bz i{position:absolute; top:0; height:100%; border-radius:2px;}
   .bz i.up{background:#3aa86a;} .bz i.dn{background:#c85c5c;}
   .cmp .cmpmsg{text-align:center; color:var(--muted); padding:16px 8px;}
+  /* Years of Life Paid: net worth / T12M expenses, one point per month, plus the
+     flag list of which expenses count (opened from the header button) */
+  .ylphead{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .ylphead h2{white-space:nowrap;}
+  .ylpwrap{margin:10px 26px 40px; padding:10px 14px 6px; max-width:940px;}
+  #ylpchart text{font-variant-numeric:tabular-nums;}
+  #ylpchart .hit{fill:transparent; cursor:crosshair;}
+  .ylpflags{border-top:1px solid var(--grid); margin-top:8px; padding:8px 0 4px;}
+  .ylpflags .nwtools{align-items:center; flex-wrap:wrap;}
+  .ylpflags .nwtools button{white-space:nowrap;}
+  .ylpflags .ylpnote{margin-right:auto; color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums;}
+  .ylpflags .ylpnote b{color:var(--ink);}
+  .ylpg{margin:4px 0 10px;}
+  .ylpg label{display:flex; align-items:center; gap:7px; cursor:pointer; min-width:0; user-select:none;}
+  .ylpg label.gh{padding:5px 2px 5px 8px; background:#141d30; border-left:3px solid var(--budget); border-radius:4px;
+                 font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px;}
+  .ylpg .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;}
+  .ylpg .amt{margin-left:auto; padding-left:6px; color:var(--muted); font-size:11px; font-weight:500;
+             font-variant-numeric:tabular-nums; letter-spacing:0; white-space:nowrap;}
+  .ylpitems{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0 14px; padding:3px 0 0 11px;}
+  .ylpitems label{padding:4px 2px; font-size:12px; border-bottom:1px solid rgba(36,48,73,.6);}
+  .ylpitems label.off .nm,.ylpitems label.off .amt{opacity:.45;}
+  .ylpitems label.lock{cursor:not-allowed;} .ylpitems label.lock .nm{opacity:.35; text-decoration:line-through;}
+  .ylpflags input[type=checkbox]{accent-color:#3aa86a; width:15px; height:15px; margin:0; flex:0 0 auto; cursor:inherit;}
   svg{width:100%; height:auto; display:block; overflow:visible;}
   .node text{fill:var(--ink); font-size:11px; dominant-baseline:middle;}
   .node .nval{fill:var(--muted); font-size:10px;}
@@ -317,6 +341,10 @@
     .cmptools select{flex:1 1 20%; height:36px; font-size:12.5px;}
     .cmptools .pills{height:36px;}
     .cmpwrap{margin:10px 14px 24px; padding:6px 4px; max-width:100%;}
+    .ylpwrap{margin:10px 14px 24px; padding:8px 6px 4px; max-width:100%;}
+    .ylpitems{grid-template-columns:1fr; padding-left:6px;}
+    .ylpflags .ylpnote{flex:1 1 100%; margin-bottom:2px;}
+    .ylpitems label{padding:7px 2px; font-size:12.5px;}
     table.cmp{font-size:12px;}
     .cmp th,.cmp td{padding:7px 5px;}
     .cmp th.v,.cmp td.v{display:none;}
@@ -486,6 +514,17 @@
   </div>
 </div>
 <div class="cmpwrap framed" id="cmpwrap" style="display:none"></div>
+
+<!-- 6) years of life paid: net worth / T12M expenses, one point per month; the Expenses
+     button opens the flag list of which expenses count -->
+<div class="nwhead ylphead" id="ylphead" style="display:none">
+  <h2>Years of Life Paid</h2>
+  <span class="pills"><button type="button" class="pill" id="ylpEdit" title="Pick which expenses count" aria-expanded="false" aria-controls="ylpFlags">Expenses<span id="ylpCnt"></span></button></span>
+</div>
+<div class="ylpwrap framed" id="ylpwrap" style="display:none">
+  <svg id="ylpchart" viewBox="0 0 900 260"></svg>
+  <div class="ylpflags" id="ylpFlags" style="display:none"></div>
+</div>
 
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
@@ -1521,6 +1560,7 @@ function buildNetWorth(){
   for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
   if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
+  NW_NOW = LIVE ? {v:gTot, at:LIVE.at} : null;              // Years of Life Paid "Now" point
   const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const liveNote = LIVE ? `<b class="live">LIVE</b> ${hhmm(LIVE.at)}` : mLab(cur);
@@ -1640,6 +1680,7 @@ function buildNetWorth(){
     if(!open) nwDetOpen=new Set();
     buildNetWorth();
   }));
+  renderYlp();   // live net worth may have moved the "Now" point (no-op when unchanged)
 }
 
 /* ---- Cash Flow vs Savings (yearly bars + savings-rate lines) --------------
@@ -2313,6 +2354,179 @@ function renderCompare(){
     renderCompare(); }));
 }
 
+/* ---- Years of Life Paid: net worth / T12M expenses -------------------------
+   One point per month, from the first month with 12 months of cash-flow history
+   (META.minMi + 11) to the last complete month:
+     years = month-end net worth / expenses of the 12 months ending that month
+   Net worth is the same month-end series as the hero sparkline (running sum of every
+   holding, earlier rows carried into the opening balance). When live prices are in,
+   a last "Now" point = live net worth / the T12M expenses of the last 12 complete
+   months. Which expenses count is picked in the flag list under the chart (one
+   checkbox per label, grouped by macro group, kept in localStorage); entries
+   excluded from metrics in the Sankey stay out too. Window-independent (ignores the
+   range bar); K applies to the tooltip and the flag amounts, Avg/m changes nothing
+   (a ratio of years). */
+const YLP_KEY='finance-sankey-ylp-off-v1', YLP_COL='#7fd0a3';
+let ylpOff=new Set(), ylpOpen=false, ylpSig=null, ylpData=null, ylpLastW=0, NW_NOW=null, YLP_LIST=new Map(), YLP_LOCK=new Set();
+function ylpLoad(){ try{ const a=JSON.parse(localStorage.getItem(YLP_KEY)||'[]'); if(Array.isArray(a)) ylpOff=new Set(a.map(String)); }catch(e){} }
+function ylpSave(){ try{ localStorage.setItem(YLP_KEY, JSON.stringify([...ylpOff].sort())); }catch(e){} }
+/* pure: [{mi, nw, exp, years}] for mi in [minMi+11, lastMi]. off = expense labels not
+   counted, excluded = the Sankey Selection_State keys (E|leaf, EG|group). years is null
+   when the counted T12M expenses are <= 0. */
+function ylpSeries(data, holds, minMi, lastMi, off, excluded){
+  const no=off||new Set(), ds=excluded||new Set(), sp={}, by={};
+  (data||[]).forEach(([mi,k,grp,leaf,val])=>{
+    if(k!=='E' || mi>lastMi || no.has(leaf) || ds.has('E|'+leaf) || ds.has('EG|'+grp)) return;
+    sp[mi]=(sp[mi]||0)-val;                       // expenses stored negative -> positive spend
+  });
+  (holds||[]).forEach(h=>{ for(const k in h.flows) by[k]=(by[k]||0)+h.flows[k]; });
+  let nw=0, s=0; const out=[];
+  for(const k in by) if(+k<minMi) nw+=by[k];     // opening balance (incl. blank-date rows)
+  for(let mi=minMi; mi<=lastMi; mi++){
+    nw+=by[mi]||0; s+=sp[mi]||0; if(mi-12>=minMi) s-=sp[mi-12]||0;
+    if(mi>=minMi+11) out.push({mi, nw, exp:s, years: s>0 ? nw/s : null});
+  }
+  return out;
+}
+function renderYlp(){
+  const svgEl=document.getElementById('ylpchart'), box=document.getElementById('ylpFlags');
+  if(!svgEl || !box || !DATA.length) return;
+  const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
+  const m0=META.minMi, m1=lastCompleteMi();
+  const sig=[W, ylpOpen, showK, m1, NW_NOW ? Math.round(NW_NOW.v)+'@'+NW_NOW.at : '',
+             [...ylpOff].sort().join(','), [...deselected].sort().join(',')].join('#');
+  if(sig===ylpSig && DATA===ylpData) return;
+  ylpSig=sig; ylpData=DATA; ylpLastW=W;
+  const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const el=(tag,attrs,txt)=>{ const e=document.createElementNS(NS,tag);
+    for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!=null) e.textContent=txt; return e; };
+  const yrs=v=>{ const r=Math.round(Math.abs(v)*10)/10; return (v<0&&r?'-':'')+r.toFixed(1).replace('.',','); };
+
+  /* expense labels: primary group (largest all-time spend), T12M spend, locked when
+     the Sankey excludes them */
+  const gAmt={}, t12={};
+  DATA.forEach(([mi,k,grp,leaf,val])=>{ if(k!=='E') return;
+    const g=gAmt[leaf]||(gAmt[leaf]={}); g[grp]=(g[grp]||0)+Math.abs(val);
+    if(mi>m1-12 && mi<=m1) t12[leaf]=(t12[leaf]||0)-val; });
+  const primary=leaf=>{ const g=gAmt[leaf]; return Object.keys(g).sort((a,b)=>g[b]-g[a])[0]; };
+  const locked=leaf=> deselected.has('E|'+leaf) || deselected.has('EG|'+primary(leaf));
+  const counted=leaf=> !ylpOff.has(leaf) && !locked(leaf);
+  YLP_LIST=new Map();
+  Object.keys(gAmt).forEach(leaf=>{ const g=primary(leaf); if(!YLP_LIST.has(g)) YLP_LIST.set(g,[]); YLP_LIST.get(g).push(leaf); });
+  const gOrd=g=>{ const i=ORDER.indexOf(g); return i<0?99:i; };
+  const groups=[...YLP_LIST.keys()].sort((a,b)=> gOrd(a)-gOrd(b) || (a<b?-1:1));
+  groups.forEach(g=> YLP_LIST.get(g).sort((a,b)=>rankCmp('E|'+a,'E|'+b)));
+  const leaves=groups.flatMap(g=>YLP_LIST.get(g)), nCnt=leaves.filter(counted).length;
+  YLP_LOCK=new Set(leaves.filter(locked));
+  const cntEl=document.getElementById('ylpCnt');
+  if(cntEl) cntEl.textContent = nCnt<leaves.length ? ' '+nCnt+'/'+leaves.length : '';
+
+  /* series (+ the live "Now" point) */
+  const pts=ylpSeries(DATA, NWHOLD, m0, m1, ylpOff, deselected);
+  if(NW_NOW && pts.length){ const L=pts[pts.length-1];
+    pts.push({mi:m1+1, nw:NW_NOW.v, exp:L.exp, years: L.exp>0 ? NW_NOW.v/L.exp : null, now:true}); }
+  const N=pts.length, vals=pts.map(p=>p.years).filter(v=>v!=null), narrow=W<560, fs=narrow?9.5:10.5;
+  svgEl.innerHTML='';
+  if(N<2 || !vals.length){
+    svgEl.setAttribute('viewBox',`0 0 ${W} 60`); svgEl.setAttribute('height',60);
+    svgEl.appendChild(el('text',{x:W/2,y:34,'text-anchor':'middle',fill:'#9aa6bd','font-size':12},
+      N<2 ? 'Needs 12 months of history' : 'No expenses counted'));
+  } else {
+    const padL=narrow?30:38, padR=narrow?40:46, plotTop=14, plotH=narrow?170:210, plotBot=plotTop+plotH, H=plotBot+22;
+    const innerW=W-padL-padR, xOf=i=> padL+i/(N-1)*innerW;
+    let yMax=Math.max(0,...vals), yMin=Math.min(0,...vals); if(yMax-yMin<1e-9) yMax=yMin+1;
+    /* 1 / 2 / 5 steps (no 2.5, so whole-year ticks stay whole) */
+    const raw=(yMax-yMin)/6, p10=Math.pow(10,Math.floor(Math.log10(raw))), f10=raw/p10;
+    const step=(f10<=1.2?1:f10<=2.5?2:f10<=6?5:10)*p10;
+    yMax=Math.ceil(yMax/step-1e-9)*step; yMin=Math.floor(yMin/step+1e-9)*step;
+    const yOf=v=> plotTop+(yMax-v)/(yMax-yMin)*plotH;
+    svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`); svgEl.setAttribute('height',H);
+    /* y grid in years (zero line stronger) */
+    for(let t=yMin; t<=yMax+step*1e-6; t+=step){
+      const y=yOf(t), z=Math.abs(t)<step*1e-6;
+      svgEl.appendChild(el('line',{x1:padL,x2:W-padR,y1:y,y2:y,stroke:z?'#3a4d78':'#243049','stroke-width':1}));
+      svgEl.appendChild(el('text',{x:padL-5,y:y+3.5,'text-anchor':'end',fill:'#9aa6bd','font-size':fs},
+        (step>=1 ? String(Math.round(t)) : yrs(t))+'y'));
+    }
+    /* x labels: one per January (every other year when tight); the first point is
+       labelled too when the first January is far enough away */
+    const jan=[]; pts.forEach((p,i)=>{ if(!p.now && p.mi%12===0) jan.push(i); });
+    const every=(innerW/Math.max(1,jan.length))<30 ? 2 : 1;
+    const xl=(i,anchor)=>{ svgEl.appendChild(el('line',{x1:xOf(i),x2:xOf(i),y1:plotBot,y2:plotBot+4,stroke:'#3a4d78'}));
+      svgEl.appendChild(el('text',{x:xOf(i),y:plotBot+15,'text-anchor':anchor,fill:'#e7ecf5','font-size':fs},String(Math.floor(pts[i].mi/12)))); };
+    if(!jan.length || xOf(jan[0])-xOf(0)>34) xl(0,'start');
+    jan.forEach((i,j)=>{ if(!(j%every)) xl(i,'middle'); });
+    /* area to the zero line + the line, one piece per run of defined points */
+    const runs=[]; let cur=null;
+    pts.forEach((p,i)=>{ if(p.years==null){ cur=null; return; } if(!cur){ cur=[]; runs.push(cur); } cur.push(i); });
+    const z0=yOf(Math.max(yMin,Math.min(yMax,0)));
+    runs.forEach(r=>{
+      const line=r.map(i=>xOf(i).toFixed(1)+','+yOf(pts[i].years).toFixed(1));
+      svgEl.appendChild(el('path',{d:'M'+line.join('L')+`L${xOf(r[r.length-1]).toFixed(1)},${z0}L${xOf(r[0]).toFixed(1)},${z0}Z`,
+        fill:YLP_COL,'fill-opacity':.16,stroke:'none'}));
+      svgEl.appendChild(el('path',{d:'M'+line.join('L'),fill:'none',stroke:YLP_COL,'stroke-width':2,'stroke-linejoin':'round'}));
+    });
+    /* last value labelled at the right end; the live point gets a ring */
+    let li=N-1; while(li>=0 && pts[li].years==null) li--;
+    if(li>=0){ const p=pts[li];
+      svgEl.appendChild(el('circle',{cx:xOf(li),cy:yOf(p.years),r:p.now?3.6:2.8,fill:p.now?'#0f1420':YLP_COL,stroke:YLP_COL,'stroke-width':p.now?1.8:0}));
+      svgEl.appendChild(el('text',{x:xOf(li)+6,y:yOf(p.years)+4,fill:YLP_COL,'font-size':fs+0.5,'font-weight':700},yrs(p.years)+'y')); }
+    /* hover / tap: nearest month, guide line + dot + tooltip */
+    const guide=el('line',{x1:0,x2:0,y1:plotTop,y2:plotBot,stroke:'rgba(231,236,245,.55)','stroke-width':1,visibility:'hidden'});
+    const dot=el('circle',{cx:0,cy:0,r:3.4,fill:YLP_COL,visibility:'hidden'});
+    svgEl.appendChild(guide); svgEl.appendChild(dot);
+    const mut=s=>`<span style="color:#9aa6bd">${s}</span>`;
+    const nOff=leaves.length-nCnt;
+    const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+    const tipHtml=i=>{ const p=pts[i];
+      let h=p.now ? `<b>Now</b> <b style="color:${YLP_COL}">LIVE</b> ${mut(hhmm(NW_NOW.at))}` : `<b>${miLabel(p.mi)}</b>`;
+      h+=`<br><i class="sw" style="background:${YLP_COL}"></i>Years paid <b>${p.years==null?'\u2014':yrs(p.years)}</b>`+
+         `<br>&nbsp;&nbsp;`+mut(`Net worth ${fmt(p.nw)}`)+
+         `<br>&nbsp;&nbsp;`+mut(`T12M expenses ${fmt(p.exp)} \u00b7 ${fmt(p.exp/12)}/m`+(p.now?` (${cmpShort(m1-11,m1)})`:''));
+      if(nOff) h+=`<br><span style="color:#e7c14a">${nOff} expense${nOff>1?'s':''} not counted</span>`;
+      return h; };
+    const hit=el('rect',{class:'hit',x:padL,y:0,width:innerW,height:H});
+    const show=e=>{ const r=svgEl.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width);
+      const i=Math.max(0,Math.min(N-1,Math.round((x-padL)/innerW*(N-1))));
+      guide.setAttribute('x1',xOf(i)); guide.setAttribute('x2',xOf(i)); guide.setAttribute('visibility','visible');
+      if(pts[i].years!=null){ dot.setAttribute('cx',xOf(i)); dot.setAttribute('cy',yOf(pts[i].years)); dot.setAttribute('visibility','visible'); }
+      else dot.setAttribute('visibility','hidden');
+      showTip(e,tipHtml(i)); const tw=tip.offsetWidth, th=tip.offsetHeight;
+      if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
+      if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
+    hit.addEventListener('mousemove',show);
+    hit.addEventListener('mouseleave',()=>{ hideTip(); guide.setAttribute('visibility','hidden'); dot.setAttribute('visibility','hidden'); });
+    hit.addEventListener('click',e=>{ e.stopPropagation(); show(e); });
+    svgEl.appendChild(hit);
+  }
+
+  /* flag list: which expenses count (open with the Expenses button in the header) */
+  const btn=document.getElementById('ylpEdit');
+  if(btn){ btn.classList.toggle('on',ylpOpen); btn.setAttribute('aria-expanded',String(ylpOpen)); }
+  box.style.display=ylpOpen ? '' : 'none';
+  if(!ylpOpen){ box.innerHTML=''; return; }
+  const amt=v=> Math.round(v||0) ? fmt(v) : '\u2014';
+  let totAll=0, totCnt=0; leaves.forEach(l=>{ totAll+=t12[l]||0; if(counted(l)) totCnt+=t12[l]||0; });
+  const free=leaves.filter(l=>!locked(l));
+  let h=`<div class="nwtools"><span class="ylpnote">Counted <b>${fmt(totCnt)}</b> of ${fmt(totAll)} \u00b7 T12M ${esc(cmpShort(m1-11,m1))}</span>`+
+    `<button type="button" data-ylpall="on"${free.every(l=>!ylpOff.has(l))?' disabled':''}>Select all</button>`+
+    `<button type="button" data-ylpall="off"${free.every(l=>ylpOff.has(l))?' disabled':''}>Select none</button></div>`;
+  groups.forEach(g=>{
+    const ls=YLP_LIST.get(g), fr=ls.filter(l=>!locked(l)), on=fr.filter(l=>!ylpOff.has(l)).length;
+    const st= !fr.length ? ' disabled' : on===fr.length ? ' checked' : '';
+    h+=`<div class="ylpg"><label class="gh" style="border-left-color:${GROUPCOL[g]||BUDGET}">`+
+       `<input type="checkbox" data-g="${esc(g)}"${st}${on && on<fr.length?' data-ind="1"':''}>`+
+       `<span class="nm">${esc(g)}</span><span class="amt">${amt(ls.reduce((a,l)=>a+(t12[l]||0),0))}</span></label><div class="ylpitems">`;
+    ls.forEach(l=>{ const lk=locked(l), c=counted(l);
+      h+=`<label class="${lk?'lock':c?'':'off'}"${lk?' title="Excluded from metrics (Include all brings it back)"':''}>`+
+         `<input type="checkbox" data-l="${esc(l)}"${c?' checked':''}${lk?' disabled':''}>`+
+         `<span class="nm">${esc(l)}</span><span class="amt">${amt(t12[l])}</span></label>`; });
+    h+=`</div></div>`;
+  });
+  box.innerHTML=h;
+  box.querySelectorAll('input[data-ind]').forEach(i=>{ i.indeterminate=true; });
+}
+
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
@@ -2330,7 +2544,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res); syncExclUI(); renderCashBars(); renderCompare();
+  paintTotals(res); render(res); syncExclUI(); renderCashBars(); renderCompare(); renderYlp();
   /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
      Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
      drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing
@@ -2481,10 +2695,28 @@ function initControlsOnce(){
     bEl.addEventListener('change',()=>{ cmp.b=+bEl.value; renderCompare(); });
     document.getElementById('cmpSort').addEventListener('change',e=>{ cmpSort=e.target.checked; renderCompare(); });
   }
+  /* years of life paid: the Expenses button opens / closes the flag list; a flag
+     (label or whole group) or Select all / none recounts and is kept in localStorage */
+  ylpLoad();
+  document.getElementById('ylpEdit').addEventListener('click',e=>{ e.stopPropagation(); ylpOpen=!ylpOpen; renderYlp(); });
+  {
+    const fl=document.getElementById('ylpFlags');
+    const freeOf=list=> list.filter(l=>!YLP_LOCK.has(l));   // labels the Sankey excludes stay as they are
+    fl.addEventListener('change',e=>{ const t=e.target; if(!t || t.type!=='checkbox') return;
+      if(t.dataset.l!=null){ if(t.checked) ylpOff.delete(t.dataset.l); else ylpOff.add(t.dataset.l); }
+      else if(t.dataset.g!=null) freeOf(YLP_LIST.get(t.dataset.g)||[]).forEach(l=>{ if(t.checked) ylpOff.delete(l); else ylpOff.add(l); });
+      ylpSave(); renderYlp(); });
+    fl.addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('button[data-ylpall]'); if(!b) return;
+      e.stopPropagation();
+      if(b.getAttribute('data-ylpall')==='on') ylpOff.clear();
+      else freeOf([...YLP_LIST.values()].flat()).forEach(l=>ylpOff.add(l));
+      ylpSave(); renderYlp(); });
+  }
   /* the yearly bars are drawn at the frame's real width, so redraw when it changes */
   let cfRT=null;
   window.addEventListener('resize',()=>{ clearTimeout(cfRT); cfRT=setTimeout(()=>{
-    const s=document.getElementById('cfbars'); if(s && Math.round(s.getBoundingClientRect().width)!==cfLastW) renderCashBars(); },150); });
+    const s=document.getElementById('cfbars'); if(s && Math.round(s.getBoundingClientRect().width)!==cfLastW) renderCashBars();
+    renderYlp(); },150); });
   const er=document.getElementById('exclReset');
   if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
@@ -2499,6 +2731,8 @@ function initControlsOnce(){
   document.getElementById('cfbwrap').style.display='';
   document.getElementById('cmphead').style.display='';
   document.getElementById('cmpwrap').style.display='';
+  document.getElementById('ylphead').style.display='';
+  document.getElementById('ylpwrap').style.display='';
   controlsReady=true;
 }
 function renderAll(){ build(); requestAnimationFrame(()=>{ buildNetWorth(); renderCashBars(); }); }   // Sankey first, table + yearly bars next frame
@@ -2567,7 +2801,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries };
 }
 </script>
 </body>
