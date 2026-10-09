@@ -21,11 +21,31 @@
   h1{margin:0; font-size:19px; font-weight:700;}
   h2{margin:0; font-size:14px; font-weight:700;}
   .sub{color:var(--muted); font-size:12.5px; margin-top:3px;}
+  /* pages: each block is its own page (Net Worth, Cash Flow, Savings, Compare, Years Paid);
+     only the page on screen is shown AND rendered. Desktop: sticky tab row under the title;
+     phone: fixed bottom tab bar (see the 680px block). */
+  .tabs{position:sticky; top:0; z-index:17; display:flex; gap:4px; margin:4px 26px 0; padding:6px 0;
+        max-width:940px; background:var(--bg); overflow-x:auto; scrollbar-width:none;}
+  .tabs::-webkit-scrollbar{display:none;}
+  .tabs.stuck{box-shadow:0 1px 0 var(--grid);}
+  .tabs a{flex:0 0 auto; padding:7px 13px; border-radius:8px; color:var(--muted); font-size:12.5px; font-weight:600;
+          text-decoration:none; white-space:nowrap; -webkit-tap-highlight-color:transparent;}
+  .tabs a:hover{color:var(--ink); background:var(--panel);}
+  .tabs a[aria-current="page"]{color:#fff; background:#25603f;}
+  .tabs a:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
+  .page[hidden]{display:none !important;}
+  /* section header with tools on the right (the Avg/m / K toggles move into the page on screen) */
+  .hdrow{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .hdtools{display:flex; align-items:center; gap:6px; min-width:0;}
+  .tgslot{display:contents;}
+  /* Avg/m does nothing on Net Worth and Years Paid, so only K shows there */
+  body[data-page="networth"] #tgAvg, body[data-page="life"] #tgAvg{display:none;}
+  body[data-page="networth"] #tgK, body[data-page="life"] #tgK{border-left:0;}
   /* cash flow controls: one compact row (3 short selects + a segmented group of toggles) */
   .controls{margin:10px 26px 0; display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:12.5px; max-width:940px;}
   /* sticky: the period presets (This M / Last M / T12M) and the Avg/m / K toggles stay
      on screen while scrolling through the Sankey and the Cash Flow vs Savings chart */
-  .controls{position:sticky; top:0; z-index:15; background:var(--bg); padding:6px 0;}
+  .controls{position:sticky; top:var(--tabsh,0px); z-index:15; background:var(--bg); padding:6px 0;}
   .controls.stuck{box-shadow:0 1px 0 var(--grid), 0 6px 12px -6px rgba(0,0,0,.6);}
   select{background:var(--panel); color:var(--ink); border:1px solid var(--grid); border-radius:7px; padding:5px 8px;}
   .controls select{height:30px; padding:0 6px; font-size:12.5px; font-family:inherit;}
@@ -245,7 +265,7 @@
   /* section titles (Assets & Liabilities, Cash Flow) */
   .nwhead{max-width:940px;}
   .nwhead h2{font-size:15px; letter-spacing:.2px;}
-  .cfhead{margin-top:6px; padding-top:18px; border-top:1px solid var(--grid);}
+  .cfhead{margin-top:14px;}   /* own page now, so no separator rule above it */
   /* two-column table (name | value) so it always fits the viewport, no sideways scroll;
      same 940px width as the Sankey frame and the card rows */
   .nwwrap{margin:12px 26px 24px; padding:10px 12px; max-width:940px;}
@@ -380,6 +400,15 @@
     .nw td.t2{padding-left:16px;}
     .nw col.cval{width:38%;}
     .swipehint{display:block;}
+    /* pages: bottom tab bar, five equal tabs within thumb reach; the page keeps room for it */
+    .tabs{position:fixed; top:auto; bottom:0; left:0; right:0; margin:0; max-width:none; z-index:25; gap:2px;
+          padding:5px 5px calc(5px + env(safe-area-inset-bottom)); border-top:1px solid var(--grid);
+          background:rgba(15,20,32,.97); box-shadow:0 -6px 14px -8px rgba(0,0,0,.7);}
+    .tabs a{flex:1 1 0; min-width:0; text-align:center; padding:10px 2px; font-size:11.5px;
+            overflow:hidden; text-overflow:ellipsis;}
+    body{padding-bottom:calc(60px + env(safe-area-inset-bottom));}
+    .hdrow,.cfbhead,.ylphead{flex-wrap:wrap; gap:8px;}
+    .hdtools,.cfbtools{flex-wrap:wrap; margin-left:auto; justify-content:flex-end;}
   }
   .swipehint{display:none; margin:4px 14px 0; color:var(--muted); font-size:11px;}
   /* skeleton Loading_State — present at first paint (no JS), CSS-only shimmer,
@@ -409,6 +438,17 @@
   <h1>Personal Finance</h1>
 </header>
 
+<!-- pages: one block per page. Only the page on screen is shown and rendered; the
+     others render the first time they are opened (then only when their inputs change).
+     The URL hash names the page (#cashflow ...), and the last page is reopened next time. -->
+<nav class="tabs" id="tabs" aria-label="Pages">
+  <a href="#networth" data-page="networth">Net Worth</a>
+  <a href="#cashflow" data-page="cashflow">Cash Flow</a>
+  <a href="#savings" data-page="savings">Savings</a>
+  <a href="#compare" data-page="compare">Compare</a>
+  <a href="#life" data-page="life">Years Paid</a>
+</nav>
+
 <div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
 <div class="badge" id="dataBadge" style="display:none"></div>
 
@@ -431,16 +471,18 @@
   <div class="sk sk-sankey"></div>
 </div>
 
-<!-- 1) net worth: one hero card (value, 12-month change, trend sparkline) -->
+<!-- PAGE Net Worth: hero card (value, trend sparkline, investment gains) + assets & liabilities -->
+<section class="page" id="pg-networth" data-page="networth" hidden>
 <div class="nwcards" id="nwcards"></div>
-
-<!-- 2) assets & liabilities tables -->
-<div class="nwhead" id="nwhead" style="display:none">
+<div class="nwhead hdrow" id="nwhead" style="display:none">
   <h2>Assets &amp; Liabilities</h2>
+  <span class="hdtools"><span class="tgslot"></span></span>
 </div>
 <div class="nwwrap framed" id="nwwrap" style="display:none"></div>
+</section>
 
-<!-- 3) cash flow: period controls, income / expenses / savings, Sankey -->
+<!-- PAGE Cash Flow: period controls, range bar, income / expenses / savings cards, Sankey -->
+<section class="page" id="pg-cashflow" data-page="cashflow" hidden>
 <div class="nwhead cfhead" id="cfhead" style="display:none">
   <h2>Cash Flow</h2>
 </div>
@@ -461,10 +503,10 @@
     <button type="button" class="pill" id="lastMonth" title="Last complete month">Last M</button>
     <label class="pill" title="Trailing 12 complete months"><input type="checkbox" id="t12">T12M</label>
   </span>
-  <!-- view toggles -->
-  <span class="pills toggles">
-    <label class="pill" title="Per month (average)"><input type="checkbox" id="tMonthly">Avg/m</label>
-    <label class="pill" title="Values in thousands"><input type="checkbox" id="tK">K</label>
+  <!-- view toggles: global, this one element moves into the header of the page on screen -->
+  <span class="pills toggles" id="toggles">
+    <label class="pill" id="tgAvg" title="Per month (average)"><input type="checkbox" id="tMonthly">Avg/m</label>
+    <label class="pill" id="tgK" title="Values in thousands"><input type="checkbox" id="tK">K</label>
   </span>
   <span id="exclBox"><span id="exclCount"></span><button id="exclReset" type="button">Include all</button></span>
 </div>
@@ -483,14 +525,17 @@
 <div class="totals" id="totals"></div>
 <div class="swipehint" id="swipehint">Swipe the diagram sideways to see it all →</div>
 <div class="wrap framed"><svg id="sankey" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg></div>
+</section>
 
-<!-- 4) cash flow vs savings: one stacked bar per year (income up, expenses down) and the
-     savings rate on total income and on safe income (Base + TFR + Food tickets) -->
+<!-- PAGE Savings (Cash Flow vs Savings): one stacked bar per year (income up, expenses down)
+     and the savings rate on total income and on safe income (Base + TFR + Food tickets) -->
+<section class="page" id="pg-savings" data-page="savings" hidden>
 <div class="nwhead cfbhead" id="cfbhead" style="display:none">
   <h2>Cash Flow vs Savings</h2>
   <div class="cfbtools">
     <!-- month drill-down: shown while one year's months are on screen, goes back to the years -->
     <span class="pills" id="cfBackWrap" style="display:none"><button type="button" class="pill on" id="cfBack" title="Back to all years (Esc)">&lsaquo; Year</button></span>
+    <span class="tgslot"></span>
     <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
     <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label></span>
     <!-- Overview (stacks + savings %) or one category / label / detail -->
@@ -500,8 +545,10 @@
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
 </div>
+</section>
 
-<!-- 5) period comparison: period A vs period B per category, what went up and down -->
+<!-- PAGE Compare (Period Comparison): period A vs period B per category, what went up and down -->
+<section class="page" id="pg-compare" data-page="compare" hidden>
 <div class="nwhead cmphead" id="cmphead" style="display:none">
   <h2>Period Comparison</h2>
   <div class="cmptools">
@@ -511,20 +558,25 @@
     <select id="cmpModeB" aria-label="Period B type" title="Period B"></select>
     <select id="cmpB" aria-label="Period B ends" title="Period B (end month / year)"></select>
     <span class="pills"><label class="pill" title="Sort each group by size of the change (off: Sankey order)"><input type="checkbox" id="cmpSort" checked>By &Delta;</label></span>
+    <span class="tgslot"></span>
   </div>
 </div>
 <div class="cmpwrap framed" id="cmpwrap" style="display:none"></div>
+</section>
 
-<!-- 6) years of life paid: net worth / T12M expenses, one point per month; the Expenses
-     button opens the flag list of which expenses count -->
+<!-- PAGE Years Paid (Years of Life Paid): net worth / T12M expenses, one point per month;
+     the Expenses button opens the flag list of which expenses count -->
+<section class="page" id="pg-life" data-page="life" hidden>
 <div class="nwhead ylphead" id="ylphead" style="display:none">
   <h2>Years of Life Paid</h2>
-  <span class="pills"><button type="button" class="pill" id="ylpEdit" title="Pick which expenses count" aria-expanded="false" aria-controls="ylpFlags">Expenses<span id="ylpCnt"></span></button></span>
+  <span class="hdtools"><span class="tgslot"></span>
+  <span class="pills"><button type="button" class="pill" id="ylpEdit" title="Pick which expenses count" aria-expanded="false" aria-controls="ylpFlags">Expenses<span id="ylpCnt"></span></button></span></span>
 </div>
 <div class="ylpwrap framed" id="ylpwrap" style="display:none">
   <svg id="ylpchart" viewBox="0 0 900 260"></svg>
   <div class="ylpflags" id="ylpFlags" style="display:none"></div>
 </div>
+</section>
 
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
@@ -556,6 +608,48 @@
 const SHEET_ID="1SnEHP7oBD9Fo38yQ0OvlhYESiidmY98f9fqfHNhDLnc";
 const SHEET_NAME="DB";
 const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+/* Slim read. The DB tab has 23 columns and ~13K rows (2.4 MB as CSV), but the app needs
+   11 columns and only their monthly sums. A gviz query asks Google to pick those columns
+   and sum VALUE per group: ~6K rows, ~0.57 MB (36 KB gzipped on the wire), same totals
+   (sums of the raw values, so they are even a little closer to the sheet's own totals
+   than the rounded display values of the full export). Columns are addressed by letter,
+   so every answer is checked against the header names (slimOk) and, if the sheet's
+   columns ever move, the full export is read instead and the letters are re-learned from
+   its header for the next load (SLIM_KEY in localStorage). */
+const NEED_COLS=["YEAR","MONTH","ACCOUNT","LABEL","DETAIL","ASSETCLASSDETAILS","VARIABLE","TYPE","CATEGORY1","CATEGORY3","VALUE"];
+const SLIM_KEY="finance-sankey-cols-v1";
+const SLIM_DEFAULT={YEAR:"A",MONTH:"B",ACCOUNT:"H",VALUE:"I",LABEL:"J",DETAIL:"K",ASSETCLASSDETAILS:"L",
+                    VARIABLE:"N",TYPE:"P",CATEGORY1:"R",CATEGORY3:"T"};
+function slimCols(){
+  try{ const c=JSON.parse(localStorage.getItem(SLIM_KEY)||'null');
+    if(c && NEED_COLS.every(n=>/^[A-Z]{1,2}$/.test(c[n]||''))) return c; }catch(e){}
+  return SLIM_DEFAULT;
+}
+/* pure: the gviz query URL for a column-letter map (VALUE summed, last column) */
+function slimURL(c){
+  const keys=NEED_COLS.filter(n=>n!=='VALUE').map(n=>c[n]).join(',');
+  return CSV_URL+'&headers=1&tq='+encodeURIComponent(`select ${keys},sum(${c.VALUE}) group by ${keys} label sum(${c.VALUE}) 'VALUE'`);
+}
+/* pure: column letters of the needed columns, read off a header row (A..Z, AA..); null if one is missing */
+function learnCols(headRow){
+  const head=(headRow||[]).map(norm), col=i=> (i>=26 ? String.fromCharCode(64+Math.floor(i/26)) : '')+String.fromCharCode(65+i%26);
+  const c={}; for(const n of NEED_COLS){ const i=head.indexOf(n); if(i<0) return null; c[n]=col(i); }
+  return c;
+}
+/* pure: a slim answer is usable when its header has every needed column with VALUE last,
+   and every VALUE is a plain number (a thousands separator would make parseFloat cut it) */
+function slimOk(csv){
+  if(typeof csv!=='string') return false;
+  const nl=csv.indexOf('\n'), head=(parseCSV(nl<0?csv:csv.slice(0,nl))[0]||[]).map(norm);
+  if(head[head.length-1]!=='VALUE' || !NEED_COLS.every(n=>head.indexOf(n)>=0)) return false;
+  return !/"[^"\n]*[^0-9.eE+\-"\n][^"\n]*"\r?$/m.test(nl<0?'':csv.slice(nl+1));
+}
+/* pure: short fingerprint of a CSV (length + FNV-1a), so a refresh can tell "same data"
+   without keeping the whole CSV in the cache */
+function csvHash(s){
+  let h=0x811c9dc5; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); }
+  return s.length+':'+(h>>>0).toString(36);
+}
 
 const INCGRP={WORKINCOME:"Work income",NONWORKINCOME:"Non-work income"};
 const EXPGRP={NEEDS:"Needs",WANTS:"Wants",LIBERALITY:"Liberality"};
@@ -567,6 +661,19 @@ const noHover=()=> typeof window.matchMedia==='function' && window.matchMedia('(
 
 let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,allMaxMi:0,refMonth:1,refWindow:1,
   refs:{trailing12:{income:1,months:12},singleMonth:{income:1,months:1},fullYear:{income:1,months:12},allTime:{income:1,months:1}}};
+
+/* ---- pages ----------------------------------------------------------------
+   One block per page: networth | cashflow | savings | compare | life. Only the page on
+   screen is shown AND drawn: every renderer returns early while its page is hidden
+   (pageOn), and showPage() draws the page it opens. The URL hash names the page and the
+   last page is reopened on the next visit (PAGE_KEY). */
+const PAGES=['networth','cashflow','savings','compare','life'];
+const PAGE_KEY='finance-sankey-page-v1';
+const pageFromHash=()=>{ const h=String(location.hash||'').replace(/^#/,''); return PAGES.indexOf(h)>=0 ? h : null; };
+let PAGE=(()=>{ const h=pageFromHash(); if(h) return h;
+  try{ const s=localStorage.getItem(PAGE_KEY); if(PAGES.indexOf(s)>=0) return s; }catch(e){}
+  return 'networth'; })();
+const pageOn=p=> PAGE===p;
 
 /* minimal RFC4180 CSV parser */
 function parseCSV(text){
@@ -1540,17 +1647,21 @@ function buildNetWorth(){
     if(L){ r.v=L.value; r.live=L; }
     else if(LIVE.capgain!=null && r.acct==='CAPGAIN' && r.cat==='LIABILITIES'){ r.v=LIVE.capgain; r.live={capgain:true}; }
   });
+  const sumV=list=>list.reduce((a,r)=>a+r.v,0);
+  const gTot=sumV(rows);
+  NW_NOW = LIVE ? {v:gTot, at:LIVE.at} : null;              // Years of Life Paid "Now" point
+  /* the hero card and the tables are drawn only while the Net Worth page is on screen;
+     the live net worth above is kept current for the Years Paid page either way */
+  if(!pageOn('networth')){ renderYlp(); return; }
   const qty=n=>{ const [i,d]=String(+Number(n).toFixed(4)).split('.'); return grp(i)+(d?','+d:''); };
   const px=n=>{ const c=Math.round(n*100); return grp(Math.floor(c/100))+','+String(c%100).padStart(2,'0'); };
   const cap=s=> s ? s.charAt(0)+s.slice(1).toLowerCase() : s;
   const vcell=v=>`<td class="val ${v<0?'neg':''}">${v<0?'('+fmt(-v)+')':fmt(v)}</td>`;
-  const sumV=list=>list.reduce((a,r)=>a+r.v,0);
   const money=v=>(v<0?'\u2212':'')+fmt(Math.abs(v));
 
   // hero card: net worth only (assets / liabilities totals live on top of their tables).
   // Month-end net worth series = running sum of every holding's flows, for the
   // 12-month change and the trend sparkline.
-  const gTot=sumV(rows);
   const byMi={}; holds.forEach(h=>{ for(const k in h.flows) byMi[k]=(byMi[k]||0)+h.flows[k]; });
   // start the trend where the cash-flow history starts (META.minMi), NOT at allMinMi:
   // a blank/zero sheet date parses as Dec 1899 and would squash the line flat.
@@ -1560,7 +1671,6 @@ function buildNetWorth(){
   for(const k in byMi){ if(+k<s0) run+=byMi[k]; }
   for(let mi=s0; mi<=cur; mi++){ run+=byMi[mi]||0; series.push(run); }
   if(LIVE && series.length) series[series.length-1]=gTot;   // latest point = live net worth
-  NW_NOW = LIVE ? {v:gTot, at:LIVE.at} : null;              // Years of Life Paid "Now" point
   const mLab=mi=>MONTHS[mi%12]+' '+Math.floor(mi/12);
   const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
   const liveNote = LIVE ? `<b class="live">LIVE</b> ${hhmm(LIVE.at)}` : mLab(cur);
@@ -2017,6 +2127,7 @@ let cfLastW=0, cfSig=null, cfData=null;
 /* called from every build(); redraws only when an input changed (data, exclusions,
    Avg/m, K, width, drill year), so dragging the range bar does not rebuild the chart */
 function renderCashBars(){
+  if(!pageOn('savings')) return;   // drawn when its page opens (the signature check below decides)
   const svgEl=document.getElementById('cfbars');
   if(!svgEl || !DATA.length) return;
   const perMonth=monthlyEl.checked;
@@ -2270,6 +2381,7 @@ function cmpInit(){
 }
 /* called from every build(); redraws only when an input changed */
 function renderCompare(){
+  if(!pageOn('compare')) return;   // drawn when its page opens
   const wrap=document.getElementById('cmpwrap');
   if(!wrap || !DATA.length) return;
   if(DATA!==cmpOptData) cmpInit();
@@ -2389,6 +2501,7 @@ function ylpSeries(data, holds, minMi, lastMi, off, excluded){
   return out;
 }
 function renderYlp(){
+  if(!pageOn('life')) return;   // drawn when its page opens
   const svgEl=document.getElementById('ylpchart'), box=document.getElementById('ylpFlags');
   if(!svgEl || !box || !DATA.length) return;
   const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
@@ -2530,6 +2643,13 @@ function renderYlp(){
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
+  syncExclUI();
+  /* the Sankey, its cards and the detail panel live on the Cash Flow page; elsewhere only
+     the chart of the page on screen redraws (the others return early) */
+  if(pageOn('cashflow')) buildSankey();
+  renderCashBars(); renderCompare(); renderYlp();
+}
+function buildSankey(){
   const raw=computeLinks(curMiF,curMiT); const monthly=monthlyEl.checked; curDiv=monthly?raw.months:1;
   /* filter the diagram by the current Selection_State before sizing/painting, so
      render() and paintTotals() consume the selection-adjusted result; res.hidden
@@ -2544,7 +2664,7 @@ function build(){
     plabel += ` · per-month average over ${res.months} month${res.months>1?'s':''}`;
   }
   document.getElementById('periodLabel').textContent=plabel;
-  paintTotals(res); render(res); syncExclUI(); renderCashBars(); renderCompare(); renderYlp();
+  paintTotals(res); render(res);
   /* If the Detail_Panel is open, refresh it against the new window/mode so ANY
      Period_Selector change (Quick-set dropdown, year/month pickers, range-bar
      drag/resize, per-month toggle) follows through to the overlay WITHOUT tearing
@@ -2564,32 +2684,54 @@ function syncExclUI(){
 }
 
 /* ---- data cache (stale-while-revalidate) --------------------------------- */
-/* Stores the raw CSV only, in the visitor's own browser (localStorage). Nothing
-   is transmitted anywhere except the existing public Google Sheets CSV endpoint. */
+/* Stores a SNAPSHOT of the crunched data (DATA, DETAIL, NWHOLD, META, ~0.3 MB) plus a
+   fingerprint of the CSV it came from, in the visitor's own browser (localStorage).
+   A returning visit paints straight from the snapshot: no CSV parse, no aggregate().
+   The background refresh only re-crunches when the fingerprint changed. The old v1
+   cache held the raw 2.4 MB CSV (~6 MB as stored), which was slow to read, close to
+   the browser quota, and still needed a full parse on every open; it is deleted.
+   Nothing is transmitted anywhere except the existing public Google Sheets endpoint. */
 const SheetCache={
-  KEY:"finance-sankey-cache-v1",
-  MAX_AGE_MS:24*60*60*1000,
+  KEY:"finance-sankey-cache-v2",
+  OLD_KEYS:["finance-sankey-cache-v1"],
+  MAX_AGE_MS:30*24*60*60*1000,   // a snapshot up to 30 days old is shown while the refresh runs
   available(){ try{ const k="__fs_probe__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }catch(e){ return false; } },
+  dropOld(){ try{ this.OLD_KEYS.forEach(k=>localStorage.removeItem(k)); }catch(e){} },
   read(){ try{ const raw=localStorage.getItem(this.KEY); if(!raw) return {ok:false};
       const entry=JSON.parse(raw);
-      if(!entry || typeof entry.csv!=='string' || typeof entry.retrievedAt!=='number') return {ok:false};
+      if(!entry || entry.v!==2 || typeof entry.hash!=='string' || typeof entry.retrievedAt!=='number' ||
+         !Array.isArray(entry.data) || !entry.data.length || !Array.isArray(entry.hold) || !entry.meta) return {ok:false};
       return {ok:true, entry}; }catch(e){ return {ok:false}; } },
-  write(csv,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:1,csv,retrievedAt})); return true; }catch(e){ return false; } },
+  /* snapshot of what is loaded right now (call after applyData / applySnapshot) */
+  /* bump KEY (and v) whenever aggregate() changes the shape or meaning of what is stored */
+  write(hash,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:2, hash, retrievedAt,
+      data:DATA, detail:DETAIL, hold:NWHOLD, meta:META})); return true; }catch(e){ return false; } },
   isFresh(entry,now){ return !!entry && typeof entry.retrievedAt==='number' && (now-entry.retrievedAt) <= this.MAX_AGE_MS; },
-  differs(a,b){ return String(a) !== String(b); }
+  differs(entry,hash){ return !entry || entry.hash!==hash; }
 };
 
 /* ---- fetch with bounded retry (<=3) + 10s per-attempt timeout ------------ */
+async function fetchText(url){
+  let signal, to;
+  if(typeof AbortController==='function'){ const ctrl=new AbortController(); signal=ctrl.signal; to=setTimeout(()=>ctrl.abort(),10000); }
+  try{
+    const resp=await fetch(url, signal?{cache:"no-store",signal}:{cache:"no-store"});
+    if(!resp.ok) throw new Error("HTTP "+resp.status);
+    return await resp.text();
+  } finally { if(to) clearTimeout(to); }
+}
+/* slim query first (attempts 1-2); if Google answers but the answer does not look right
+   (columns moved, error page), or on the last attempt, read the full export instead and
+   re-learn the column letters from its header for next time */
 async function fetchSheet(){
   let lastErr;
   for(let attempt=0; attempt<3; attempt++){
     try{
-      let signal, to;
-      if(typeof AbortController==='function'){ const ctrl=new AbortController(); signal=ctrl.signal; to=setTimeout(()=>ctrl.abort(),10000); }
-      const resp=await fetch(CSV_URL, signal?{cache:"no-store",signal}:{cache:"no-store"});
-      if(to) clearTimeout(to);
-      if(!resp.ok) throw new Error("HTTP "+resp.status);
-      return await resp.text();
+      if(attempt<2){ const t=await fetchText(slimURL(slimCols())); if(slimOk(t)) return t; }
+      const full=await fetchText(CSV_URL), nl=full.indexOf('\n');
+      const c=learnCols(parseCSV(nl<0?full:full.slice(0,nl))[0]);
+      if(c){ try{ localStorage.setItem(SLIM_KEY, JSON.stringify(c)); }catch(e){} }
+      return full;
     }catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
   }
   throw lastErr || new Error("fetch failed");
@@ -2720,9 +2862,6 @@ function initControlsOnce(){
   const er=document.getElementById('exclReset');
   if(er) er.addEventListener('click',e=>{ e.stopPropagation(); deselected.clear(); build(); });
   document.getElementById('controls').style.display='';
-  /* sticky controls bar: a soft shadow while it floats over the content */
-  { const c=document.getElementById('controls'), upd=()=>c.classList.toggle('stuck', c.getBoundingClientRect().top<=0.5 && window.scrollY>0);
-    window.addEventListener('scroll',upd,{passive:true}); window.addEventListener('resize',upd); upd(); }
   document.getElementById('rangeBox').style.display='';
   document.getElementById('nwhead').style.display='';
   document.getElementById('nwwrap').style.display='';
@@ -2734,10 +2873,83 @@ function initControlsOnce(){
   document.getElementById('ylphead').style.display='';
   document.getElementById('ylpwrap').style.display='';
   controlsReady=true;
+  syncPageUI();                                // reveal the page on screen (pages stay hidden until data is in)
 }
-function renderAll(){ build(); requestAnimationFrame(()=>{ buildNetWorth(); renderCashBars(); }); }   // Sankey first, table + yearly bars next frame
-function applyData(csv){
-  aggregate(parseCSV(csv));
+
+/* ---- page switching ----------------------------------------------------------
+   showPage(): remember the scroll of the page being left, close the hover / detail
+   overlays, show the new page, move the Avg/m | K toggles into it, draw it, and put
+   back its own scroll position. The Sankey and the net worth tables redraw on entry
+   (a few ms); the three charts skip the redraw when nothing they show has changed. */
+const pageScroll={};
+function syncPageUI(){
+  document.body.setAttribute('data-page',PAGE);
+  document.querySelectorAll('section.page').forEach(s=>{ s.hidden = !controlsReady || s.getAttribute('data-page')!==PAGE; });
+  document.querySelectorAll('#tabs a[data-page]').forEach(a=>{
+    if(a.getAttribute('data-page')===PAGE) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  /* one Avg/m | K element: back in the controls row on Cash Flow, else in the page header */
+  const tg=document.getElementById('toggles');
+  if(tg){
+    if(PAGE==='cashflow'){ const c=document.getElementById('controls'), ex=document.getElementById('exclBox');
+      if(tg.parentNode!==c) c.insertBefore(tg,ex); }
+    else { const slot=document.querySelector('#pg-'+PAGE+' .tgslot'); if(slot && tg.parentNode!==slot) slot.appendChild(tg); }
+  }
+  syncSticky();
+}
+function renderPage(){
+  if(!controlsReady) return;
+  if(PAGE==='cashflow') build();
+  else if(PAGE==='networth') buildNetWorth();
+  else if(PAGE==='savings') renderCashBars();
+  else if(PAGE==='compare') renderCompare();
+  else if(PAGE==='life') renderYlp();
+}
+function showPage(p, fromHash){
+  if(PAGES.indexOf(p)<0 || p===PAGE) return;
+  pageScroll[PAGE]=window.scrollY;
+  hideMini(); hideTip(); if(panel) closePanel();
+  PAGE=p;
+  try{ localStorage.setItem(PAGE_KEY,p); }catch(e){}
+  if(!fromHash && location.hash!=='#'+p){ try{ history.replaceState(null,'','#'+p); }catch(e){} }
+  syncPageUI(); renderPage();
+  window.scrollTo(0, pageScroll[p]||0);
+  syncSticky();
+}
+document.getElementById('tabs').addEventListener('click',e=>{
+  const a=e.target.closest && e.target.closest('a[data-page]'); if(!a) return;
+  e.preventDefault(); e.stopPropagation(); showPage(a.getAttribute('data-page'));
+});
+window.addEventListener('hashchange',()=>{ const h=pageFromHash(); if(h) showPage(h,true); });
+/* sticky bars: on wide screens the tab row sticks at the top and the Cash Flow controls
+   stick right under it (--tabsh); on phones the tabs are a fixed bottom bar, so the
+   controls stick at the top. Each gets a soft shadow while it floats over the content. */
+let stickyTop=0, tabsSticky=false;
+function measureSticky(){
+  const t=document.getElementById('tabs');
+  tabsSticky=!!t && getComputedStyle(t).position==='sticky';
+  const h=tabsSticky ? t.offsetHeight : 0;
+  if(h!==stickyTop){ stickyTop=h; document.documentElement.style.setProperty('--tabsh', h+'px'); }
+}
+function onScrollSticky(){
+  const t=document.getElementById('tabs'), c=document.getElementById('controls'), y=window.scrollY>0;
+  if(t) t.classList.toggle('stuck', tabsSticky && y && t.getBoundingClientRect().top<=0.5);
+  if(c && pageOn('cashflow') && c.style.display!=='none')
+    c.classList.toggle('stuck', y && c.getBoundingClientRect().top<=stickyTop+0.5);
+}
+function syncSticky(){ measureSticky(); onScrollSticky(); }
+window.addEventListener('scroll',onScrollSticky,{passive:true});
+window.addEventListener('resize',syncSticky);
+/* only the page on screen draws anything (each renderer returns early while its page is
+   hidden); buildNetWorth() still runs to keep the live net worth (NW_NOW) current */
+function renderAll(){ build(); buildNetWorth(); }
+function applyData(csv){ aggregate(parseCSV(csv)); afterData(); }
+/* returning visit: install the cached snapshot as-is (RANK is rebuilt, it is cheap) */
+function applySnapshot(e){
+  DATA=e.data; DETAIL=e.detail||[]; NWHOLD=e.hold; META=e.meta;
+  RANK=stableRank(DATA, DETAIL, META.maxMi);
+  afterData();
+}
+function afterData(){
   if(!DATA.length) throw new Error("No usable rows (check the sheet is shared 'anyone with the link → Viewer' and named DB).");
   syncYearOptions();
   initControlsOnce();
@@ -2764,27 +2976,33 @@ function showError(msg,timedOut){
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
 function boot(){
+  syncPageUI();                                // highlight the tab of the page to open (pages show once data is in)
   loadLive();                                  // live ETF values, in parallel with the DB load
   setInterval(()=>{ if(!document.hidden) loadLive(); }, 5*60*1000);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) loadLive(); });
+  SheetCache.dropOld();                        // the old raw-CSV cache (v1) is no longer read
   const cached=SheetCache.read(), now=Date.now();
   let renderedFromCache=false, settled=false;
   if(cached.ok && SheetCache.isFresh(cached.entry,now)){
-    try{ applyData(cached.entry.csv); renderedFromCache=true; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
+    try{ applySnapshot(cached.entry); renderedFromCache=true; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
   }
   const overall=setTimeout(()=>{ if(!settled && !renderedFromCache) showError('',true); },30000);
   fetchSheet().then(csv=>{
     settled=true; clearTimeout(overall);
+    const h=csvHash(csv), t=Date.now();
     if(renderedFromCache){
-      if(SheetCache.differs(cached.entry.csv,csv)){ SheetCache.write(csv,Date.now()); applyData(csv); }
+      /* same fingerprint: nothing to redo, just re-stamp the snapshot twice a day so it
+         stays inside MAX_AGE; new data: crunch it, redraw the page, replace the snapshot */
+      if(SheetCache.differs(cached.entry,h)){ applyData(csv); SheetCache.write(h,t); }
+      else if(t-cached.entry.retrievedAt > 12*60*60*1000) SheetCache.write(h,t);
       clearBadge();                            // live data confirmed current
     }else{
-      applyData(csv); SheetCache.write(csv,Date.now()); clearBadge();
+      applyData(csv); SheetCache.write(h,Date.now()); clearBadge();
     }
   }).catch(err=>{
     settled=true; clearTimeout(overall);
     if(renderedFromCache){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
-    if(cached.ok){ try{ applyData(cached.entry.csv); showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
+    if(cached.ok){ try{ applySnapshot(cached.entry); showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
     showError(err && err.message ? err.message : 'load failed');
   });
 }
@@ -2801,7 +3019,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash };
 }
 </script>
 </body>

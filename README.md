@@ -7,23 +7,44 @@ browser.
 
 **Live:** https://stefanoamato93-wq.github.io/finance-sankey/
 
-## Page order
-1. Title (**Personal Finance**, title case; section titles too).
-2. **Net worth hero card**: the only headline box. Big net-worth value, a sub-line
-   with just `LIVE HH:MM` (or the latest month when live prices are unavailable), a
-   **trend sparkline** of month-end net worth on the right.
-3. **Assets & Liabilities** section: the Assets and Liabilities tables (side by
-   side on wide screens, stacked on phones), each with its total on top, collapsed
-   by category (Expand all / Collapse all cover both).
-4. **Cash Flow** section (separated by a thin rule): period controls, range bar,
-   Income / Expenses / Savings / Safe savings cards, then the money-flow **Sankey**.
-5. **Cash Flow vs Savings** chart (see below), under the Sankey.
-6. **Period Comparison** (see below): period A vs period B, what went up and down.
-7. **Years of Life Paid** (see below), at the bottom: net worth / T12M expenses per
-   month, with a flag list of which expenses count.
+## Pages (one block per page, added 9 Oct 2026)
+Title (**Personal Finance**, title case; section titles too), then a tab row with five
+pages. Only the page on screen is shown **and drawn**:
+
+| Tab | Hash | Content |
+|---|---|---|
+| **Net Worth** | `#networth` | Hero card (net worth, `LIVE HH:MM`, trend sparkline, investment gains) + **Assets & Liabilities** tables (side by side on wide screens, stacked on phones, totals on top, collapsed by category). |
+| **Cash Flow** | `#cashflow` | Period controls, range bar, Income / Expenses / Savings / Safe savings cards, the money-flow **Sankey** and its detail panel. |
+| **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below). |
+| **Compare** | `#compare` | **Period Comparison** (see below). |
+| **Years Paid** | `#life` | **Years of Life Paid** (see below). |
+
+- **Navigation:** desktop = a sticky tab row under the title (the Cash Flow controls
+  stick right under it, `--tabsh`); phone (<=680px) = a fixed bottom tab bar with five
+  equal tabs, so the Cash Flow controls stick at the top as before. Tabs set the URL
+  hash with `history.replaceState` (bookmarkable, no back-button clutter); opening a
+  URL with a hash, or changing it, opens that page (`hashchange`).
+- **Last page remembered:** a bare URL reopens the page used last
+  (`finance-sankey-page-v1` in localStorage), otherwise Net Worth.
+- **Lazy drawing:** every renderer returns early while its page is hidden
+  (`pageOn(p)`). `showPage(p)` closes the hover preview / tooltip / detail panel, shows
+  the page, draws it and restores that page's own scroll position. The Sankey and the
+  net worth tables redraw on entry (a few ms); the Savings, Compare and Years Paid charts
+  skip the redraw when nothing they show changed (signature checks). Dragging the range
+  bar now redraws only the Sankey and its cards.
+- **Shared state:** exclusions made on the Sankey, Avg/m and K apply on every page.
+  The **Avg/m | K** toggles are one element (`#toggles`) that moves into the page on
+  screen: the controls row on Cash Flow, the section header elsewhere. Avg/m is hidden
+  on Net Worth and Years Paid, where it changes nothing. The "N excluded · Include all"
+  pill stays on Cash Flow; Compare and Savings show their own "N excluded" notes.
+- `buildNetWorth()` always keeps the live net worth (`NW_NOW`) current, even while Net
+  Worth is hidden, so the Years Paid "Now" point is right without visiting Net Worth.
+- Code: `PAGES`, `PAGE`, `pageOn()`, `syncPageUI()`, `renderPage()`, `showPage()`,
+  `measureSticky()` / `onScrollSticky()`. `build()` = range + `buildSankey()` (Cash Flow
+  only) + the guarded charts. Check: `_verify_pages.py [shot]` (untracked).
 
 ### Years of Life Paid (net worth / T12M expenses)
-A monthly line chart under Period Comparison. Added 9 Oct 2026.
+A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
 - **Metric:** `years = month-end net worth / expenses of the 12 months ending that
   month`, i.e. how many years the current net worth would pay at the last 12 months'
   spending. One point per month, from the first month with 12 months of cash-flow
@@ -62,7 +83,7 @@ A monthly line chart under Period Comparison. Added 9 Oct 2026.
   none, persistence, Sankey exclusions, K, tooltip and the live Now point.
 
 ### Period Comparison (A vs B, what went up and down)
-A diverging change chart in table form, under Cash Flow vs Savings. Added Oct 2026.
+A diverging change chart in table form, the **Compare** page. Added Oct 2026.
 - **Two periods**, each picked with a type + anchor select in the section header
   (`#cmpModeA` / `#cmpA` vs `#cmpModeB` / `#cmpB`):
   `T12M` = 12 months ending on the anchor month, `YTD` = January to the anchor month,
@@ -193,9 +214,8 @@ year is labelled `YTD` under its year; any other part year shows its month count
   `renderCashBars()`; tiers and colours in `CF_SAFE`, `CF_INC`, `CF_EXP`. To change
   what counts as safe income, edit `CF_SAFE` (DB `DETAIL` names, upper case).
 
-The section frames (`#nwwrap`) and titles (`#nwhead`, `#cfhead`) stay hidden until
-the data has loaded, so no empty box shows above the skeleton; the skeleton mirrors
-this order (hero, table rows, controls, range, cards, Sankey).
+Every page stays hidden until the data has loaded, so no empty box shows next to the
+skeleton (hero, table rows, controls, range, cards, Sankey).
 
 **One shared column.** The hero card, the tables frame, the range bar, the
 Income/Expenses/Savings row and the Sankey frame all use the same 26px left margin
@@ -358,11 +378,12 @@ Needs / Wants / Liberality / Taxes → category`.
     month (`currentMi()`), *Last M* = the last complete month, both as a single-month
     view; each lights green while the window is exactly that month. *T12M* is the
     trailing-12 toggle.
-  - **Toggles** `Avg/m | K`.
-  The whole controls row is **sticky** (`position:sticky; top:0`, page-coloured
-  background, a soft shadow via `.stuck` once it floats), so This M / Last M / T12M
-  and Avg/m / K stay on screen while scrolling through the Sankey and the Cash Flow
-  vs Savings chart. On phones `html,body` use `overflow-x:clip` (with `hidden` as a
+  - **Toggles** `Avg/m | K` (on the other pages this same element sits in the
+    section header, see Pages).
+  The whole controls row is **sticky** (`position:sticky; top:var(--tabsh)`, i.e.
+  under the desktop tab row, at the top on phones; page-coloured background, a soft
+  shadow via `.stuck` once it floats), so This M / Last M / T12M and Avg/m / K stay
+  on screen while scrolling through the Sankey. On phones `html,body` use `overflow-x:clip` (with `hidden` as a
   fallback): `hidden` turns body into a scroll container and silently kills sticky.
   Toggle pills are `<label>`s wrapping the original checkboxes (`#t12`, `#tMonthly`,
   `#tK`, visually hidden), so the toggle logic is unchanged; a checked pill turns
@@ -485,24 +506,46 @@ export, the same access the DB load uses; the app never writes to the sheet):
 - Freshness is whatever Google last computed for `GOOGLEFINANCE` (usually up to
   ~20 min delayed). A LIST entry with no matching NETWORTH row (e.g. `DIRECTA|AMZN`,
   not yet in DB/NETWORTH) has no price and is ignored.
-- Reconciled Oct 2026: app total vs `NETWORTH!F11` differs by ~1 € (rounding of
-  DB rows).
+- Reconciled Oct 2026: app total vs `NETWORTH!F11` differed by ~1 € (rounding of
+  DB rows). Since the slim query (sums of raw values, 9 Oct 2026) it matches to the
+  euro (464.332 on both).
 
 ## Performance / loading
 
-The page used to block on the live Google Sheet fetch, so a cold network could
-leave it near-blank for up to ~10 seconds. It now uses a **stale-while-revalidate**
-cache:
+Reworked 9 Oct 2026, when opening had grown to ~0,45-0,85 s of blocked main thread on
+every visit (4x CPU throttle, i.e. a phone) as the sheet and the page grew. Three
+changes, measured on the same data (Chrome, 4x throttle, script time per open):
+old 440-850 ms, now ~40 ms (Net Worth), ~120 ms (Cash Flow), ~175 ms (Savings).
 
-- The most recent raw CSV is cached in the browser's **localStorage**
-  (`finance-sankey-cache-v1`, key = raw CSV text + retrieval timestamp). Nothing is
-  stored server-side and nothing is sent anywhere except the existing public CSV
-  endpoint, so the privacy model is unchanged.
-- **Returning visits render instantly from cache** (if the cached copy is ≤24h old)
-  while a fresh copy is fetched in the **background**. When the background copy
-  differs, the diagram re-renders with the new data; when it is identical, nothing
-  re-renders. A small **"Showing last loaded data" badge** appears while refreshing
-  and if the refresh fails (the cached view stays on screen).
+1. **Slim query** (`slimURL()`): the DB tab is 23 columns x ~13K rows (2,4 MB CSV).
+   The app asks gviz for the 11 columns it uses, grouped, with `sum(VALUE)` per group:
+   ~6K rows, 0,57 MB (36 KB gzipped instead of 141 KB). Same results; sums now use the
+   raw values instead of the rounded display values of the full export, so a few
+   totals move by 1 € (net worth now equals the sheet). Columns are addressed by
+   letter (`SLIM_DEFAULT`: A, B, H, I, J, K, L, N, P, R, T), so every answer is checked
+   (`slimOk()`: every needed header present, VALUE last, plain numbers). If it fails
+   (columns moved, error page) the full export is read instead, and `learnCols()`
+   re-learns the letters from its header into `finance-sankey-cols-v1`, so the next
+   load is slim again. Parse + aggregate: 224 ms -> 54 ms (desktop).
+2. **Snapshot cache** (`SheetCache`, `finance-sankey-cache-v2`): stores the crunched
+   data (`DATA`, `DETAIL`, `NWHOLD`, `META`, ~0,18 MB) plus a fingerprint of the CSV
+   (`csvHash()` = length + FNV-1a). A returning visit installs the snapshot
+   (`applySnapshot()`, ~12 ms incl. drawing the page) with no CSV parse and no
+   `aggregate()`. The background refresh hashes the new CSV (~3 ms): same fingerprint
+   = nothing redone (the snapshot is re-stamped at most twice a day), new fingerprint
+   = `applyData()` + new snapshot. Snapshots up to **30 days** old are shown while the
+   refresh runs. **Bump the key (v3) whenever `aggregate()` changes the shape or meaning
+   of `DATA` / `DETAIL` / `NWHOLD` / `META`**, otherwise a returning visit would paint
+   the old shape until the CSV itself changes. The old v1 cache kept the raw CSV (~3M characters, ~6 MB as stored,
+   over Safari's 5 MB localStorage quota) and is deleted on boot. Nothing is stored
+   server-side and nothing is sent anywhere except the existing public sheet endpoint,
+   so the privacy model is unchanged.
+3. **One page per block, drawn lazily** (see Pages): boot draws only the page on
+   screen, the range bar redraws only the Sankey, and layout reads of hidden charts
+   are gone.
+
+- A small **"Showing last loaded data" badge** appears while refreshing and if the
+  refresh fails (the cached view stays on screen).
 - The live fetch **retries up to 3 times** with a **10s timeout per attempt**, and a
   **30s overall guard** shows a timeout error if a cold load never returns. On a cold
   failure with any cached copy present (even stale), the cached copy is shown instead
@@ -511,10 +554,12 @@ cache:
   Sankey and table) is in the initial markup, so it paints immediately with no JS
   and is hidden the moment real content renders (no blank/unstyled gap). It
   respects `prefers-reduced-motion`.
-- The Sankey is rendered first and the net-worth table on the next frame, so the
-  diagram paints without waiting on the table.
 - If `localStorage` is unavailable (private mode, disabled), the app silently falls
   back to a plain live fetch.
+- Why not separate HTML files per page: every file would still have to download and
+  crunch the same sheet on each switch (a full reload), while the HTML itself is
+  ~60 KB gzipped and already HTTP-cached by GitHub Pages. In-page pages switch with no
+  reload and share one loaded dataset.
 
 The file remains a single self-contained HTML page with no build step and no
 external dependencies.
@@ -524,6 +569,9 @@ The Google Sheet must be shared as **“Anyone with the link → Viewer”** and
 tab named **`DB`**. Columns used (extra columns are ignored):
 `YEAR, MONTH, VALUE, LABEL, DETAIL, ASSETCLASSDETAILS, TYPE, CATEGORY1` for the
 cash-flow Sankey, plus `ACCOUNT, VARIABLE, CATEGORY3` for the net-worth table.
+They are read by letter through the slim query (see Performance); if a column is
+inserted or moved, the first load after it falls back to the full export and
+re-learns the letters by header name, so nothing needs editing.
 
 Row handling:
 - `TYPE=INCOME` → source = `DETAIL`, grouped by `CATEGORY1`
@@ -549,7 +597,9 @@ the nodes/flows are CSS variables in `:root`.
 The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpers
 (`parseCSV`, `aggregate`, `computeLinks`, `applySelection`, `savingsPercentage`,
 `monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `isMobile`,
-`scaleReferenceFor`). It is **never referenced by `index.html`** — the page stays a
+`scaleReferenceFor`; the shim also exports `slimURL`, `learnCols`, `slimOk`, `csvHash`,
+and the Oct 2026 chart helpers). Note: `data-path-smoke` still expects the v1 raw-CSV
+cache and a single fetch URL, so it predates the snapshot cache. It is **never referenced by `index.html`** — the page stays a
 single self-contained file. A tiny guarded export shim at the end of the inline
 script (`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those
 helpers to Node and is completely inert in the browser. Running the suite needs
