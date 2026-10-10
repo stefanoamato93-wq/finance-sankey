@@ -2496,7 +2496,13 @@ function comparePeriods(data, detail, pa, pb, excluded){
     const a=A.v[key]||0, b=B.v[key]||0;
     let gr=G.get(gk); if(!gr){ gr={key:gk, name:g, kind:k, a:0, b:0, excl:ds.has(gk), leaves:[]}; G.set(gk,gr); }
     const exL=ds.has(key);
-    const details = k==='E' && dets[leaf] && dets[leaf].size>1 ? [...dets[leaf]].map(dn=>{ const dk='D|'+leaf+'|'+dn;
+    /* carry the DETAIL breakdown when it ADDS something: more than one sub-category, OR a
+       single one whose name differs from the label (e.g. Holidays -> Weekend / Argentina).
+       A lone detail equal to the label (Groceries -> Groceries) adds nothing, so skip it.
+       The leaf is upper-case; detail names keep the sheet spelling, so compare case-insensitively. */
+    const dset=dets[leaf];
+    const meaningful = k==='E' && dset && (dset.size>1 || [...dset].some(dn=>String(dn).toUpperCase()!==leaf));
+    const details = meaningful ? [...dset].map(dn=>{ const dk='D|'+leaf+'|'+dn;
       return {key:dk, name:dn, a:A.v[dk]||0, b:B.v[dk]||0}; }) : [];
     gr.leaves.push({key, name:leaf, kind:k, a, b, excl:exL||gr.excl, details});
     if(!exL){ gr.a+=a; gr.b+=b; }
