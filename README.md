@@ -63,20 +63,34 @@ DETAIL / ACCOUNT / TRENDS / FIELD OCCURRENCES blocks).
   (10 min, 2 min on return) **only while the Query page is on screen**, and straight away when
   the DB refresh sees a new fingerprint. Same fingerprint = nothing redrawn. Nothing else is
   sent anywhere.
-- **Filters** (collapsible panel; collapsed it shows a one-line summary):
+- **Filters** (collapsible panel; collapsed it shows a one-line summary). No instruction
+  text on the page (removed 10 Oct 2026, the controls explain themselves):
   - **Dates:** From / To date pickers (day precision, both included, swapped if reversed)
     plus presets `All | This M | Last M | YTD | T12M | Last Y` (T12M = the 12 complete months,
     like elsewhere); the matching preset lights up.
   - **Type:** `Income | Expenses | Taxes | Transfer | Apprec.`, default the cash-flow three.
-  - **Search** (every word must appear in account, label, detail, type, group or category 2),
-    **Group** (`CATEGORY1`), **Category 2** (FOOD / NONFOOD / SAFE / NONSAFE ...), **Account**,
-    **Label**, **Detail**: the sheet's syntax. Blank or `%` = any, exact match otherwise
-    (case-insensitive), `%` or `*` wildcard (`ARG%`), comma = or (`FOOD, GROCERIES`), a
-    leading `!` = not (`!T`). Each field suggests its values (datalist) among the rows the
-    OTHER criteria leave, so the lists cascade (Label HOLIDAYS -> Detail lists the trips).
-  - **Value:** `>`, `<`, `>=`, `<=`, `=`, `!=` or a range `-500..-50`; several with `, `. A
-    term that does not parse turns the field red and is ignored.
-  - Text fields apply 220 ms after typing stops, or on Enter. A field in use is outlined green.
+  - **Search** = words as chips. Typing filters live (200 ms pause); Enter or comma turns the
+    typed words into chips, each with an `×`; Backspace in the empty box removes the last chip.
+    While typing, up to 8 **suggestions** (labels, details, accounts containing the text,
+    matching start first, then most used, the match highlighted) drop down; tap one (or arrow
+    keys + Enter) to add it as one chip. Every chip must appear (substring, any case) in the
+    row's account, label, detail, type, group or category 2.
+  - **Pickers** (added 10 Oct 2026, replaced the typed `%` / `!` / comma syntax): one button per
+    field, **Label, Detail, Account, Group, Category 2**, showing `Any`, the picked value,
+    `HOLIDAYS +2`, or `Not T` (red). Green when set, an `×` clears it. A tap opens the picker:
+    a popover under the button on desktop, a bottom sheet over a dimmed page on a phone. Inside:
+    `Only | Except`, `Clear`, a `Find` box, then every value still reachable under the OTHER
+    filters, biggest `|sum|` first (picked ones on top) with a hint (a label's group, a detail's
+    label), its count and its sum. Ticks apply at once (the picker stays open), `Pick shown`
+    ticks everything Find leaves, Enter in Find toggles the first match, `Done` / Esc / a tap
+    outside closes. The lists cascade (Label HOLIDAYS -> Detail lists the trips). A picked
+    value with nothing left under the other filters stays listed, greyed, so it can be unticked.
+    Groups and category 2 read as words (`Needs`, `Work income`, `Non-food`); details keep the
+    sheet's spelling.
+  - **Amount:** `All | Out | In` (negative / positive values), Min € and Max € on the
+    **absolute** amount (`1.000`, `1000`, `12,5` and `1k` all work; a box that does not parse
+    turns red and is ignored), and quick minimums `≥100 | ≥500 | ≥1K` (tap again to clear).
+    Out + ≥500 = every transaction of -500 or less.
   - **Reset** clears every criterion and the drill trail (types back to the cash-flow three),
     keeping the view and the sorts.
 - **Cards:** Sum (sub-line `in X · out Y` when both signs are present, else the date range),
@@ -98,22 +112,29 @@ DETAIL / ACCOUNT / TRENDS / FIELD OCCURRENCES blocks).
   field is already pinned to one exact value is skipped (Label HOLIDAYS set: a month opens its
   Details). The previous query goes on a back stack: a `‹ Back` pill and a crumb trail
   (`Months › Nov 2025 › HOLIDAYS › Weekend`, any crumb jumps back there), and Esc steps back
-  (not while typing in a field). The criteria, view and sorts are kept in localStorage
-  (`finance-sankey-query-v1`); the trail is not.
+  (not while typing in a field; with a picker open, Esc closes it first). A drill sets the
+  matching picker, so its button shows the value. The criteria, view and sorts are kept in
+  localStorage (`finance-sankey-query-v2`: `words`, `f[field] = {sel, not}`, `sign`, `min`,
+  `max`; the old v1 key with the typed syntax is deleted); the trail is not.
 - **Toggles:** K applies to the cards and every sum; Avg/m is hidden (Per month is a card).
   The Sankey exclusions do **not** apply here: the criteria are explicit.
 - The view pills and the sort stay on screen while scrolling a long list (sticky `.qbar`).
-- **Phone:** the fields go two per row (16px text so iOS does not zoom on focus), the date
-  pickers share the width, Count / Avg move under the name (`12 tx · avg -40 · WANTS`), and the
-  transactions show `Detail · Account` under the label.
+- **Phone:** the picker buttons go two per row (Category 2 full width), boxes use 16px text so
+  iOS does not zoom on focus, the date pickers and Min / Max share the width, the quick
+  minimums fill a row, pickers open as a bottom sheet with larger rows (the Find box is not
+  auto-focused, so the keyboard does not cover the list), Count / Avg move under the name
+  (`12 tx · avg -40 · Wants`), and the transactions show `Detail · Account` under the label.
 - Reconciled 10 Oct 2026 against a Python reference built straight from the sheet CSV:
   8.121 cash-flow transactions, sum 366.711; top expense month Nov 2025 (-5.764), top income
   month Nov 2024 (32.669).
-- Code: pure `parseTx()`, `qTextMatcher()`, `qValueMatcher()`, `queryRows(tx, q)` (rows + the
-  cascading suggestion lists, one pass with a bit per criterion), `queryGroup(rows, by)`,
-  `querySort()`, `querySortTx()`, `txURL()`, `txOk()` (all in the test shim); `fetchTx()`,
-  `refreshTx()`, `ensureTx()`, `TxCache`, then `q` state, `qInit()`, `syncQControls()`,
-  `qDrill()`, `qBack()`, `renderQuery()`. Check: `_verify_query.py [shot]` (untracked).
+- Code: pure `parseTx()`, `qNum()`, `qAmountFn(sign, min, max)`, `queryRows(tx, q)` (rows +
+  the cascading picker lists with count / sum / hint, one pass with a bit per criterion),
+  `queryGroup(rows, by)`, `querySort()`, `querySortTx()`, `txURL()`, `txOk()` (all in the test
+  shim); `fetchTx()`, `refreshTx()`, `ensureTx()`, `TxCache`, then `q` state, `qIndexTx()`
+  (detail spellings + suggestions), `qInit()`, `syncQControls()`, the search chips
+  (`qAddWords()`, `qSuggRender()`), the pickers (`qOpenPop()`, `qRenderPop()`, `qPopSync()`,
+  `qPlacePop()`, `qClosePop()`), `qDrill()`, `qBack()`, `renderQuery()`.
+  Check: `_verify_query.py [shot]` (untracked, 79 checks incl. pickers, chips, amount).
 
 ### Years of Life Paid (net worth / T12M expenses)
 A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
@@ -739,7 +760,7 @@ The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpe
 `monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `isMobile`,
 `scaleReferenceFor`; the shim also exports `slimURL`, `learnCols`, `slimOk`, `csvHash`,
 the Oct 2026 chart helpers and the Query helpers `txURL`, `txOk`, `parseTx`,
-`qTextMatcher`, `qValueMatcher`, `queryRows`, `queryGroup`, `querySort`, `querySortTx`). Note: `data-path-smoke` still expects the v1 raw-CSV
+`qNum`, `qAmountFn`, `queryRows`, `queryGroup`, `querySort`, `querySortTx`). Note: `data-path-smoke` still expects the v1 raw-CSV
 cache and a single fetch URL, so it predates the snapshot cache. It is **never referenced by `index.html`** — the page stays a
 single self-contained file. A tiny guarded export shim at the end of the inline
 script (`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those

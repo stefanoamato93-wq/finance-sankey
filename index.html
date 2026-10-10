@@ -397,11 +397,83 @@
   .qfilters input.set{border-color:#2f7a52; background:#11251b;}
   .qfilters input.bad{border-color:#c85c5c; background:#2a1414;}
   .qfilters .pills .pill{font-size:11.5px; padding:0 9px;}
-  .qgrid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 10px; margin-top:10px;}
-  .qf{display:flex; flex-direction:column; gap:3px; min-width:0;}
-  .qf > span{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;}
-  .qhint{color:var(--muted); font-size:11px; margin-top:8px; line-height:1.45;}
-  .qhint b{color:var(--ink); font-weight:600;}
+  /* search: words as chips, suggestions while typing */
+  .qtokwrap{position:relative; flex:1 1 320px; min-width:0; max-width:560px;}
+  .qtok{display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:32px; padding:3px 6px; background:var(--bg);
+        border:1px solid var(--grid); border-radius:7px; cursor:text;}
+  .qtok:focus-within{border-color:var(--needs);}
+  .qtok.set{border-color:#2f7a52;}
+  .qchips{display:contents;}
+  .qfilters .qtok input{flex:1 1 90px; border:0; background:transparent; height:24px; padding:0 2px; min-width:70px;}
+  .qchip{display:inline-flex; align-items:center; height:24px; padding:0 0 0 9px; border-radius:12px; background:#1b3a2b;
+         color:#d6f2e2; font-size:12px; font-weight:600; max-width:100%; min-width:0;}
+  .qchip span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qchip button{background:none; border:0; color:inherit; opacity:.7; cursor:pointer; font-size:15px; line-height:1;
+                padding:0 8px 0 6px; height:24px; font-family:inherit;}
+  .qchip button:hover{opacity:1;}
+  .qsugg{position:absolute; left:0; right:0; top:100%; margin-top:4px; z-index:46; background:#0b0f18; border:1px solid var(--grid);
+         border-radius:9px; box-shadow:0 10px 30px rgba(0,0,0,.6); padding:4px; max-height:300px; overflow-y:auto;}
+  .qsugg[hidden]{display:none;}
+  .qsugg button{display:flex; align-items:center; gap:10px; width:100%; background:none; border:0; color:var(--ink);
+                padding:8px 9px; border-radius:6px; font-family:inherit; font-size:12.5px; text-align:left; cursor:pointer;}
+  .qsugg button .t{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qsugg button .f{color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.4px; flex:0 0 auto;}
+  .qsugg button.hi,.qsugg button:hover{background:#18233a;}
+  .qsugg mark{background:none; color:#7fd0a3; font-weight:700;}
+  /* field pickers: one button per field, the picked values on it */
+  .qpicks{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin-top:10px;}
+  .qpick{position:relative; min-width:0;}
+  .qpbtn{width:100%; display:flex; flex-direction:column; align-items:flex-start; gap:2px; min-height:46px; padding:6px 28px 6px 10px;
+         background:var(--bg); border:1px solid var(--grid); border-radius:8px; color:var(--ink); font-family:inherit; cursor:pointer; text-align:left;}
+  .qpbtn:hover{border-color:#3a4d78;}
+  .qpbtn:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
+  .qpbtn[aria-expanded="true"]{border-color:var(--needs);}
+  .qpname{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;}
+  .qpval{font-size:12.5px; font-weight:600; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#5d6a83;}
+  .qpick.set .qpbtn{border-color:#2f7a52; background:#11251b;}
+  .qpick.set .qpval{color:#d6f2e2;}
+  .qpick.not .qpval{color:#f0a5a5;}
+  .qpcaret{position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:10px; pointer-events:none;}
+  .qpx{position:absolute; right:3px; top:50%; transform:translateY(-50%); width:26px; height:26px; border:0; border-radius:6px;
+       background:none; color:#9fd8b8; font-size:16px; line-height:1; cursor:pointer; font-family:inherit;}
+  .qpx:hover{background:rgba(255,255,255,.07); color:#fff;}
+  .qpx[hidden],.qpick.set .qpcaret{display:none;}
+  /* value picker popover (desktop) / bottom sheet (phone) */
+  #qpop{position:absolute; z-index:47; width:360px; display:flex; flex-direction:column; padding:10px 10px 8px;
+        background:var(--panel); box-shadow:0 14px 40px rgba(0,0,0,.65);}
+  #qpop[hidden],#qpopBack[hidden]{display:none;}
+  #qpopBack{display:none;}
+  .qphead{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .qphead b{font-size:13.5px; margin-right:auto;}
+  .qphead .pills{height:28px;} .qphead .pill{font-size:11.5px; padding:0 10px;}
+  #qpop .qpfind{width:100%; height:32px; background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:7px;
+        padding:0 9px; font-family:inherit; font-size:12.5px; color-scheme:dark;}
+  #qpop .qpfind:focus{outline:none; border-color:var(--needs);}
+  .qplist{flex:1 1 auto; min-height:80px; overflow-y:auto; overscroll-behavior:contain; margin:8px -4px 0; padding:0 4px;}
+  .qpi{display:grid; grid-template-columns:18px minmax(0,1fr) auto 66px; align-items:center; gap:8px; padding:7px 4px;
+       border-bottom:1px solid rgba(36,48,73,.6); cursor:pointer; font-size:12.5px; border-radius:4px;}
+  .qpi:hover{background:#18233a;}
+  .qpi[hidden]{display:none;}
+  .qpi input{accent-color:#3aa86a; width:15px; height:15px; margin:0; cursor:pointer;}
+  .qpi .nm{min-width:0;}
+  .qpi .t{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qpi .ht{display:block; color:var(--muted); font-size:10.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qpi .ct{color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums;}
+  .qpi .sm{font-weight:600; font-size:12px; text-align:right; font-variant-numeric:tabular-nums;}
+  .qpi .sm.neg{color:#e58a8a;} .qpi .sm.pos{color:#7fd0a3;}
+  .qpi.on{background:rgba(58,168,106,.10);} .qpi.on .t{color:#d6f2e2; font-weight:600;}
+  .qpi.zero .t,.qpi.zero .ct,.qpi.zero .sm{opacity:.45;}
+  #qpop.not .qpi.on{background:rgba(200,92,92,.12);} #qpop.not .qpi.on .t{color:#f0a5a5; text-decoration:line-through;}
+  #qpop.not .qpi input{accent-color:#c85c5c;}
+  .qpempty{color:var(--muted); font-size:12px; text-align:center; padding:18px 6px;}
+  .qpfoot{display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--grid);}
+  .qpfoot .qpsel{color:var(--muted); font-size:11.5px; margin-right:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .qbtn.qdone{background:#25603f; border-color:#2f7a52; color:#fff; font-weight:600; padding:5px 14px;}
+  .qbtn.qdone:hover{background:#2c7049;}
+  /* amount: sign + min / max on the absolute value + quick minimums */
+  .qamt{display:inline-flex; align-items:center; gap:6px;}
+  .qamt span{color:var(--muted);}
+  .qfilters .qamt input{width:96px;}
   /* the view switch + sort stay on screen while scrolling a long list (under the desktop tabs) */
   .qbar{position:sticky; top:var(--tabsh,0px); z-index:14; background:var(--bg); display:flex; align-items:center;
         gap:6px 8px; flex-wrap:wrap; margin:6px 26px 0; padding:6px 0; max-width:940px;}
@@ -456,7 +528,27 @@
     /* 16px stops iOS zooming into a field on focus */
     .qfilters input{height:36px; font-size:16px;}
     .qfilters .pills{height:34px;}
-    .qgrid{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;}
+    .qtokwrap{flex:1 1 100%; max-width:none;}
+    .qtok{min-height:38px;}
+    .qfilters .qtok input{height:30px;}
+    .qchip{height:28px; font-size:12.5px;} .qchip button{height:28px; padding:0 10px 0 6px;}
+    .qsugg button{padding:11px 10px; font-size:13.5px;}
+    .qpicks{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;}
+    .qpick:last-child{grid-column:1/-1;}
+    .qpbtn{min-height:50px;}
+    .qpx{width:34px; height:34px; right:2px;}
+    .qamt{flex:1 1 auto; min-width:0;}
+    .qfilters .qamt input{flex:1 1 0; width:auto; min-width:0;}
+    #qAmtP{flex:1 1 100%; justify-content:stretch;} #qAmtP .pill{flex:1 1 0; justify-content:center;}
+    /* the picker is a bottom sheet over a dimmed page */
+    #qpop{position:fixed; left:0 !important; right:0; top:auto !important; bottom:0; width:auto !important;
+          max-height:80vh !important; border-radius:16px 16px 0 0; padding:12px 12px calc(10px + env(safe-area-inset-bottom));}
+    #qpopBack{display:block; position:fixed; inset:0; z-index:46; background:rgba(0,0,0,.55);}
+    #qpop .qpfind{height:40px; font-size:16px;}
+    .qpi{padding:11px 4px; font-size:13.5px; grid-template-columns:20px minmax(0,1fr) auto 72px;}
+    .qpi input{width:18px; height:18px;}
+    .qphead .pills{height:34px;}
+    .qpfoot .qbtn{padding:9px 12px; font-size:12.5px;}
     .qtrail{flex:1 1 100%;}
     .qviews{flex:1 1 auto; height:36px;}
     .qviews .pill{padding:0 8px; font-size:12px;}
@@ -774,20 +866,36 @@
         <label class="pill" title="Market value changes (and ApprecTaxes)"><input type="checkbox" value="APPRECIATION">Apprec.</label>
       </span>
     </div>
-    <div class="qgrid">
-      <label class="qf"><span>Search</span><input id="qSearch" type="search" placeholder="any words" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Group</span><input id="qC1" data-qf="c1" list="qdl-c1" placeholder="%" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Category 2</span><input id="qC2" data-qf="c2" list="qdl-c2" placeholder="%" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Account</span><input id="qAcct" data-qf="acct" list="qdl-acct" placeholder="%" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Label</span><input id="qLabel" data-qf="label" list="qdl-label" placeholder="%" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Detail</span><input id="qDetail" data-qf="detail" list="qdl-detail" placeholder="%" autocomplete="off" spellcheck="false"></label>
-      <label class="qf"><span>Value</span><input id="qValue" data-qf="value" placeholder="&lt;0 · &gt;100 · -500..-50" autocomplete="off" spellcheck="false"></label>
+    <div class="qrow">
+      <span class="qlab">Search</span>
+      <div class="qtokwrap">
+        <div class="qtok" id="qtok"><span class="qchips" id="qWordChips"></span><input id="qWordIn" type="text" placeholder="Search…"
+          autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="Search words" role="combobox"
+          aria-autocomplete="list" aria-expanded="false" aria-controls="qSugg"></div>
+        <div class="qsugg" id="qSugg" role="listbox" aria-label="Suggestions" hidden></div>
+      </div>
     </div>
-    <div class="qhint">Like the sheet's QUERY tab: blank or <b>%</b> = any, exact match otherwise, <b>%</b> wildcard (<b>ARG%</b>), comma = or (<b>FOOD, GROCERIES</b>), <b>!</b> = not (<b>!T</b>). Value: <b>&gt;</b> <b>&lt;</b> <b>&gt;=</b> <b>&lt;=</b> <b>=</b> <b>!=</b> or a range <b>-500..-50</b>. Search: every word, anywhere.</div>
-    <datalist id="qdl-c1"></datalist><datalist id="qdl-c2"></datalist><datalist id="qdl-acct"></datalist>
-    <datalist id="qdl-label"></datalist><datalist id="qdl-detail"></datalist>
+    <!-- one picker per field (Label, Detail, Account, Group, Category 2), built in qInit() -->
+    <div class="qpicks" id="qPicks"></div>
+    <div class="qrow">
+      <span class="qlab">Amount</span>
+      <span class="pills" id="qSign">
+        <button type="button" class="pill" data-qsg="all">All</button>
+        <button type="button" class="pill" data-qsg="out" title="Money out (negative values)">Out</button>
+        <button type="button" class="pill" data-qsg="in" title="Money in (positive values)">In</button>
+      </span>
+      <span class="qamt"><input id="qMin" type="text" inputmode="decimal" placeholder="Min €" aria-label="Minimum amount" autocomplete="off"><span>&ndash;</span><input id="qMax" type="text" inputmode="decimal" placeholder="Max €" aria-label="Maximum amount" autocomplete="off"></span>
+      <span class="pills" id="qAmtP">
+        <button type="button" class="pill" data-qap="100">&ge;100</button>
+        <button type="button" class="pill" data-qap="500">&ge;500</button>
+        <button type="button" class="pill" data-qap="1000">&ge;1K</button>
+      </span>
+    </div>
   </div>
 </div>
+<!-- value picker (one at a time): popover under its button on desktop, bottom sheet on a phone -->
+<div id="qpop" class="framed" role="dialog" hidden></div>
+<div id="qpopBack" hidden></div>
 <div class="totals" id="qcards" style="display:none"></div>
 <div class="qbar" id="qbar" style="display:none">
   <div class="qtrail" id="qtrail" style="display:none"></div>
@@ -3017,10 +3125,11 @@ function renderYlp(){
    One row per DB transaction (date, account, label, detail, type, group, category 2,
    value), read the first time the page opens with a second gviz query (no group by,
    ~0,9 MB, ~68 KB gzipped), kept in localStorage (TxCache) and refreshed like the DB
-   sheet, but only while the page is on screen. Criteria work like the sheet's QUERY
-   tab: blank or % = any, exact match otherwise (case-insensitive), % or * = wildcard,
-   comma = or, a leading ! = not; Value takes > < >= <= = != and a..b ranges; Search
-   ANDs words over every text field. Views: Transactions, Months, Labels, Details,
+   sheet, but only while the page is on screen. Criteria: dates, types, search words as
+   chips (each must appear somewhere in the row, suggestions while typing), one picker
+   per field (Label, Detail, Account, Group, Category 2: tick values, Only / Except, with
+   count and sum per value under the other filters) and the amount (sign Out / In, min /
+   max on the absolute value, quick minimums). Views: Transactions, Months, Labels, Details,
    Accounts, ranked by size (|sum|, so expenses come most negative first and income most
    positive first) with sum, count (the sheet's "field occurrences") and average (its
    "trends"). A row click drills one level down (Months -> Labels -> Details ->
@@ -3125,71 +3234,70 @@ function ensureTx(){
   if(!txBusy && Date.now()-txAt >= DB_STALE) refreshTx();
 }
 
-/* pure: one text criterion -> null (any) or test(upperCaseValue) -> bool */
-function qTextMatcher(expr){
-  const pos=[], neg=[]; let any=false;
-  String(expr==null?'':expr).split(',').forEach(raw=>{
-    let t=raw.trim(); const not=t[0]==='!'; if(not) t=t.slice(1).trim();
-    t=t.toUpperCase(); if(!t) return;
-    let f;
-    if(/^[%*]+$/.test(t)){ if(!not){ any=true; return; } f=()=>true; }          // "!%" leaves nothing
-    else if(/[%*]/.test(t)){
-      const re=new RegExp('^'+t.split(/[%*]+/).map(x=>x.replace(/[.+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$');
-      f=s=>re.test(s);
-    } else f=s=>s===t;
-    (not?neg:pos).push(f);
-  });
-  if(any) pos.length=0;
-  if(!pos.length && !neg.length) return null;
-  return s=>{ s=s==null?'':String(s); if(pos.length && !pos.some(f=>f(s))) return false; return !neg.some(f=>f(s)); };
-}
-/* pure: the Value criterion -> {fn: null (any) | test(value), bad: some term did not parse} */
-function qValueMatcher(expr){
-  const num=s=>{ s=String(s).replace(/\s|€/g,'').replace(/\u2212/g,'-');
-    if(/^[-+]?\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');               // 1.000 = one thousand
-    if(!/^[-+]?\d+([.,]\d+)?$/.test(s)) return NaN; return parseFloat(s.replace(',','.')); };
-  const fs=[]; let bad=false;
-  String(expr==null?'':expr).split(/[;|]|,(?=\s*[<>=!])|,\s+/).map(s=>s.trim()).filter(Boolean).forEach(t=>{
-    if(t.indexOf('..')>0){ const [a,b]=t.split('..').map(num); if(isNaN(a)||isNaN(b)){ bad=true; return; }
-      const lo=Math.min(a,b), hi=Math.max(a,b); fs.push(v=>v>=lo && v<=hi); return; }
-    const m=/^(>=|<=|!=|<>|>|<|=)?\s*(.+)$/.exec(t), x=m ? num(m[2]) : NaN; if(isNaN(x)){ bad=true; return; }
-    const op=m[1]||'=';
-    fs.push(op==='>' ? v=>v>x : op==='<' ? v=>v<x : op==='>=' ? v=>v>=x : op==='<=' ? v=>v<=x :
-            (op==='!='||op==='<>') ? v=>v!==x : v=>v===x);
-  });
-  return {fn: fs.length ? v=>fs.some(f=>f(v)) : null, bad};
-}
 const Q_TYPES=['INCOME','EXPENSES','TAXES','TRANSFER','APPRECIATION'];
 const Q_TYPE_NAME={INCOME:'Income',EXPENSES:'Expenses',TAXES:'Taxes',TRANSFER:'Transfer',APPRECIATION:'Apprec.'};
-const Q_LISTS=['c1','c2','acct','label','detail'];
-/* pure: the rows matching every criterion of q, plus, per text field, the values still
-   reachable under all the OTHER criteria (the field's suggestions, so they cascade) */
+/* the pickable fields, in the order of their buttons */
+const Q_FIELDS=['label','detail','acct','c1','c2'];
+const Q_FNAME={label:'Label', detail:'Detail', acct:'Account', c1:'Group', c2:'Category 2'};
+const Q_VAL={label:r=>r.lab, detail:r=>r.detU, acct:r=>r.acct, c1:r=>r.c1, c2:r=>r.c2};
+const Q_BIT={label:8, detail:16, acct:32, c1:64, c2:128};
+/* pure: an amount typed in a box -> its absolute value, null when blank, NaN when it is not
+   a number. Takes 1.000 / 1000 / 12,5 / 1k */
+function qNum(s){
+  s=String(s==null?'':s).trim().replace(/[\s\u20ac]/g,'').replace(/\u2212/g,'-').replace(/^[-+]/,'');
+  if(!s) return null;
+  let k=1; if(/k$/i.test(s)){ k=1000; s=s.slice(0,-1); }
+  if(/^\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');
+  if(!/^\d+([.,]\d+)?$/.test(s)) return NaN;
+  return parseFloat(s.replace(',','.'))*k;
+}
+/* pure: the amount criterion -> {fn: null (any) | test(value), bad:{min,max}}.
+   sign: all | out (negative values) | in (positive); min / max apply to the absolute value */
+function qAmountFn(sign, min, max){
+  let lo=qNum(min), hi=qNum(max); const bad={min:Number.isNaN(lo), max:Number.isNaN(hi)};
+  if(bad.min) lo=null; if(bad.max) hi=null;
+  if(lo!=null && hi!=null && lo>hi){ const t=lo; lo=hi; hi=t; }
+  const s=(sign==='out' || sign==='in') ? sign : 'all';
+  if(s==='all' && lo==null && hi==null) return {fn:null, bad};
+  return {fn:v=>{ if(s==='out' && !(v<0)) return false; if(s==='in' && !(v>0)) return false;
+    const a=Math.abs(v); return (lo==null || a>=lo) && (hi==null || a<=hi); }, bad};
+}
+/* pure: the rows matching every criterion of q, plus, per pickable field, the values still
+   reachable under all the OTHER criteria with their count, sum and a hint (a detail's label,
+   a label's group): the picker lists, so they cascade (Label HOLIDAYS -> Detail lists the
+   trips). q.words: each must appear (upper-case substring) in account, label, detail, type,
+   group or category 2. q.f[field] = {sel:[keys], not}: only (or, with not, all but) those. */
 function queryRows(tx, q){
   const dkOf=s=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||''); return m ? (+m[1])*10000+(+m[2])*100+(+m[3]) : null; };
   let lo=dkOf(q.from), hi=dkOf(q.to); if(lo!=null && hi!=null && lo>hi){ const t=lo; lo=hi; hi=t; }
-  const types=new Set(q.types||[]), words=String(q.search||'').toUpperCase().split(/\s+/).filter(Boolean);
-  const M={c1:qTextMatcher(q.c1), c2:qTextMatcher(q.c2), acct:qTextMatcher(q.acct), label:qTextMatcher(q.label), detail:qTextMatcher(q.detail)};
-  const V=qValueMatcher(q.value);
-  const BIT={c1:8, c2:16, acct:32, label:64, detail:128};
-  const L={}; Q_LISTS.forEach(k=>{ L[k]=new Map(); });
-  const val={c1:r=>r.c1, c2:r=>r.c2, acct:r=>r.acct, label:r=>r.lab, detail:r=>r.detU};
+  const types=new Set(q.types||[]);
+  const words=(q.words||[]).map(w=>String(w).trim().toUpperCase()).filter(Boolean);
+  const F={}; Q_FIELDS.forEach(f=>{ const c=q.f && q.f[f]; F[f]=(c && c.sel && c.sel.length) ? {set:new Set(c.sel), not:!!c.not} : null; });
+  const A=qAmountFn(q.sign, q.min, q.max);
+  const L={}; Q_FIELDS.forEach(f=>{ L[f]=new Map(); });
   const rows=[];
   for(const r of tx||[]){
     let k=0;
     if((lo!=null && r.dk<lo) || (hi!=null && r.dk>hi)) k|=1;
     if(!types.has(r.typ)) k|=2;
     if(words.length && !words.every(w=>r.hay.indexOf(w)>=0)) k|=4;
-    if(M.c1 && !M.c1(r.c1)) k|=8;
-    if(M.c2 && !M.c2(r.c2)) k|=16;
-    if(M.acct && !M.acct(r.acct)) k|=32;
-    if(M.label && !M.label(r.lab)) k|=64;
-    if(M.detail && !M.detail(r.detU)) k|=128;
-    if(V.fn && !V.fn(r.v)) k|=256;
+    for(const f of Q_FIELDS){ const c=F[f]; if(c && c.set.has(Q_VAL[f](r))===c.not) k|=Q_BIT[f]; }
+    if(A.fn && !A.fn(r.v)) k|=256;
     if(!k) rows.push(r);
-    for(const f of Q_LISTS){ if(!(k & ~BIT[f])){ const u=val[f](r); if(u && !L[f].has(u)) L[f].set(u, f==='detail' ? r.det : u); } }
+    for(const f of Q_FIELDS){
+      if(k & ~Q_BIT[f]) continue;
+      const key=Q_VAL[f](r); let e=L[f].get(key);
+      if(!e){ e={key, n:0, sum:0, hint:new Map()}; L[f].set(key,e); }
+      e.n++; e.sum+=r.v;
+      const h= f==='detail' ? r.lab : f==='label' ? r.c1 : '';
+      if(h) e.hint.set(h,(e.hint.get(h)||0)+1);
+    }
   }
-  const lists={}; Q_LISTS.forEach(f=>{ lists[f]=[...L[f].values()].sort((a,b)=>a.localeCompare(b)); });
-  return {rows, lists, bad:{value:V.bad}};
+  const lists={};
+  Q_FIELDS.forEach(f=>{ lists[f]=[...L[f].values()].map(e=>{ let h='', b=0; e.hint.forEach((n,x)=>{ if(n>b){ b=n; h=x; } });
+      return {key:e.key, n:e.n, sum:e.sum, hint:h, hints:e.hint.size}; })
+    .sort((a,b)=> Math.abs(b.sum)-Math.abs(a.sum) || b.n-a.n || String(a.key).localeCompare(String(b.key))); });
+  return {rows, lists, bad:A.bad};
 }
 /* pure: rows -> [{key, name, n, sum, avg, sub}] by months | labels | details | accounts.
    sub = the labels of a detail / the groups of a label (shown as a hint) */
@@ -3222,7 +3330,7 @@ function querySortTx(rows, sort){
 }
 
 /* ---- Query page: state, controls, drawing ---- */
-const Q_KEY='finance-sankey-query-v1', Q_PAGE=300, Q_MORE=500;
+const Q_KEY='finance-sankey-query-v2', Q_OLD_KEY='finance-sankey-query-v1', Q_PAGE=300, Q_MORE=500;
 const Q_VIEWS=['tx','months','labels','details','accounts'];
 const Q_VNAME={tx:'Transactions', months:'Months', labels:'Labels', details:'Details', accounts:'Accounts'};
 /* view pill text; "Transactions" shortens to "Tx" on a phone so the five pills fit */
@@ -3232,9 +3340,12 @@ const Q_CHAIN={months:['labels','details','tx'], labels:['details','tx'], detail
 const Q_SORTS={
   tx:[['date','Newest first'],['old','Oldest first'],['size','By size'],['neg','Negative first'],['pos','Positive first']],
   grp:[['size','By size'],['neg','Negative first'],['pos','Positive first'],['count','By count'],['avg','By average'],['name','By name']]};
-const qDefault=()=>({from:'', to:'', types:['INCOME','EXPENSES','TAXES'], search:'', c1:'', c2:'', acct:'', label:'', detail:'',
-  value:'', view:'tx', sortTx:'date', sortGrp:'size', open:true});
-let q=qDefault(), qStack=[], qShown=Q_PAGE, qSig=null, qDl={}, qGroups=new Map(), qReady=false;
+const Q_SIGNS=['all','out','in'];
+const qFDefault=()=>{ const o={}; Q_FIELDS.forEach(f=>{ o[f]={sel:[], not:false}; }); return o; };
+const qDefault=()=>({from:'', to:'', types:['INCOME','EXPENSES','TAXES'], words:[], f:qFDefault(), sign:'all', min:'', max:'',
+  view:'tx', sortTx:'date', sortGrp:'size', open:true});
+let q=qDefault(), qStack=[], qShown=Q_PAGE, qSig=null, qGroups=new Map(), qReady=false;
+let qTyping='', qLists={}, qPopF=null, qSuggList=[], qSuggHi=-1, Q_DISP=new Map(), Q_SUGG=[];
 const qEsc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const qCls=v=> v<0 ? 'neg' : v>0 ? 'pos' : '';
 const fmtE=v=>{ const r=Math.round(Math.abs(v)); return (v<0&&r?'-':'')+grp(r); };   // full euros, whatever K says
@@ -3243,19 +3354,44 @@ const qIso=(y,m,d)=> y+'-'+q2(m)+'-'+q2(d);
 const qDays=(y,m)=> new Date(y,m,0).getDate();
 const qIt=dk=> q2(dk%100)+'/'+q2(Math.floor(dk/100)%100)+'/'+Math.floor(dk/10000);
 const qItIso=s=> s ? s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4) : '';
+const Q_PRETTY={WORKINCOME:'Work income', NONWORKINCOME:'Non-work income', NEEDS:'Needs', WANTS:'Wants', LIBERALITY:'Liberality',
+  TAXES:'Taxes', TRANSFER:'Transfer', APPRECIATION:'Appreciation', FOOD:'Food', NONFOOD:'Non-food', SAFE:'Safe', NONSAFE:'Non-safe'};
+/* how a picked value reads: details keep the sheet's spelling, groups and category 2 read as words */
+function qName(f, key){
+  if(key==null || key==='') return '(blank)';
+  if(f==='detail') return Q_DISP.get(key) || key;
+  if(f==='c1' || f==='c2') return Q_PRETTY[key] || (key.charAt(0)+key.slice(1).toLowerCase());
+  return key;
+}
+/* once per transaction load: detail spellings, and the search suggestions (label, detail,
+   account; most used first) */
+function qIndexTx(){
+  const disp=new Map(), cnt=new Map(), add=(t,f)=>{ if(!t) return; const k=f+'|'+t; const e=cnt.get(k); if(e) e.n++; else cnt.set(k,{t,f,n:1}); };
+  (TX||[]).forEach(r=>{ if(r.detU && !disp.has(r.detU)) disp.set(r.detU, r.det); add(r.lab,'label'); add(r.det,'detail'); add(r.acct,'acct'); });
+  Q_DISP=disp;
+  /* one suggestion per text: a detail that equals its label (Groceries) is only offered once */
+  const seen=new Set();
+  Q_SUGG=[...cnt.values()].sort((a,b)=>b.n-a.n).filter(s=>{ const u=s.t.toUpperCase(); if(seen.has(u)) return false; seen.add(u); return true; });
+}
 function qLoad(){
+  try{ localStorage.removeItem(Q_OLD_KEY); }catch(e){}
   try{ const s=JSON.parse(localStorage.getItem(Q_KEY)||'null'); if(!s || typeof s!=='object') return;
     const d=qDefault();
-    for(const k in d){ if(k==='types') continue; if(s[k]!==undefined && typeof s[k]===typeof d[k]) d[k]=s[k]; }
+    ['from','to','min','max','view','sortTx','sortGrp'].forEach(k=>{ if(typeof s[k]==='string') d[k]=s[k]; });
+    if(typeof s.open==='boolean') d.open=s.open;
+    if(Q_SIGNS.indexOf(s.sign)>=0) d.sign=s.sign;
     if(Array.isArray(s.types)) d.types=s.types.filter(t=>Q_TYPES.indexOf(t)>=0);
+    if(Array.isArray(s.words)) d.words=s.words.filter(w=>typeof w==='string' && w.trim()).slice(0,20);
+    if(s.f && typeof s.f==='object') Q_FIELDS.forEach(f=>{ const c=s.f[f];
+      if(c && Array.isArray(c.sel)) d.f[f]={sel:c.sel.filter(x=>typeof x==='string'), not:!!c.not}; });
     if(Q_VIEWS.indexOf(d.view)<0) d.view='tx';
     q=d; }catch(e){}
 }
 function qSave(){ try{ localStorage.setItem(Q_KEY, JSON.stringify(q)); }catch(e){} }
-const qExact=s=>{ const t=String(s||'').trim(); return !!t && !/[%*,!]/.test(t); };
+const qExact=f=> q.f[f].sel.length===1 && !q.f[f].not;
 function qNextView(view){
   const ch=Q_CHAIN[view]||['tx'];
-  return ch.find(v=> v==='tx' || (v==='labels' ? !qExact(q.label) : v==='details' ? !qExact(q.detail) : true)) || 'tx';
+  return ch.find(v=> v==='tx' || (v==='labels' ? !qExact('label') : v==='details' ? !qExact('detail') : true)) || 'tx';
 }
 function qPresetRange(p){
   const d=new Date(), y=d.getFullYear(), m=d.getMonth()+1;
@@ -3291,16 +3427,30 @@ function qMonthSpan(){
   const mi=x=> Math.floor(x/10000)*12+Math.floor(x/100)%100-1;
   return mi(hi)-mi(lo)+1;
 }
+/* the picked values of a field, short: HOLIDAYS / HOLIDAYS +2 / Not T */
+function qPickText(f, long){
+  const c=q.f[f]; if(!c.sel.length) return '';
+  const names=c.sel.map(k=>qName(f,k));
+  const s= names.length===1 ? names[0] : long && names.length<=3 ? names.join(', ') : names[0]+' +'+(names.length-1);
+  return (c.not?'Not ':'')+s;
+}
+function qAmountText(){
+  const lo=qNum(q.min), hi=qNum(q.max), f=v=>grp(Math.round(v));
+  const a= (lo!=null && !isNaN(lo) && hi!=null && !isNaN(hi)) ? f(Math.min(lo,hi))+'\u2013'+f(Math.max(lo,hi))
+         : (lo!=null && !isNaN(lo)) ? '\u2265 '+f(lo) : (hi!=null && !isNaN(hi)) ? '\u2264 '+f(hi) : '';
+  const s= q.sign==='out' ? 'Out' : q.sign==='in' ? 'In' : '';
+  return [s,a].filter(Boolean).join(' ');
+}
 function qSummary(){
   const parts=[qDateLabel()], t=q.types;
   parts.push(t.length===Q_TYPES.length ? 'all types' : t.length ? t.map(x=>Q_TYPE_NAME[x]).join(', ') : 'no type');
-  [['search','Search'],['c1','Group'],['c2','Cat. 2'],['acct','Account'],['label','Label'],['detail','Detail'],['value','Value']].forEach(([k,n])=>{
-    const v=String(q[k]||'').trim(); if(v && v!=='%') parts.push(n+' '+v); });
+  if(q.words.length) parts.push(q.words.map(w=>'\u201c'+w+'\u201d').join(' '));
+  Q_FIELDS.forEach(f=>{ const s=qPickText(f,true); if(s) parts.push(Q_FNAME[f]+' '+s); });
+  const a=qAmountText(); if(a) parts.push(a);
   return parts.join(' \u00b7 ');
 }
-const Q_INPUTS={search:'qSearch', c1:'qC1', c2:'qC2', acct:'qAcct', label:'qLabel', detail:'qDetail', value:'qValue'};
-/* put the state on the controls (a field being typed in is left alone) */
-let qBad={};
+/* put the state on the controls (a box being typed in is left alone) */
+let qBad={min:false, max:false}, qChipSig=null;
 function syncQControls(bad){
   if(bad) qBad=bad; else bad=qBad;
   const $=id=>document.getElementById(id), act=document.activeElement;
@@ -3311,10 +3461,28 @@ function syncQControls(bad){
   const p=qPresetOn();
   document.querySelectorAll('#qPresets [data-qp]').forEach(b=>b.classList.toggle('on', b.getAttribute('data-qp')===p));
   document.querySelectorAll('#qTypes input').forEach(i=>{ i.checked=q.types.indexOf(i.value)>=0; });
-  for(const k in Q_INPUTS){ const el=$(Q_INPUTS[k]); if(!el) continue;
+  /* search words as chips */
+  const cs=q.words.join('\u0001');
+  if(cs!==qChipSig){ qChipSig=cs;
+    $('qWordChips').innerHTML=q.words.map((w,i)=>`<span class="qchip"><span>${qEsc(w)}</span>`+
+      `<button type="button" data-qw="${i}" aria-label="Remove ${qEsc(w)}">\u00d7</button></span>`).join('');
+    $('qWordIn').placeholder= q.words.length ? '' : 'Search\u2026'; }
+  $('qtok').classList.toggle('set', q.words.length>0);
+  /* one button per field: the picked values, green (only) or red (except), x to clear */
+  Q_FIELDS.forEach(f=>{ const el=document.querySelector('.qpick[data-f="'+f+'"]'); if(!el) return;
+    const c=q.f[f], set=c.sel.length>0;
+    el.classList.toggle('set', set); el.classList.toggle('not', set && c.not);
+    el.querySelector('.qpval').textContent= set ? qPickText(f) : 'Any';
+    el.querySelector('.qpbtn').title= set ? Q_FNAME[f]+': '+qPickText(f,true) : Q_FNAME[f];
+    el.querySelector('.qpx').hidden=!set;
+    el.querySelector('.qpbtn').setAttribute('aria-expanded', qPopF===f ? 'true' : 'false'); });
+  /* amount */
+  document.querySelectorAll('#qSign [data-qsg]').forEach(b=>b.classList.toggle('on', b.getAttribute('data-qsg')===q.sign));
+  [['qMin','min'],['qMax','max']].forEach(([id,k])=>{ const el=$(id); if(!el) return;
     if(el!==act && el.value!==q[k]) el.value=q[k];
-    const v=String(q[k]||'').trim(); el.classList.toggle('set', !!v && v!=='%');
-    el.classList.toggle('bad', k==='value' && !!(bad && bad.value)); }
+    el.classList.toggle('set', !!q[k].trim() && !bad[k]); el.classList.toggle('bad', !!bad[k]); });
+  const lo=qNum(q.min);
+  document.querySelectorAll('#qAmtP [data-qap]').forEach(b=>b.classList.toggle('on', !q.max.trim() && lo===+b.getAttribute('data-qap')));
   const tg=$('qfToggle'), body=$('qfBody'), sum=$('qfSum');
   if(tg){ tg.setAttribute('aria-expanded', q.open?'true':'false'); tg.querySelector('.tw').textContent=q.open?'\u25BE':'\u25B8'; }
   if(body) body.style.display=q.open?'':'none';
@@ -3337,13 +3505,6 @@ function qRenderTrail(){
       : `<button type="button" class="crumb" data-qcrumb="${j}" title="Back to here">${qEsc(c)}</button>`)).join('');
   el.style.display='';
 }
-function qFillLists(lists){
-  for(const k of Q_LISTS){
-    const el=document.getElementById('qdl-'+k); if(!el) continue;
-    const vals=(lists[k]||[]).slice(0,400), s=vals.join('\u0001'); if(qDl[k]===s) continue; qDl[k]=s;
-    el.innerHTML=vals.map(v=>`<option value="${qEsc(v)}"></option>`).join('');
-  }
-}
 /* any change of the criteria: back to the first page of rows, save, redraw */
 function qChanged(){ qShown=Q_PAGE; qSave(); renderQuery(true); }
 function qScrollToResults(){
@@ -3354,27 +3515,134 @@ function qScrollToResults(){
 function qDrill(key){
   const g=qGroups.get(String(key)); if(!g) return;
   const view=q.view, label= view==='months' ? g.name : (g.name || '\u2014');
+  qClosePop();
   qStack.push({q:JSON.parse(JSON.stringify(q)), label});
   if(view==='months'){ const y=Math.floor(g.key/12), m=g.key%12+1; q.from=qIso(y,m,1); q.to=qIso(y,m,qDays(y,m)); }
-  else if(view==='labels') q.label=g.name;
-  else if(view==='details') q.detail=g.name;
-  else if(view==='accounts') q.acct=g.name;
+  else if(view==='labels') q.f.label={sel:[g.key], not:false};
+  else if(view==='details') q.f.detail={sel:[g.key], not:false};
+  else if(view==='accounts') q.f.acct={sel:[g.key], not:false};
   q.view=qNextView(view);
   qChanged(); qScrollToResults();
 }
 function qBack(j){
   if(!qStack.length) return;
   const i= j==null ? qStack.length-1 : Math.max(0, Math.min(qStack.length-1, j));
+  qClosePop();
   q=qStack[i].q; qStack=qStack.slice(0,i);
   qChanged(); qScrollToResults();
 }
+
+/* ---- search words: chips, suggestions while typing ---- */
+function qAddWords(list){
+  let added=false;
+  list.map(w=>String(w).trim()).filter(Boolean).forEach(w=>{
+    if(!q.words.some(x=>x.toUpperCase()===w.toUpperCase())){ q.words.push(w); added=true; } });
+  const inp=document.getElementById('qWordIn'); inp.value=''; qTyping=''; qSuggClose();
+  if(added) qChanged(); else renderQuery(true);
+}
+function qCommitTyped(){ const v=document.getElementById('qWordIn').value; if(v.trim()) qAddWords(v.split(/[\s,]+/)); }
+function qSuggClose(){ const s=document.getElementById('qSugg'); s.hidden=true; s.innerHTML=''; qSuggList=[]; qSuggHi=-1;
+  document.getElementById('qWordIn').setAttribute('aria-expanded','false'); }
+function qSuggRender(){
+  const inp=document.getElementById('qWordIn'), box=document.getElementById('qSugg');
+  const t=inp.value.trim().toUpperCase();
+  if(!t || !Q_SUGG.length){ qSuggClose(); return; }
+  const have=new Set(q.words.map(w=>w.toUpperCase()));
+  const hits=[];
+  for(const s of Q_SUGG){ const u=s.t.toUpperCase(), i=u.indexOf(t); if(i<0 || have.has(u)) continue;
+    hits.push({s, i}); if(hits.length>=200) break; }
+  hits.sort((a,b)=> (a.i===0?0:1)-(b.i===0?0:1) || b.s.n-a.s.n);
+  qSuggList=hits.slice(0,8).map(h=>h.s);
+  if(!qSuggList.length){ qSuggClose(); return; }
+  if(qSuggHi>=qSuggList.length) qSuggHi=qSuggList.length-1;
+  const mark=txt=>{ const u=txt.toUpperCase(), i=u.indexOf(t);
+    return qEsc(txt.slice(0,i))+'<mark>'+qEsc(txt.slice(i,i+t.length))+'</mark>'+qEsc(txt.slice(i+t.length)); };
+  box.innerHTML=qSuggList.map((s,i)=>`<button type="button" role="option" data-qsi="${i}" class="${i===qSuggHi?'hi':''}"`+
+    ` aria-selected="${i===qSuggHi}"><span class="t">${mark(s.t)}</span><span class="f">${Q_FNAME[s.f]}</span></button>`).join('');
+  box.hidden=false; inp.setAttribute('aria-expanded','true');
+}
+
+/* ---- field pickers: one popover (desktop) / bottom sheet (phone) at a time ---- */
+function qPopItems(f){
+  const list=(qLists[f]||[]).slice(), have=new Set(list.map(e=>e.key)), sel=q.f[f].sel;
+  sel.forEach(k=>{ if(!have.has(k)) list.push({key:k, n:0, sum:0, hint:'', hints:0}); });   // picked, but nothing left under the other filters
+  const on=new Set(sel);
+  return list.filter(e=>on.has(e.key)).concat(list.filter(e=>!on.has(e.key)));
+}
+function qPopSync(){
+  const pop=document.getElementById('qpop'); if(!qPopF) return;
+  const c=q.f[qPopF];
+  pop.classList.toggle('not', c.not);
+  pop.querySelectorAll('[data-qm]').forEach(b=>b.classList.toggle('on', (b.getAttribute('data-qm')==='1')===c.not));
+  pop.querySelectorAll('.qpi').forEach(l=>{ const i=l.querySelector('input'); const on=c.sel.indexOf(i.value)>=0; i.checked=on; l.classList.toggle('on',on); });
+  const n=c.sel.length;
+  pop.querySelector('.qpsel').textContent= n ? (c.not ? n+' left out' : n+' picked') : 'Any '+Q_FNAME[qPopF].toLowerCase();
+  pop.querySelector('[data-qpclr]').disabled=!n;
+}
+function qPopFilter(){
+  const pop=document.getElementById('qpop'), t=pop.querySelector('.qpfind').value.trim().toLowerCase();
+  let shown=0;
+  pop.querySelectorAll('.qpi').forEach(l=>{ const h=!!t && l.getAttribute('data-s').indexOf(t)<0; l.hidden=h; if(!h) shown++; });
+  const em=pop.querySelector('.qpempty'); if(em) em.hidden=shown>0;
+  const all=pop.querySelector('[data-qpall]'); if(all) all.hidden=!t || !shown;
+}
+function qRenderPop(){
+  const pop=document.getElementById('qpop'), f=qPopF; if(!f) return;
+  const name=Q_FNAME[f], items=TX ? qPopItems(f) : [];
+  const hint=e=>{ if(!e.hint) return ''; const h=f==='label' ? qName('c1',e.hint) : e.hint; return e.hints>1 ? h+' +'+(e.hints-1) : h; };
+  const rows=items.map(e=>{ const nm=qName(f,e.key), h=hint(e);
+    return `<label class="qpi${e.n?'':' zero'}" data-s="${qEsc((nm+' '+h).toLowerCase())}"><input type="checkbox" value="${qEsc(e.key)}">`+
+      `<span class="nm"><span class="t">${qEsc(nm)}</span>${h?`<span class="ht">${qEsc(h)}</span>`:''}</span>`+
+      `<span class="ct">${grp(e.n)}</span><span class="sm ${qCls(e.sum)}">${fmt(e.sum)}</span></label>`; }).join('');
+  pop.setAttribute('aria-label', name);
+  pop.innerHTML=`<div class="qphead"><b>${name}</b><span class="pills"><button type="button" class="pill" data-qm="0">Only</button>`+
+    `<button type="button" class="pill" data-qm="1">Except</button></span>`+
+    `<button type="button" class="qbtn" data-qpclr>Clear</button></div>`+
+    `<input type="search" class="qpfind" placeholder="Find" aria-label="Find a ${name.toLowerCase()}" autocomplete="off" spellcheck="false">`+
+    `<div class="qplist">${rows}<div class="qpempty"${items.length?' hidden':''}>${TX ? 'Nothing here' : 'Loading\u2026'}</div></div>`+
+    `<div class="qpfoot"><span class="qpsel"></span><button type="button" class="qbtn" data-qpall hidden>Pick shown</button>`+
+    `<button type="button" class="qbtn qdone" data-qpdone>Done</button></div>`;
+  qPopSync();
+}
+function qPlacePop(){
+  const pop=document.getElementById('qpop'); if(!qPopF || pop.hidden) return;
+  if(isMobile()){ pop.style.left=pop.style.top=pop.style.width=pop.style.maxHeight=''; return; }
+  const b=document.querySelector('.qpick[data-f="'+qPopF+'"]'); if(!b) return;
+  const r=b.getBoundingClientRect(), w=Math.min(380, window.innerWidth-16);
+  const left=Math.max(8, Math.min(r.left, window.innerWidth-w-8));
+  pop.style.width=w+'px'; pop.style.left=(left+window.scrollX)+'px'; pop.style.top=(r.bottom+window.scrollY+4)+'px';
+  pop.style.maxHeight=Math.max(300, Math.min(480, window.innerHeight-r.bottom-14))+'px';
+}
+function qOpenPop(f){
+  if(qPopF===f){ qClosePop(true); return; }
+  qSuggClose();
+  qPopF=f;
+  const pop=document.getElementById('qpop');
+  pop.hidden=false; document.getElementById('qpopBack').hidden=false; qRenderPop();
+  qPlacePop(); syncQControls();
+  if(!isMobile()) pop.querySelector('.qpfind').focus({preventScroll:true});
+}
+function qClosePop(refocus){
+  if(!qPopF) return;
+  const f=qPopF; qPopF=null;
+  const pop=document.getElementById('qpop'); pop.hidden=true; pop.innerHTML='';
+  document.getElementById('qpopBack').hidden=true;
+  const b=document.querySelector('.qpick[data-f="'+f+'"] .qpbtn');
+  if(b){ b.setAttribute('aria-expanded','false'); if(refocus) b.focus({preventScroll:true}); }
+}
+function qToggleValue(f, key, on){
+  const c=q.f[f], i=c.sel.indexOf(key);
+  if(on && i<0) c.sel.push(key); else if(!on && i>=0) c.sel.splice(i,1);
+  qChanged(); qPopSync();
+}
+
 function qGroupTable(list, view, n, sum){
   const sorted=querySort(list, q.sortGrp, view);
   const maxA=Math.max(0, ...list.map(g=>Math.abs(g.sum)));
   let P=0, N=0; list.forEach(g=>{ if(g.sum>0) P+=g.sum; else N-=g.sum; });
   const s=q.sortGrp, on=k=> (k==='sum' ? (s==='size'||s==='neg'||s==='pos') : s===k) ? ' on'+(k==='sum'&&s==='neg' ? ' asc' : '') : '';
   const share=v=>{ const base=v>0?P:N; if(!base || !v) return ''; const p=Math.abs(v)/base*100; return p<1 ? '<1%' : Math.round(p)+'%'; };
-  const hint=g=> view==='details' ? (g.sub.length===1 ? g.sub[0] : g.sub.length+' labels') : view==='labels' && g.sub.length===1 ? g.sub[0] : '';
+  const hint=g=> view==='details' ? (g.sub.length===1 ? g.sub[0] : g.sub.length+' labels') : view==='labels' && g.sub.length===1 ? qName('c1',g.sub[0]) : '';
   const nextV=qNextView(view), nextName=Q_VNAME[nextV].toLowerCase();
   const title={months:'Month', labels:'Label', details:'Detail', accounts:'Account'}[view];
   qGroups=new Map(list.map(g=>[String(g.key), g]));
@@ -3405,11 +3673,12 @@ function qTxTable(rows){
     (left>0 ? `<button type="button" class="qbtn qmore" data-qmore>Show ${grp(Math.min(Q_MORE,left))} more (${grp(left)} left)</button>` : '');
 }
 /* called from every build() (returns early off the page) and on every criteria change */
+let qIndexedVer=-1;
 function renderQuery(force){
   if(!pageOn('query') || !controlsReady) return;
   const wrap=document.getElementById('qwrap'), cards=document.getElementById('qcards'); if(!wrap || !cards) return;
   ensureTx();
-  const sig=[JSON.stringify(q), showK, txVer, qShown, txBusy?1:0, txErr||'', qStack.map(e=>e.label).join('|')].join('#');
+  const sig=[JSON.stringify(q), qTyping, showK, txVer, qShown, txBusy?1:0, txErr||'', qStack.map(e=>e.label).join('|')].join('#');
   if(!force && sig===qSig) return;
   qSig=sig;
   if(!TX){
@@ -3420,8 +3689,11 @@ function renderQuery(force){
       : `<div class="qmsg">Loading transactions\u2026</div>`;
     return;
   }
-  const R=queryRows(TX, q), rows=R.rows, n=rows.length;
-  syncQControls(R.bad); qFillLists(R.lists);
+  if(qIndexedVer!==txVer){ qIndexTx(); qIndexedVer=txVer; if(qPopF) qRenderPop(); }
+  const words=q.words.concat(qTyping.split(/[\s,]+/).filter(Boolean));
+  const R=queryRows(TX, Object.assign({}, q, {words})), rows=R.rows, n=rows.length;
+  qLists=R.lists;
+  syncQControls(R.bad);
   const G={months:queryGroup(rows,'months'), labels:queryGroup(rows,'labels'), details:queryGroup(rows,'details'), accounts:queryGroup(rows,'accounts')};
   document.querySelectorAll('#qviews [data-qv]').forEach(b=>{ const v=b.getAttribute('data-qv');
     b.innerHTML=`${qViewName(v)}<span class="qn">${grp(v==='tx' ? n : G[v].length)}</span>`; });
@@ -3438,22 +3710,80 @@ function renderQuery(force){
   wrap.innerHTML= q.view==='tx' ? qTxTable(rows) : qGroupTable(G[q.view], q.view, n, sum);
 }
 function qReset(){ const keep={view:q.view, sortTx:q.sortTx, sortGrp:q.sortGrp, open:q.open};
+  qClosePop(); qSuggClose(); qTyping=''; document.getElementById('qWordIn').value='';
   q=Object.assign(qDefault(), keep); qStack=[]; qChanged(); }
 function qInit(){
   if(qReady) return; qReady=true;
   qLoad();
   const $=id=>document.getElementById(id);
-  $('qfToggle').addEventListener('click',()=>{ q.open=!q.open; qSave(); syncQControls(); });
+  /* the field picker buttons */
+  $('qPicks').innerHTML=Q_FIELDS.map(f=>`<div class="qpick" data-f="${f}">`+
+    `<button type="button" class="qpbtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="qpop">`+
+    `<span class="qpname">${Q_FNAME[f]}</span><span class="qpval">Any</span></button>`+
+    `<span class="qpcaret" aria-hidden="true">\u25BE</span>`+
+    `<button type="button" class="qpx" aria-label="Clear ${Q_FNAME[f]}" hidden>\u00d7</button></div>`).join('');
+  $('qPicks').addEventListener('click',e=>{ const p=e.target.closest && e.target.closest('.qpick'); if(!p) return;
+    const f=p.getAttribute('data-f');
+    if(e.target.closest('.qpx')){ q.f[f]={sel:[], not:false}; qChanged(); if(qPopF===f) qRenderPop(); return; }
+    if(e.target.closest('.qpbtn')) qOpenPop(f); });
+  $('qfToggle').addEventListener('click',()=>{ q.open=!q.open; if(!q.open){ qClosePop(); qSuggClose(); } qSave(); syncQControls(); });
   $('qReset').addEventListener('click',qReset);
   [['qFrom','from'],['qTo','to']].forEach(([id,k])=>$(id).addEventListener('change',e=>{ q[k]=e.target.value||''; qChanged(); }));
   $('qPresets').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qp]'); if(!b) return;
     const [f,t]=qPresetRange(b.getAttribute('data-qp')); q.from=f; q.to=t; qChanged(); });
   $('qTypes').addEventListener('change',()=>{ q.types=[...document.querySelectorAll('#qTypes input')].filter(i=>i.checked).map(i=>i.value); qChanged(); });
-  /* text criteria: redraw shortly after typing stops (a datalist pick fires input too) */
-  let qT=null;
-  for(const k in Q_INPUTS){ const el=$(Q_INPUTS[k]);
-    el.addEventListener('input',()=>{ clearTimeout(qT); qT=setTimeout(()=>{ q[k]=el.value; qChanged(); },220); });
-    el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ clearTimeout(qT); q[k]=el.value; qChanged(); } }); }
+  /* search: typing filters live (short pause); Enter or comma makes the words chips, a
+     suggestion adds that value as one chip, Backspace on an empty box removes the last chip */
+  const wIn=$('qWordIn'); let wT=null;
+  $('qtok').addEventListener('click',e=>{ const x=e.target.closest && e.target.closest('[data-qw]');
+    if(x){ e.stopPropagation(); q.words.splice(+x.getAttribute('data-qw'),1); qChanged(); wIn.focus(); return; }
+    if(e.target!==wIn) wIn.focus(); });
+  wIn.addEventListener('input',()=>{ qSuggHi=-1; qSuggRender(); clearTimeout(wT);
+    wT=setTimeout(()=>{ qTyping=wIn.value.trim(); renderQuery(true); },200); });
+  wIn.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown' || e.key==='ArrowUp'){ const n=qSuggList.length; if(!n) return; e.preventDefault();
+      if(e.key==='ArrowDown') qSuggHi = qSuggHi>=n-1 ? -1 : qSuggHi+1; else qSuggHi = qSuggHi<=-1 ? n-1 : qSuggHi-1;
+      qSuggRender(); return; }
+    if(e.key==='Enter'){ e.preventDefault(); clearTimeout(wT);
+      if(qSuggHi>=0 && qSuggList[qSuggHi]) qAddWords([qSuggList[qSuggHi].t]); else qCommitTyped(); return; }
+    if(e.key===','){ e.preventDefault(); clearTimeout(wT); qCommitTyped(); return; }
+    if(e.key==='Backspace' && !wIn.value && q.words.length){ q.words.pop(); qChanged(); return; }
+    if(e.key==='Escape' && !$('qSugg').hidden){ e.stopPropagation(); qSuggClose(); } });
+  wIn.addEventListener('blur',()=>{ setTimeout(()=>{ if(document.activeElement!==wIn){ clearTimeout(wT); qCommitTyped(); qSuggClose(); } },150); });
+  const sg=$('qSugg');
+  sg.addEventListener('mousedown',e=>e.preventDefault());          // keep the focus in the box
+  sg.addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qsi]'); if(!b) return;
+    const s=qSuggList[+b.getAttribute('data-qsi')]; if(s){ clearTimeout(wT); qAddWords([s.t]); wIn.focus(); } });
+  /* amount: sign, min / max (short pause while typing), quick minimums */
+  $('qSign').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qsg]'); if(!b) return;
+    q.sign=b.getAttribute('data-qsg'); qChanged(); });
+  let aT=null;
+  [['qMin','min'],['qMax','max']].forEach(([id,k])=>{ const el=$(id);
+    el.addEventListener('input',()=>{ clearTimeout(aT); aT=setTimeout(()=>{ q[k]=el.value; qChanged(); },300); });
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ clearTimeout(aT); q[k]=el.value; qChanged(); el.blur(); } }); });
+  $('qAmtP').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qap]'); if(!b) return;
+    const v=b.getAttribute('data-qap'); if(qNum(q.min)===+v && !q.max.trim()) q.min=''; else { q.min=v; q.max=''; }
+    clearTimeout(aT); qChanged(); });
+  /* the picker: Only / Except, Clear, tick values (applied at once), Find, Pick shown, Done */
+  const pop=$('qpop');
+  pop.addEventListener('change',e=>{ const i=e.target; if(!qPopF || !i || i.type!=='checkbox') return; qToggleValue(qPopF, i.value, i.checked); });
+  pop.addEventListener('click',e=>{ if(!qPopF) return; const t=e.target.closest ? e.target : null; if(!t) return;
+    const m=t.closest('[data-qm]'); if(m){ q.f[qPopF].not=m.getAttribute('data-qm')==='1'; qChanged(); qPopSync(); return; }
+    if(t.closest('[data-qpclr]')){ q.f[qPopF].sel=[]; qChanged(); qPopSync(); return; }
+    if(t.closest('[data-qpall]')){ const c=q.f[qPopF];
+      pop.querySelectorAll('.qpi:not([hidden]) input').forEach(i=>{ if(c.sel.indexOf(i.value)<0) c.sel.push(i.value); });
+      qChanged(); qPopSync(); return; }
+    if(t.closest('[data-qpdone]')) qClosePop(true); });
+  pop.addEventListener('input',e=>{ if(e.target.classList.contains('qpfind')) qPopFilter(); });
+  pop.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){ e.stopPropagation(); qClosePop(true); return; }
+    if(e.key==='Enter' && e.target.classList.contains('qpfind')){ e.preventDefault();
+      const first=pop.querySelector('.qpi:not([hidden]) input'); if(first){ first.checked=!first.checked; qToggleValue(qPopF, first.value, first.checked); } } });
+  $('qpopBack').addEventListener('click',e=>{ e.stopPropagation(); qClosePop(); });
+  document.addEventListener('click',e=>{ if(!qPopF) return; const t=e.target;
+    if(t && t.closest && (t.closest('#qpop') || t.closest('.qpick[data-f="'+qPopF+'"]'))) return;
+    qClosePop(); });
+  window.addEventListener('resize',()=>qPlacePop());
   $('qviews').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qv]'); if(!b) return;
     q.view=b.getAttribute('data-qv'); qChanged(); });
   $('qSort').addEventListener('change',e=>{ if(q.view==='tx') q.sortTx=e.target.value; else q.sortGrp=e.target.value; qChanged(); });
@@ -3475,9 +3805,12 @@ function qInit(){
   });
   wrap.addEventListener('keydown',e=>{ if(e.key!=='Enter' && e.key!==' ') return;
     const tr=e.target.closest && e.target.closest('tr.dr'); if(!tr) return; e.preventDefault(); qDrill(tr.getAttribute('data-k')); });
-  /* Esc steps back through the drill-down (not while typing in a field, not over an overlay) */
+  /* Esc: closes an open picker first, else steps back through the drill-down (not while
+     typing in a box, not over another overlay) */
   document.addEventListener('keydown',e=>{
-    if(e.key!=='Escape' || !pageOn('query') || !qStack.length || panel || mdMi!=null) return;
+    if(e.key!=='Escape' || !pageOn('query') || panel || mdMi!=null) return;
+    if(qPopF){ qClosePop(true); return; }
+    if(!qStack.length) return;
     const tag=e.target && e.target.tagName; if(tag==='INPUT' || tag==='SELECT' || tag==='TEXTAREA') return;
     qBack(); });
   ['qhead','qfilters','qcards','qbar','qwrap'].forEach(id=>{ $(id).style.display=''; });
@@ -3754,7 +4087,7 @@ function renderPage(){
 function showPage(p, fromHash){
   if(PAGES.indexOf(p)<0 || p===PAGE) return;
   pageScroll[PAGE]=window.scrollY;
-  hideMini(); hideTip(); if(panel) closePanel(); closeMd();
+  hideMini(); hideTip(); if(panel) closePanel(); closeMd(); if(qReady){ qClosePop(); qSuggClose(); }
   PAGE=p;
   try{ localStorage.setItem(PAGE_KEY,p); }catch(e){}
   if(!fromHash && location.hash!=='#'+p){ try{ history.replaceState(null,'','#'+p); }catch(e){} }
@@ -3914,7 +4247,7 @@ boot();
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash,
-    txURL, txOk, parseTx, qTextMatcher, qValueMatcher, queryRows, queryGroup, querySort, querySortTx };
+    txURL, txOk, parseTx, qNum, qAmountFn, queryRows, queryGroup, querySort, querySortTx };
 }
 </script>
 </body>
