@@ -199,11 +199,13 @@ year is labelled `YTD` under its year; any other part year shows its month count
     that has a `DETAIL` breakdown opens its sub-categories on tap (▸), shown as indented
     muted rows (same drill-down pattern as the net-worth table), biggest first with their
     own bar and share; a group header collapses its labels. Expenses are separated from
-    income by a heavier rule. A label whose only DETAIL is itself (Groceries, Food,
-    Restaurants, ...) is not drillable; one that has distinct details still expands even
-    when a single one is non-zero that month (e.g. Holidays -> Weekend). The rule is
-    `l.details.length > 0` (comparePeriods only carries details for labels with more than
-    one distinct DETAIL all-time, so the single-same-name labels never reach it).
+    income by a heavier rule. A label is drillable when its DETAIL breakdown **adds
+    something**: `comparePeriods()` carries the details when the period has more than one
+    distinct sub-category, OR a single one whose name differs from the label. So a lone
+    DETAIL equal to the label (Groceries -> Groceries, Food, Restaurants, ...) is not
+    drillable, but a single named one is (Holidays -> Weekend in Sep, -> Argentina-Jan27
+    in Oct), which is why Holidays now expands every month, not only when there are two or
+    more trips. `renderMd()` then shows the arrow for `l.details.length > 0`.
   - **Navigation:** `‹` / `›` (or the ← / → arrow keys) step month by month, clamped to
     the data; the chart behind follows the year. **`Cash Flow ›`** opens that month in the
     Cash Flow Sankey (sets Month mode + the range window, switches to the Cash Flow page).
