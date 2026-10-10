@@ -72,15 +72,32 @@ A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
   flag amounts; Avg/m changes nothing (the value is a ratio of years).
 - **Display:** y axis in years (1 / 2 / 5 steps, `0y` line stronger), one x label per
   January, last value labelled at the right end (`8,7y`). Hover / tap snaps to the
-  nearest month: tooltip with years paid, net worth and T12M expenses (+ per month),
-  plus "N expenses not counted" when flags are off. No legend. Drawn at the frame's
+  nearest month: a dot on each series and a tooltip with years paid, net worth and T12M
+  expenses (+ per month), each with its colour swatch, plus "N expenses not counted"
+  when flags are off. No legend.
+- **Background series (added 10 Oct 2026):** behind the years line, shapes only (the
+  values are in the tooltip, there is no second axis):
+  - **Net worth** (blue `YLP_NW` area + thin line), on a € scale whose zero sits on the
+    years zero line and sized so the whole series fits (`kNw` = the larger of max net
+    worth / top of the axis and min net worth / bottom of the axis). Since years =
+    net worth / expenses, both cross zero in the same month.
+  - **T12M expenses** (orange `YLP_EX` thin line + very light area), on its own scale:
+    the peak sits at `YLP_EXP_H` = half of the positive height, so the trend reads as a
+    band under the other two. Both follow the expense flags and the Sankey exclusions,
+    like the years line.
+- **Negative = red:** everything below the zero line (years paid, net worth) is drawn
+  in `YLP_NEG` (#e58a8a). Each signed series is drawn twice, clipped above and below
+  the zero line (`clipPath` `ylpPos` / `ylpNeg`). The end label, the hover dots and the
+  tooltip values turn red when negative too (Dec 2018: -2,9y, net worth -16.976). Drawn at the frame's
   real pixel width, redrawn on resize. Phone: the flag list is one column.
 - Code: pure `ylpSeries(data, holds, minMi, lastMi, off, excluded)` (exported in the
   test shim) returns `[{mi, nw, exp, years}]`; `renderYlp()` draws the chart and the
   flag list; `NW_NOW` (set in `buildNetWorth()`) carries the live net worth.
   Check: `_verify_ylp.py` (untracked) compares every month against a Python
   reference computed straight from the sheet CSV, plus flags, groups, Select all /
-  none, persistence, Sankey exclusions, K, tooltip and the live Now point.
+  none, persistence, Sankey exclusions, K, tooltip, the live Now point, and the
+  background series (one point per month, drawn behind the line, net worth on the same
+  side of zero as the years line, expenses peak at half height, red below zero).
 
 ### Period Comparison (A vs B, what went up and down)
 A diverging change chart in table form, the **Compare** page. Added Oct 2026.

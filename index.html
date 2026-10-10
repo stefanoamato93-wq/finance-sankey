@@ -2477,8 +2477,12 @@ function renderCompare(){
    checkbox per label, grouped by macro group, kept in localStorage); entries
    excluded from metrics in the Sankey stay out too. Window-independent (ignores the
    range bar); K applies to the tooltip and the flag amounts, Avg/m changes nothing
-   (a ratio of years). */
+   (a ratio of years). Behind the line: net worth (blue area, zero on the years zero
+   line) and T12M expenses (orange area, own scale), shapes only. Anything below
+   zero (years, net worth) is red. */
 const YLP_KEY='finance-sankey-ylp-off-v1', YLP_COL='#7fd0a3';
+/* background series (net worth, T12M expenses) and the colour of anything below zero */
+const YLP_NW='#5b8fd0', YLP_EX='#d98a4a', YLP_NEG='#e58a8a', YLP_EXP_H=0.5;
 let ylpOff=new Set(), ylpOpen=false, ylpSig=null, ylpData=null, ylpLastW=0, NW_NOW=null, YLP_LIST=new Map(), YLP_LOCK=new Set();
 function ylpLoad(){ try{ const a=JSON.parse(localStorage.getItem(YLP_KEY)||'[]'); if(Array.isArray(a)) ylpOff=new Set(a.map(String)); }catch(e){} }
 function ylpSave(){ try{ localStorage.setItem(YLP_KEY, JSON.stringify([...ylpOff].sort())); }catch(e){} }
@@ -2569,46 +2573,77 @@ function renderYlp(){
       svgEl.appendChild(el('text',{x:xOf(i),y:plotBot+15,'text-anchor':anchor,fill:'#e7ecf5','font-size':fs},String(Math.floor(pts[i].mi/12)))); };
     if(!jan.length || xOf(jan[0])-xOf(0)>34) xl(0,'start');
     jan.forEach((i,j)=>{ if(!(j%every)) xl(i,'middle'); });
-    /* area to the zero line + the line, one piece per run of defined points */
+    /* everything below the zero line is drawn in red: each signed series is drawn twice,
+       clipped above the zero line in its own colour and below it in YLP_NEG */
+    const z0=yOf(Math.max(yMin,Math.min(yMax,0)));
+    const defs=el('defs',{});
+    const clip=(id,y,h)=>{ const c=el('clipPath',{id}); c.appendChild(el('rect',{x:0,y,width:W,height:Math.max(0,h)})); defs.appendChild(c); };
+    clip('ylpPos',0,z0); clip('ylpNeg',z0,H-z0);
+    svgEl.appendChild(defs);
+    const yC=u=> yOf(Math.max(yMin,Math.min(yMax,u)));
+    /* area to the zero line + the line over the points idx; unit(i) = value in years-axis units */
+    const series=(idx,unit,col,o)=>{
+      const line='M'+idx.map(i=>xOf(i).toFixed(1)+','+yC(unit(i)).toFixed(1)).join('L');
+      const area=line+`L${xOf(idx[idx.length-1]).toFixed(1)},${z0.toFixed(1)}L${xOf(idx[0]).toFixed(1)},${z0.toFixed(1)}Z`;
+      (o.signed ? [['ylpPos',col],['ylpNeg',YLP_NEG]] : [[null,col]]).forEach(([cp,c])=>{
+        const a={d:area,fill:c,'fill-opacity':o.fill,stroke:'none',class:o.cls+' area'},
+              l={d:line,fill:'none',stroke:c,'stroke-width':o.w,'stroke-opacity':o.line,'stroke-linejoin':'round',class:o.cls+' line'};
+        if(cp){ a['clip-path']=l['clip-path']=`url(#${cp})`; }
+        svgEl.appendChild(el('path',a)); svgEl.appendChild(el('path',l));
+      });
+    };
+    /* background, shapes only (values in the tooltip):
+       net worth = area on a € scale whose zero sits on the years zero line, sized so the
+         series fits; it crosses zero in the same month as the years line (same sign)
+       T12M expenses = area on its own scale, peak at YLP_EXP_H of the positive height */
+    const all=pts.map((p,i)=>i), nws=pts.map(p=>p.nw), exs=pts.map(p=>p.exp);
+    const nwMax=Math.max(0,...nws), nwMin=Math.min(0,...nws);
+    const kNw=Math.max(yMax>0 ? nwMax/yMax : 0, yMin<0 ? nwMin/yMin : 0) || 1;
+    const exMax=Math.max(0,...exs), posU=yMax>0 ? yMax : yMax-yMin, kEx=exMax>0 ? exMax/(posU*YLP_EXP_H) : 1;
+    const uNw=i=>pts[i].nw/kNw, uEx=i=>pts[i].exp/kEx;
+    series(all, uNw, YLP_NW, {fill:.11, line:.6, w:1.3, signed:true, cls:'bgnw'});
+    series(all, uEx, YLP_EX, {fill:.045, line:.7, w:1.3, signed:true, cls:'bgex'});   // light fill: orange on navy reads brown-red
+    /* foreground: years paid, one piece per run of defined points */
     const runs=[]; let cur=null;
     pts.forEach((p,i)=>{ if(p.years==null){ cur=null; return; } if(!cur){ cur=[]; runs.push(cur); } cur.push(i); });
-    const z0=yOf(Math.max(yMin,Math.min(yMax,0)));
-    runs.forEach(r=>{
-      const line=r.map(i=>xOf(i).toFixed(1)+','+yOf(pts[i].years).toFixed(1));
-      svgEl.appendChild(el('path',{d:'M'+line.join('L')+`L${xOf(r[r.length-1]).toFixed(1)},${z0}L${xOf(r[0]).toFixed(1)},${z0}Z`,
-        fill:YLP_COL,'fill-opacity':.16,stroke:'none'}));
-      svgEl.appendChild(el('path',{d:'M'+line.join('L'),fill:'none',stroke:YLP_COL,'stroke-width':2,'stroke-linejoin':'round'}));
-    });
+    runs.forEach(r=> series(r, i=>pts[i].years, YLP_COL, {fill:.16, line:1, w:2, signed:true, cls:'yrs'}));
+    const colOf=v=> v<0 ? YLP_NEG : YLP_COL;
     /* last value labelled at the right end; the live point gets a ring */
     let li=N-1; while(li>=0 && pts[li].years==null) li--;
-    if(li>=0){ const p=pts[li];
-      svgEl.appendChild(el('circle',{cx:xOf(li),cy:yOf(p.years),r:p.now?3.6:2.8,fill:p.now?'#0f1420':YLP_COL,stroke:YLP_COL,'stroke-width':p.now?1.8:0}));
-      svgEl.appendChild(el('text',{x:xOf(li)+6,y:yOf(p.years)+4,fill:YLP_COL,'font-size':fs+0.5,'font-weight':700},yrs(p.years)+'y')); }
-    /* hover / tap: nearest month, guide line + dot + tooltip */
+    if(li>=0){ const p=pts[li], c=colOf(p.years);
+      svgEl.appendChild(el('circle',{cx:xOf(li),cy:yOf(p.years),r:p.now?3.6:2.8,fill:p.now?'#0f1420':c,stroke:c,'stroke-width':p.now?1.8:0}));
+      svgEl.appendChild(el('text',{x:xOf(li)+6,y:yOf(p.years)+4,fill:c,'font-size':fs+0.5,'font-weight':700},yrs(p.years)+'y')); }
+    /* hover / tap: nearest month, guide line + a dot on each series + tooltip */
     const guide=el('line',{x1:0,x2:0,y1:plotTop,y2:plotBot,stroke:'rgba(231,236,245,.55)','stroke-width':1,visibility:'hidden'});
-    const dot=el('circle',{cx:0,cy:0,r:3.4,fill:YLP_COL,visibility:'hidden'});
-    svgEl.appendChild(guide); svgEl.appendChild(dot);
+    const dNw=el('circle',{cx:0,cy:0,r:2.6,fill:YLP_NW,visibility:'hidden'}),
+          dEx=el('circle',{cx:0,cy:0,r:2.6,fill:YLP_EX,visibility:'hidden'}),
+          dot=el('circle',{cx:0,cy:0,r:3.4,fill:YLP_COL,visibility:'hidden'});
+    [guide,dNw,dEx,dot].forEach(x=>svgEl.appendChild(x));
     const mut=s=>`<span style="color:#9aa6bd">${s}</span>`;
     const nOff=leaves.length-nCnt;
     const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+    const red=v=> v<0 ? ` style="color:${YLP_NEG}"` : '';
     const tipHtml=i=>{ const p=pts[i];
       let h=p.now ? `<b>Now</b> <b style="color:${YLP_COL}">LIVE</b> ${mut(hhmm(NW_NOW.at))}` : `<b>${miLabel(p.mi)}</b>`;
-      h+=`<br><i class="sw" style="background:${YLP_COL}"></i>Years paid <b>${p.years==null?'\u2014':yrs(p.years)}</b>`+
-         `<br>&nbsp;&nbsp;`+mut(`Net worth ${fmt(p.nw)}`)+
-         `<br>&nbsp;&nbsp;`+mut(`T12M expenses ${fmt(p.exp)} \u00b7 ${fmt(p.exp/12)}/m`+(p.now?` (${cmpShort(m1-11,m1)})`:''));
+      h+=`<br><i class="sw" style="background:${colOf(p.years)}"></i>Years paid <b${red(p.years)}>${p.years==null?'\u2014':yrs(p.years)}</b>`+
+         `<br><i class="sw" style="background:${p.nw<0?YLP_NEG:YLP_NW}"></i>Net worth <b${red(p.nw)}>${fmt(p.nw)}</b>`+
+         `<br><i class="sw" style="background:${p.exp<0?YLP_NEG:YLP_EX}"></i>T12M expenses <b${red(p.exp)}>${fmt(p.exp)}</b> `+
+         mut(`\u00b7 ${fmt(p.exp/12)}/m`+(p.now?` (${cmpShort(m1-11,m1)})`:''));
       if(nOff) h+=`<br><span style="color:#e7c14a">${nOff} expense${nOff>1?'s':''} not counted</span>`;
       return h; };
     const hit=el('rect',{class:'hit',x:padL,y:0,width:innerW,height:H});
+    const at=(d,i,u,c)=>{ d.setAttribute('cx',xOf(i)); d.setAttribute('cy',yC(u)); d.setAttribute('fill',c); d.setAttribute('visibility','visible'); };
+    const hideDots=()=>[guide,dNw,dEx,dot].forEach(x=>x.setAttribute('visibility','hidden'));
     const show=e=>{ const r=svgEl.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width);
-      const i=Math.max(0,Math.min(N-1,Math.round((x-padL)/innerW*(N-1))));
+      const i=Math.max(0,Math.min(N-1,Math.round((x-padL)/innerW*(N-1)))), p=pts[i];
       guide.setAttribute('x1',xOf(i)); guide.setAttribute('x2',xOf(i)); guide.setAttribute('visibility','visible');
-      if(pts[i].years!=null){ dot.setAttribute('cx',xOf(i)); dot.setAttribute('cy',yOf(pts[i].years)); dot.setAttribute('visibility','visible'); }
-      else dot.setAttribute('visibility','hidden');
+      at(dNw,i,uNw(i),p.nw<0?YLP_NEG:YLP_NW); at(dEx,i,uEx(i),p.exp<0?YLP_NEG:YLP_EX);
+      if(p.years!=null) at(dot,i,p.years,colOf(p.years)); else dot.setAttribute('visibility','hidden');
       showTip(e,tipHtml(i)); const tw=tip.offsetWidth, th=tip.offsetHeight;
       if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
       if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
     hit.addEventListener('mousemove',show);
-    hit.addEventListener('mouseleave',()=>{ hideTip(); guide.setAttribute('visibility','hidden'); dot.setAttribute('visibility','hidden'); });
+    hit.addEventListener('mouseleave',()=>{ hideTip(); hideDots(); });
     hit.addEventListener('click',e=>{ e.stopPropagation(); show(e); });
     svgEl.appendChild(hit);
   }
