@@ -370,6 +370,107 @@
   .badge{margin:8px 26px 0; display:inline-block; color:#e7c14a; font-size:11.5px;
          background:rgba(231,193,74,.10); border:1px solid rgba(231,193,74,.35);
          border-radius:7px; padding:4px 9px;}
+  /* Query page (modelled on the sheet's QUERY tab): a criteria panel, Sum / Count / Average /
+     Per month cards, then one ranked view (Transactions, Months, Labels, Details, Accounts)
+     whose rows drill one level down */
+  body[data-page="query"] #tgAvg{display:none;}
+  body[data-page="query"] #tgK{border-left:0;}
+  .qfilters{margin:10px 26px 0; padding:6px 12px 10px; max-width:940px;}
+  .qfhead{display:flex; align-items:center; gap:8px; min-height:30px;}
+  #qfToggle{background:none; border:0; color:var(--ink); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
+            padding:4px 2px; display:inline-flex; align-items:center; gap:4px; flex:0 0 auto;}
+  #qfToggle .tw{display:inline-block; width:11px; color:var(--muted); font-size:11px;}
+  .qfsum{color:var(--muted); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1 1 auto;}
+  .qbtn{background:#141d30; color:var(--ink); border:1px solid var(--grid); border-radius:6px; padding:4px 10px;
+        font-size:11.5px; font-family:inherit; cursor:pointer; flex:0 0 auto;}
+  .qbtn:hover{background:#18233a;}
+  #qReset{margin-left:auto;}
+  .qrow{display:flex; align-items:center; gap:6px 8px; flex-wrap:wrap; margin-top:8px;}
+  .qlab{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; width:42px; flex:0 0 auto;}
+  .qdates{display:inline-flex; align-items:center; gap:6px; min-width:0;}
+  .qdates span{color:var(--muted);}
+  .qfilters input{height:30px; background:var(--bg); color:var(--ink); border:1px solid var(--grid); border-radius:7px;
+                  padding:0 8px; font-family:inherit; font-size:12.5px; min-width:0; color-scheme:dark;}
+  .qfilters input[type=date]{width:136px; padding:0 6px;}
+  .qfilters input::placeholder{color:#5d6a83;}
+  .qfilters input:focus{outline:none; border-color:var(--needs);}
+  .qfilters input.set{border-color:#2f7a52; background:#11251b;}
+  .qfilters input.bad{border-color:#c85c5c; background:#2a1414;}
+  .qfilters .pills .pill{font-size:11.5px; padding:0 9px;}
+  .qgrid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 10px; margin-top:10px;}
+  .qf{display:flex; flex-direction:column; gap:3px; min-width:0;}
+  .qf > span{color:var(--muted); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;}
+  .qhint{color:var(--muted); font-size:11px; margin-top:8px; line-height:1.45;}
+  .qhint b{color:var(--ink); font-weight:600;}
+  /* the view switch + sort stay on screen while scrolling a long list (under the desktop tabs) */
+  .qbar{position:sticky; top:var(--tabsh,0px); z-index:14; background:var(--bg); display:flex; align-items:center;
+        gap:6px 8px; flex-wrap:wrap; margin:6px 26px 0; padding:6px 0; max-width:940px;}
+  .qbar.stuck{box-shadow:0 1px 0 var(--grid), 0 6px 12px -6px rgba(0,0,0,.6);}
+  .qtrail{display:flex; align-items:center; gap:2px 4px; flex-wrap:wrap; font-size:12px; color:var(--muted); min-width:0;}
+  .qtrail .pills{margin-right:4px;}
+  .qtrail .crumb{background:none; border:0; color:var(--ink); font:inherit; font-size:12px; cursor:pointer; padding:3px 4px; border-radius:5px;}
+  .qtrail .crumb:hover{background:var(--panel);}
+  .qtrail .crumb[aria-current]{color:#7fd0a3; font-weight:700; cursor:default;}
+  .qtrail .sep{color:var(--muted);}
+  .qviews{overflow-x:auto; scrollbar-width:none; max-width:100%;}
+  .qviews::-webkit-scrollbar{display:none;}
+  .qviews .pill{white-space:nowrap;}
+  .qviews .qn{margin-left:5px; color:#6f7c95; font-weight:500; font-size:10.5px; font-variant-numeric:tabular-nums;}
+  .qviews .pill.on .qn{color:rgba(255,255,255,.7);}
+  .qviews .qvs{display:none;}
+  #qSort{height:30px; padding:0 6px; font-size:12px; font-family:inherit; margin-left:auto; min-width:0;}
+  .qwrap{margin:4px 26px 40px; padding:8px 12px; max-width:940px;}
+  table.q{border-collapse:collapse; width:100%; table-layout:fixed; font-size:12.5px; font-variant-numeric:tabular-nums;}
+  .q th,.q td{padding:6px 8px; border-bottom:1px solid var(--grid); text-align:right; white-space:nowrap;
+              overflow:hidden; text-overflow:ellipsis;}
+  .q th{color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.3px; text-transform:uppercase; user-select:none;}
+  .q th[data-qs]{cursor:pointer;} .q th[data-qs]:hover,.q th.on{color:var(--ink);}
+  .q th.on::after{content:" \25BE"; font-size:9px;}
+  .q th.on.asc::after{content:" \25B4";}
+  .q th.n,.q td.n,.q th.lb,.q td.lb,.q th.dd,.q td.dd,.q th.ac,.q td.ac,.q th.dt,.q td.dt{text-align:left;}
+  .q th.rk{width:36px;} .q th.c{width:62px;} .q th.a{width:86px;} .q th.s{width:104px;} .q th.bar{width:21%;} .q th.p{width:60px;}
+  .q th.dt{width:92px;} .q th.lb{width:21%;} .q th.ac{width:17%;}
+  .q td.rk{color:var(--muted); font-size:11px;}
+  .q td.c,.q td.p,.q td.ac,.q td.dt{color:var(--muted);}
+  .q td.dd{color:var(--ink);}
+  .q td.bar i{display:block; height:8px; border-radius:2px; min-width:1px; background:var(--budget);}
+  .q td.bar i.pos{background:#3aa86a;} .q td.bar i.neg{background:#c85c5c;}
+  .q td.pos{color:#7fd0a3;} .q td.neg{color:#e58a8a;}
+  .q td.s{font-weight:600;}
+  .q tr.tot td{font-weight:700; background:#18223a; border-bottom:2px solid #3a4d78;}
+  .q tr.dr{cursor:pointer;}
+  .q tr.dr:hover td{background:#18233a;}
+  .q tr.dr:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
+  .q .hint{color:var(--muted); font-size:11px; font-weight:400; margin-left:6px;}
+  .q .sub{display:none; color:var(--muted); font-size:10.5px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .qmore{display:block; margin:10px auto 4px; padding:7px 14px; font-size:12px;}
+  .qmsg{text-align:center; color:var(--muted); padding:18px 8px; font-size:12.5px; line-height:1.6;}
+  .qmsg .qbtn{margin-top:8px;}
+  @media (max-width:680px){
+    .qfilters{margin:10px 14px 0; padding:6px 10px 10px; max-width:100%;}
+    .qbar{margin:6px 14px 0; max-width:100%;}
+    .qwrap{margin:4px 14px 24px; padding:4px 4px; max-width:100%;}
+    .qrow .qlab{width:100%;}
+    .qdates{flex:1 1 100%;}
+    .qfilters input[type=date]{flex:1 1 0; width:auto;}
+    /* 16px stops iOS zooming into a field on focus */
+    .qfilters input{height:36px; font-size:16px;}
+    .qfilters .pills{height:34px;}
+    .qgrid{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px;}
+    .qtrail{flex:1 1 100%;}
+    .qviews{flex:1 1 auto; height:36px;}
+    .qviews .pill{padding:0 8px; font-size:12px;}
+    .qviews .qvl{display:none;} .qviews .qvs{display:inline;}
+    .qviews .qn{margin-left:4px;}
+    #qSort{height:36px; font-size:12.5px; flex:0 1 auto; max-width:40%;}
+    table.q{font-size:12px;}
+    .q th,.q td{padding:7px 5px;}
+    .q th.c,.q td.c,.q th.a,.q td.a,.q th.dd,.q td.dd,.q th.ac,.q td.ac{display:none;}
+    .q th.rk{width:26px;} .q th.s{width:84px;} .q th.bar{width:17%;} .q th.p{width:46px;} .q th.dt{width:74px;} .q th.lb{width:auto;}
+    .q td.dt{font-size:11px;}
+    .q .sub{display:block;}
+    .q .hint{display:none;}
+  }
   /* mobile: adapt every section — controls, cards, table, touch targets — and keep the
      Sankey legible by rendering it wider inside its own horizontal scroll frame */
   @media (max-width:680px){
@@ -445,11 +546,11 @@
     .nw td.t2{padding-left:16px;}
     .nw col.cval{width:38%;}
     .swipehint{display:block;}
-    /* pages: bottom tab bar, five equal tabs within thumb reach; the page keeps room for it */
-    .tabs{position:fixed; top:auto; bottom:0; left:0; right:0; margin:0; max-width:none; z-index:25; gap:2px;
-          padding:5px 5px calc(5px + env(safe-area-inset-bottom)); border-top:1px solid var(--grid);
+    /* pages: bottom tab bar, six equal tabs within thumb reach; the page keeps room for it */
+    .tabs{position:fixed; top:auto; bottom:0; left:0; right:0; margin:0; max-width:none; z-index:25; gap:1px;
+          padding:5px 4px calc(5px + env(safe-area-inset-bottom)); border-top:1px solid var(--grid);
           background:rgba(15,20,32,.97); box-shadow:0 -6px 14px -8px rgba(0,0,0,.7);}
-    .tabs a{flex:1 1 0; min-width:0; text-align:center; padding:10px 2px; font-size:11.5px;
+    .tabs a{flex:1 1 0; min-width:0; text-align:center; padding:10px 1px; font-size:11px; letter-spacing:-.1px;
             overflow:hidden; text-overflow:ellipsis;}
     body{padding-bottom:calc(60px + env(safe-area-inset-bottom));}
     /* month detail on a phone: tighter cards and columns, bigger tap targets */
@@ -503,6 +604,7 @@
   <a href="#savings" data-page="savings">Savings</a>
   <a href="#compare" data-page="compare">Compare</a>
   <a href="#life" data-page="life">Years Paid</a>
+  <a href="#query" data-page="query">Query</a>
 </nav>
 
 <div class="status" id="status" style="display:none">Loading data from Google Sheets…</div>
@@ -634,6 +736,73 @@
 </div>
 </section>
 
+<!-- PAGE Query (modelled on the sheet's QUERY tab): criteria per field, Sum / Count /
+     Average / Per month, then one ranked view whose rows drill one level down
+     (Months -> Labels -> Details -> Transactions). Transactions load the first time the
+     page opens; filled by renderQuery() -->
+<section class="page" id="pg-query" data-page="query" hidden>
+<div class="nwhead hdrow" id="qhead" style="display:none">
+  <h2>Query</h2>
+  <span class="hdtools"><span class="tgslot"></span></span>
+</div>
+<div class="qfilters framed" id="qfilters" style="display:none">
+  <div class="qfhead">
+    <button type="button" id="qfToggle" aria-expanded="true" aria-controls="qfBody"><span class="tw">&#9662;</span>Filters</button>
+    <span class="qfsum" id="qfSum"></span>
+    <button type="button" class="qbtn" id="qReset" title="Clear every filter (types back to Income, Expenses, Taxes)">Reset</button>
+  </div>
+  <div id="qfBody">
+    <div class="qrow">
+      <span class="qlab">Dates</span>
+      <span class="qdates"><input type="date" id="qFrom" aria-label="From date" title="From (included)"><span>&ndash;</span><input type="date" id="qTo" aria-label="To date" title="To (included)"></span>
+      <span class="pills" id="qPresets">
+        <button type="button" class="pill" data-qp="all" title="Every date">All</button>
+        <button type="button" class="pill" data-qp="this" title="Current month">This M</button>
+        <button type="button" class="pill" data-qp="last" title="Last complete month">Last M</button>
+        <button type="button" class="pill" data-qp="ytd" title="1 January to today">YTD</button>
+        <button type="button" class="pill" data-qp="t12" title="Trailing 12 complete months">T12M</button>
+        <button type="button" class="pill" data-qp="ly" title="Last calendar year">Last Y</button>
+      </span>
+    </div>
+    <div class="qrow">
+      <span class="qlab">Type</span>
+      <span class="pills" id="qTypes">
+        <label class="pill"><input type="checkbox" value="INCOME">Income</label>
+        <label class="pill"><input type="checkbox" value="EXPENSES">Expenses</label>
+        <label class="pill"><input type="checkbox" value="TAXES">Taxes</label>
+        <label class="pill" title="Moves between accounts (credits, debts, top-ups)"><input type="checkbox" value="TRANSFER">Transfer</label>
+        <label class="pill" title="Market value changes (and ApprecTaxes)"><input type="checkbox" value="APPRECIATION">Apprec.</label>
+      </span>
+    </div>
+    <div class="qgrid">
+      <label class="qf"><span>Search</span><input id="qSearch" type="search" placeholder="any words" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Group</span><input id="qC1" data-qf="c1" list="qdl-c1" placeholder="%" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Category 2</span><input id="qC2" data-qf="c2" list="qdl-c2" placeholder="%" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Account</span><input id="qAcct" data-qf="acct" list="qdl-acct" placeholder="%" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Label</span><input id="qLabel" data-qf="label" list="qdl-label" placeholder="%" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Detail</span><input id="qDetail" data-qf="detail" list="qdl-detail" placeholder="%" autocomplete="off" spellcheck="false"></label>
+      <label class="qf"><span>Value</span><input id="qValue" data-qf="value" placeholder="&lt;0 · &gt;100 · -500..-50" autocomplete="off" spellcheck="false"></label>
+    </div>
+    <div class="qhint">Like the sheet's QUERY tab: blank or <b>%</b> = any, exact match otherwise, <b>%</b> wildcard (<b>ARG%</b>), comma = or (<b>FOOD, GROCERIES</b>), <b>!</b> = not (<b>!T</b>). Value: <b>&gt;</b> <b>&lt;</b> <b>&gt;=</b> <b>&lt;=</b> <b>=</b> <b>!=</b> or a range <b>-500..-50</b>. Search: every word, anywhere.</div>
+    <datalist id="qdl-c1"></datalist><datalist id="qdl-c2"></datalist><datalist id="qdl-acct"></datalist>
+    <datalist id="qdl-label"></datalist><datalist id="qdl-detail"></datalist>
+  </div>
+</div>
+<div class="totals" id="qcards" style="display:none"></div>
+<div class="qbar" id="qbar" style="display:none">
+  <div class="qtrail" id="qtrail" style="display:none"></div>
+  <span class="pills qviews" id="qviews" role="tablist" aria-label="View">
+    <button type="button" class="pill" data-qv="tx" role="tab">Transactions</button>
+    <button type="button" class="pill" data-qv="months" role="tab">Months</button>
+    <button type="button" class="pill" data-qv="labels" role="tab">Labels</button>
+    <button type="button" class="pill" data-qv="details" role="tab">Details</button>
+    <button type="button" class="pill" data-qv="accounts" role="tab">Accounts</button>
+  </span>
+  <select id="qSort" aria-label="Sort" title="Sort"></select>
+</div>
+<div class="qwrap framed" id="qwrap" style="display:none"></div>
+</section>
+
 <div class="tip" id="tip"></div>
 <div id="mini"><div class="mt" id="miniTitle"></div><svg id="miniSvg"></svg></div>
 
@@ -691,9 +860,9 @@ function slimURL(c){
   return CSV_URL+'&headers=1&tq='+encodeURIComponent(`select ${keys},sum(${c.VALUE}) group by ${keys} label sum(${c.VALUE}) 'VALUE'`);
 }
 /* pure: column letters of the needed columns, read off a header row (A..Z, AA..); null if one is missing */
-function learnCols(headRow){
+function learnCols(headRow, cols){
   const head=(headRow||[]).map(norm), col=i=> (i>=26 ? String.fromCharCode(64+Math.floor(i/26)) : '')+String.fromCharCode(65+i%26);
-  const c={}; for(const n of NEED_COLS){ const i=head.indexOf(n); if(i<0) return null; c[n]=col(i); }
+  const c={}; for(const n of (cols||NEED_COLS)){ const i=head.indexOf(n); if(i<0) return null; c[n]=col(i); }
   return c;
 }
 /* pure: a slim answer is usable when its header has every needed column with VALUE last,
@@ -723,11 +892,11 @@ let DATA=[], DETAIL=[], NWHOLD=[], META={years:[],minMi:0,maxMi:0,allMinMi:0,all
   refs:{trailing12:{income:1,months:12},singleMonth:{income:1,months:1},fullYear:{income:1,months:12},allTime:{income:1,months:1}}};
 
 /* ---- pages ----------------------------------------------------------------
-   One block per page: networth | cashflow | savings | compare | life. Only the page on
-   screen is shown AND drawn: every renderer returns early while its page is hidden
+   One block per page: networth | cashflow | savings | compare | life | query. Only the page
+   on screen is shown AND drawn: every renderer returns early while its page is hidden
    (pageOn), and showPage() draws the page it opens. The URL hash names the page and the
    last page is reopened on the next visit (PAGE_KEY). */
-const PAGES=['networth','cashflow','savings','compare','life'];
+const PAGES=['networth','cashflow','savings','compare','life','query'];
 const PAGE_KEY='finance-sankey-page-v1';
 const pageFromHash=()=>{ const h=String(location.hash||'').replace(/^#/,''); return PAGES.indexOf(h)>=0 ? h : null; };
 let PAGE=(()=>{ const h=pageFromHash(); if(h) return h;
@@ -2844,6 +3013,477 @@ function renderYlp(){
   box.querySelectorAll('input[data-ind]').forEach(i=>{ i.indeterminate=true; });
 }
 
+/* ---- Query page (modelled on the sheet's QUERY tab) --------------------------
+   One row per DB transaction (date, account, label, detail, type, group, category 2,
+   value), read the first time the page opens with a second gviz query (no group by,
+   ~0,9 MB, ~68 KB gzipped), kept in localStorage (TxCache) and refreshed like the DB
+   sheet, but only while the page is on screen. Criteria work like the sheet's QUERY
+   tab: blank or % = any, exact match otherwise (case-insensitive), % or * = wildcard,
+   comma = or, a leading ! = not; Value takes > < >= <= = != and a..b ranges; Search
+   ANDs words over every text field. Views: Transactions, Months, Labels, Details,
+   Accounts, ranked by size (|sum|, so expenses come most negative first and income most
+   positive first) with sum, count (the sheet's "field occurrences") and average (its
+   "trends"). A row click drills one level down (Months -> Labels -> Details ->
+   Transactions, Accounts -> Labels) and pushes the previous query on a back stack (Back
+   pill, a crumb of the trail, or Esc). Ignores the Sankey exclusions and Avg/m (the
+   criteria are explicit, and Per month is a card); K applies to sums, not to the single
+   transaction values. TAXES rows with DETAIL ApprecTaxes count as Appreciation, like the
+   Sankey, which leaves them out of cash flow. */
+const TX_COLS=["YEAR","MONTH","DAY","ACCOUNT","LABEL","DETAIL","TYPE","CATEGORY1","CATEGORY2","VALUE"];   // VALUE last (txOk)
+const TX_DEFAULT={YEAR:"A",MONTH:"B",DAY:"C",ACCOUNT:"H",LABEL:"J",DETAIL:"K",TYPE:"P",CATEGORY1:"R",CATEGORY2:"S",VALUE:"I"};
+const TX_COLS_KEY="finance-sankey-txcols-v1";
+function txCols(){
+  try{ const c=JSON.parse(localStorage.getItem(TX_COLS_KEY)||'null');
+    if(c && TX_COLS.every(n=>/^[A-Z]{1,2}$/.test(c[n]||''))) return c; }catch(e){}
+  return TX_DEFAULT;
+}
+/* pure: the gviz query URL of the transaction rows (no aggregation) */
+function txURL(c){ return CSV_URL+'&headers=1&tq='+encodeURIComponent('select '+TX_COLS.map(n=>c[n]).join(',')); }
+/* pure: the answer has every needed header, VALUE last, and plain-number values */
+function txOk(csv){
+  if(typeof csv!=='string') return false;
+  const nl=csv.indexOf('\n'); if(nl<0) return false;
+  const head=(parseCSV(csv.slice(0,nl))[0]||[]).map(norm);
+  if(head[head.length-1]!=='VALUE' || !TX_COLS.every(n=>head.indexOf(n)>=0)) return false;
+  return !/"[^"\n]*[^0-9.eE+\-"\n][^"\n]*"\r?$/m.test(csv.slice(nl+1));
+}
+function txMake(dk,v,acct,lab,det,typ,c1,c2){
+  const detU=String(det).toUpperCase();
+  return {dk, mi:Math.floor(dk/10000)*12+Math.floor(dk/100)%100-1, v, acct, lab, det, detU, typ, c1, c2,
+          hay:acct+' '+lab+' '+detU+' '+typ+' '+c1+' '+c2};
+}
+/* pure: parsed CSV rows (header first, columns found by name, so the full export works
+   too) -> transactions. Skips the sheet's blank formula rows (no year, TYPE #N/A, no
+   VALUE). dk = yyyymmdd, mi = year*12+month-1 like everywhere else. */
+function parseTx(rows){
+  const head=((rows&&rows[0])||[]).map(norm), c={};
+  TX_COLS.forEach(n=>{ c[n]=head.indexOf(n); });
+  if(c.YEAR<0 || c.MONTH<0 || c.VALUE<0 || c.TYPE<0) return [];
+  const g=(row,i)=> i>=0 && row[i]!=null ? String(row[i]).trim() : '';
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; if(!row) continue;
+    const y=parseInt(g(row,c.YEAR),10), m=parseInt(g(row,c.MONTH),10), d=parseInt(g(row,c.DAY),10)||1;
+    if(!(y>1900) || !(m>=1 && m<=12)) continue;
+    let typ=norm(g(row,c.TYPE)); if(!typ || typ==='#N/A') continue;
+    const vs=g(row,c.VALUE); if(vs==='') continue;
+    const v=parseFloat(vs); if(!isFinite(v)) continue;
+    const det=g(row,c.DETAIL);
+    if(typ==='TAXES' && norm(det)==='APPRECTAXES') typ='APPRECIATION';   // as in the Sankey: not cash flow
+    out.push(txMake(y*10000+m*100+Math.min(31,Math.max(1,d)), v, norm(g(row,c.ACCOUNT)), norm(g(row,c.LABEL)), det,
+                    typ, norm(g(row,c.CATEGORY1)), norm(g(row,c.CATEGORY2))));
+  }
+  return out;
+}
+/* transactions snapshot in localStorage: strings in one table, rows as a flat number array */
+const TxCache={
+  KEY:'finance-sankey-tx-v1',
+  read(){ try{ const raw=localStorage.getItem(this.KEY); if(!raw) return null;
+      const e=JSON.parse(raw);
+      if(!e || e.v!==1 || typeof e.hash!=='string' || !Array.isArray(e.s) || !Array.isArray(e.r)) return null;
+      const S=e.s, R=e.r, out=[];
+      for(let i=0;i+7<R.length;i+=8) out.push(txMake(R[i],R[i+1],S[R[i+2]],S[R[i+3]],S[R[i+4]],S[R[i+5]],S[R[i+6]],S[R[i+7]]));
+      return out.length ? {rows:out, hash:e.hash} : null; }catch(e){ return null; } },
+  write(rows,hash){ try{
+      const S=[], ix=new Map(), R=[], id=s=>{ let i=ix.get(s); if(i===undefined){ i=S.length; S.push(s); ix.set(s,i); } return i; };
+      rows.forEach(r=>R.push(r.dk, r.v, id(r.acct), id(r.lab), id(r.det), id(r.typ), id(r.c1), id(r.c2)));
+      localStorage.setItem(this.KEY, JSON.stringify({v:1, hash, at:Date.now(), s:S, r:R})); return true; }catch(e){ return false; } }
+};
+/* tx query first (attempts 1-2), else the full export (columns re-learned for next time) */
+async function fetchTx(){
+  let lastErr;
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      if(attempt<2){ const t=await fetchText(txURL(txCols())); if(txOk(t)) return t; }
+      const full=await fetchText(CSV_URL), nl=full.indexOf('\n');
+      const c=learnCols(parseCSV(nl<0?full:full.slice(0,nl))[0], TX_COLS);
+      if(c){ try{ localStorage.setItem(TX_COLS_KEY, JSON.stringify(c)); }catch(e){} }
+      return full;
+    }catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
+  }
+  throw lastErr || new Error("fetch failed");
+}
+let TX=null, txHash=null, txAt=0, txBusy=false, txErr=null, txVer=0, TX_MIN=0, TX_MAX=0;
+function installTx(rows){
+  TX=rows; txVer++;
+  TX_MIN=Infinity; TX_MAX=-Infinity; rows.forEach(r=>{ if(r.dk<TX_MIN) TX_MIN=r.dk; if(r.dk>TX_MAX) TX_MAX=r.dk; });
+}
+async function refreshTx(){
+  if(txBusy || document.hidden) return;
+  txBusy=true; txAt=Date.now(); renderQuery();
+  try{
+    const csv=await fetchTx(), h=csvHash(csv);
+    if(h!==txHash){ const rows=parseTx(parseCSV(csv)); if(!rows.length) throw new Error('no transactions in the answer');
+      installTx(rows); txHash=h; TxCache.write(rows,h); }
+    txErr=null;
+  }catch(e){ txErr=(e && e.message) || 'load failed'; }
+  finally{ txBusy=false; renderQuery(); }
+}
+/* the Query page needs the transactions: cached copy first, then a background check */
+function ensureTx(){
+  if(!TX){ const c=TxCache.read(); if(c){ installTx(c.rows); txHash=c.hash; } }
+  if(!txBusy && Date.now()-txAt >= DB_STALE) refreshTx();
+}
+
+/* pure: one text criterion -> null (any) or test(upperCaseValue) -> bool */
+function qTextMatcher(expr){
+  const pos=[], neg=[]; let any=false;
+  String(expr==null?'':expr).split(',').forEach(raw=>{
+    let t=raw.trim(); const not=t[0]==='!'; if(not) t=t.slice(1).trim();
+    t=t.toUpperCase(); if(!t) return;
+    let f;
+    if(/^[%*]+$/.test(t)){ if(!not){ any=true; return; } f=()=>true; }          // "!%" leaves nothing
+    else if(/[%*]/.test(t)){
+      const re=new RegExp('^'+t.split(/[%*]+/).map(x=>x.replace(/[.+?^${}()|[\]\\]/g,'\\$&')).join('.*')+'$');
+      f=s=>re.test(s);
+    } else f=s=>s===t;
+    (not?neg:pos).push(f);
+  });
+  if(any) pos.length=0;
+  if(!pos.length && !neg.length) return null;
+  return s=>{ s=s==null?'':String(s); if(pos.length && !pos.some(f=>f(s))) return false; return !neg.some(f=>f(s)); };
+}
+/* pure: the Value criterion -> {fn: null (any) | test(value), bad: some term did not parse} */
+function qValueMatcher(expr){
+  const num=s=>{ s=String(s).replace(/\s|€/g,'').replace(/\u2212/g,'-');
+    if(/^[-+]?\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');               // 1.000 = one thousand
+    if(!/^[-+]?\d+([.,]\d+)?$/.test(s)) return NaN; return parseFloat(s.replace(',','.')); };
+  const fs=[]; let bad=false;
+  String(expr==null?'':expr).split(/[;|]|,(?=\s*[<>=!])|,\s+/).map(s=>s.trim()).filter(Boolean).forEach(t=>{
+    if(t.indexOf('..')>0){ const [a,b]=t.split('..').map(num); if(isNaN(a)||isNaN(b)){ bad=true; return; }
+      const lo=Math.min(a,b), hi=Math.max(a,b); fs.push(v=>v>=lo && v<=hi); return; }
+    const m=/^(>=|<=|!=|<>|>|<|=)?\s*(.+)$/.exec(t), x=m ? num(m[2]) : NaN; if(isNaN(x)){ bad=true; return; }
+    const op=m[1]||'=';
+    fs.push(op==='>' ? v=>v>x : op==='<' ? v=>v<x : op==='>=' ? v=>v>=x : op==='<=' ? v=>v<=x :
+            (op==='!='||op==='<>') ? v=>v!==x : v=>v===x);
+  });
+  return {fn: fs.length ? v=>fs.some(f=>f(v)) : null, bad};
+}
+const Q_TYPES=['INCOME','EXPENSES','TAXES','TRANSFER','APPRECIATION'];
+const Q_TYPE_NAME={INCOME:'Income',EXPENSES:'Expenses',TAXES:'Taxes',TRANSFER:'Transfer',APPRECIATION:'Apprec.'};
+const Q_LISTS=['c1','c2','acct','label','detail'];
+/* pure: the rows matching every criterion of q, plus, per text field, the values still
+   reachable under all the OTHER criteria (the field's suggestions, so they cascade) */
+function queryRows(tx, q){
+  const dkOf=s=>{ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s||''); return m ? (+m[1])*10000+(+m[2])*100+(+m[3]) : null; };
+  let lo=dkOf(q.from), hi=dkOf(q.to); if(lo!=null && hi!=null && lo>hi){ const t=lo; lo=hi; hi=t; }
+  const types=new Set(q.types||[]), words=String(q.search||'').toUpperCase().split(/\s+/).filter(Boolean);
+  const M={c1:qTextMatcher(q.c1), c2:qTextMatcher(q.c2), acct:qTextMatcher(q.acct), label:qTextMatcher(q.label), detail:qTextMatcher(q.detail)};
+  const V=qValueMatcher(q.value);
+  const BIT={c1:8, c2:16, acct:32, label:64, detail:128};
+  const L={}; Q_LISTS.forEach(k=>{ L[k]=new Map(); });
+  const val={c1:r=>r.c1, c2:r=>r.c2, acct:r=>r.acct, label:r=>r.lab, detail:r=>r.detU};
+  const rows=[];
+  for(const r of tx||[]){
+    let k=0;
+    if((lo!=null && r.dk<lo) || (hi!=null && r.dk>hi)) k|=1;
+    if(!types.has(r.typ)) k|=2;
+    if(words.length && !words.every(w=>r.hay.indexOf(w)>=0)) k|=4;
+    if(M.c1 && !M.c1(r.c1)) k|=8;
+    if(M.c2 && !M.c2(r.c2)) k|=16;
+    if(M.acct && !M.acct(r.acct)) k|=32;
+    if(M.label && !M.label(r.lab)) k|=64;
+    if(M.detail && !M.detail(r.detU)) k|=128;
+    if(V.fn && !V.fn(r.v)) k|=256;
+    if(!k) rows.push(r);
+    for(const f of Q_LISTS){ if(!(k & ~BIT[f])){ const u=val[f](r); if(u && !L[f].has(u)) L[f].set(u, f==='detail' ? r.det : u); } }
+  }
+  const lists={}; Q_LISTS.forEach(f=>{ lists[f]=[...L[f].values()].sort((a,b)=>a.localeCompare(b)); });
+  return {rows, lists, bad:{value:V.bad}};
+}
+/* pure: rows -> [{key, name, n, sum, avg, sub}] by months | labels | details | accounts.
+   sub = the labels of a detail / the groups of a label (shown as a hint) */
+function queryGroup(rows, by){
+  const m=new Map();
+  for(const r of rows||[]){
+    const k = by==='months' ? r.mi : by==='labels' ? r.lab : by==='details' ? r.detU : r.acct;
+    let g=m.get(k);
+    if(!g){ g={key:k, name: by==='months' ? miLabel(r.mi) : by==='details' ? r.det : k, n:0, sum:0, sub:new Set()}; m.set(k,g); }
+    g.n++; g.sum+=r.v;
+    if(by==='details') g.sub.add(r.lab); else if(by==='labels') g.sub.add(r.c1);
+  }
+  return [...m.values()].map(g=>({key:g.key, name:g.name, n:g.n, sum:g.sum, avg:g.sum/g.n, sub:[...g.sub].sort()}));
+}
+/* pure: sort a grouped view. size = |sum| (expenses most negative first, income most
+   positive first), neg / pos = signed, count, avg = |average|, name (months: newest) */
+function querySort(list, sort, view){
+  const abs=Math.abs, nm=(x,y)=> view==='months' ? y.key-x.key : String(x.name).localeCompare(String(y.name));
+  const by={ size:(x,y)=> abs(y.sum)-abs(x.sum) || y.n-x.n || nm(x,y), neg:(x,y)=> x.sum-y.sum || nm(x,y),
+    pos:(x,y)=> y.sum-x.sum || nm(x,y), count:(x,y)=> y.n-x.n || abs(y.sum)-abs(x.sum) || nm(x,y),
+    avg:(x,y)=> abs(y.avg)-abs(x.avg) || nm(x,y), name:nm };
+  return (list||[]).slice().sort(by[sort]||by.size);
+}
+/* pure: sort transactions. date = newest first, old, size = |value|, neg, pos */
+function querySortTx(rows, sort){
+  const abs=Math.abs;
+  const by={ date:(x,y)=> y.dk-x.dk || abs(y.v)-abs(x.v), old:(x,y)=> x.dk-y.dk || abs(y.v)-abs(x.v),
+    size:(x,y)=> abs(y.v)-abs(x.v) || y.dk-x.dk, neg:(x,y)=> x.v-y.v || y.dk-x.dk, pos:(x,y)=> y.v-x.v || y.dk-x.dk };
+  return (rows||[]).slice().sort(by[sort]||by.date);
+}
+
+/* ---- Query page: state, controls, drawing ---- */
+const Q_KEY='finance-sankey-query-v1', Q_PAGE=300, Q_MORE=500;
+const Q_VIEWS=['tx','months','labels','details','accounts'];
+const Q_VNAME={tx:'Transactions', months:'Months', labels:'Labels', details:'Details', accounts:'Accounts'};
+/* view pill text; "Transactions" shortens to "Tx" on a phone so the five pills fit */
+const qViewName=v=> v==='tx' ? '<span class="qvl">Transactions</span><span class="qvs">Tx</span>' : Q_VNAME[v];
+/* drill-down chain: a row opens the next view whose field is not already pinned */
+const Q_CHAIN={months:['labels','details','tx'], labels:['details','tx'], details:['tx'], accounts:['labels','details','tx']};
+const Q_SORTS={
+  tx:[['date','Newest first'],['old','Oldest first'],['size','By size'],['neg','Negative first'],['pos','Positive first']],
+  grp:[['size','By size'],['neg','Negative first'],['pos','Positive first'],['count','By count'],['avg','By average'],['name','By name']]};
+const qDefault=()=>({from:'', to:'', types:['INCOME','EXPENSES','TAXES'], search:'', c1:'', c2:'', acct:'', label:'', detail:'',
+  value:'', view:'tx', sortTx:'date', sortGrp:'size', open:true});
+let q=qDefault(), qStack=[], qShown=Q_PAGE, qSig=null, qDl={}, qGroups=new Map(), qReady=false;
+const qEsc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const qCls=v=> v<0 ? 'neg' : v>0 ? 'pos' : '';
+const fmtE=v=>{ const r=Math.round(Math.abs(v)); return (v<0&&r?'-':'')+grp(r); };   // full euros, whatever K says
+const q2=n=> (n<10?'0':'')+n;
+const qIso=(y,m,d)=> y+'-'+q2(m)+'-'+q2(d);
+const qDays=(y,m)=> new Date(y,m,0).getDate();
+const qIt=dk=> q2(dk%100)+'/'+q2(Math.floor(dk/100)%100)+'/'+Math.floor(dk/10000);
+const qItIso=s=> s ? s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4) : '';
+function qLoad(){
+  try{ const s=JSON.parse(localStorage.getItem(Q_KEY)||'null'); if(!s || typeof s!=='object') return;
+    const d=qDefault();
+    for(const k in d){ if(k==='types') continue; if(s[k]!==undefined && typeof s[k]===typeof d[k]) d[k]=s[k]; }
+    if(Array.isArray(s.types)) d.types=s.types.filter(t=>Q_TYPES.indexOf(t)>=0);
+    if(Q_VIEWS.indexOf(d.view)<0) d.view='tx';
+    q=d; }catch(e){}
+}
+function qSave(){ try{ localStorage.setItem(Q_KEY, JSON.stringify(q)); }catch(e){} }
+const qExact=s=>{ const t=String(s||'').trim(); return !!t && !/[%*,!]/.test(t); };
+function qNextView(view){
+  const ch=Q_CHAIN[view]||['tx'];
+  return ch.find(v=> v==='tx' || (v==='labels' ? !qExact(q.label) : v==='details' ? !qExact(q.detail) : true)) || 'tx';
+}
+function qPresetRange(p){
+  const d=new Date(), y=d.getFullYear(), m=d.getMonth()+1;
+  const back=k=>{ const mi=y*12+m-1-k; return [Math.floor(mi/12), mi%12+1]; };
+  const month=([Y,M])=>[qIso(Y,M,1), qIso(Y,M,qDays(Y,M))];
+  if(p==='this') return month([y,m]);
+  if(p==='last') return month(back(1));
+  if(p==='ytd') return [qIso(y,1,1), qIso(y,m,d.getDate())];
+  if(p==='t12') return [month(back(12))[0], month(back(1))[1]];
+  if(p==='ly') return [qIso(y-1,1,1), qIso(y-1,12,31)];
+  return ['',''];
+}
+function qPresetOn(){ return ['all','this','last','ytd','t12','ly'].find(p=>{ const [f,t]=qPresetRange(p); return f===q.from && t===q.to; }) || null; }
+function qDateLabel(){
+  const f=q.from, t=q.to; if(!f && !t) return 'All dates';
+  if(qPresetOn()==='ytd') return 'YTD '+f.slice(0,4);
+  const mf=/^(\d{4})-(\d{2})-01$/.exec(f||''), mt=/^(\d{4})-(\d{2})-(\d{2})$/.exec(t||'');
+  if(mf && mt && +mt[3]===qDays(+mt[1],+mt[2])){
+    const a=(+mf[1])*12+(+mf[2])-1, b=(+mt[1])*12+(+mt[2])-1;
+    if(a===b) return miLabel(a);
+    if(a%12===0 && b%12===11 && Math.floor(a/12)===Math.floor(b/12)) return String(Math.floor(a/12));
+    if(a<b) return miLabel(a)+' \u2013 '+miLabel(b);
+  }
+  return (f?qItIso(f):'\u2026')+' \u2013 '+(t?qItIso(t):'\u2026');
+}
+/* calendar months the date window spans, clamped to the data (Per month card) */
+function qMonthSpan(){
+  if(!TX || !TX.length) return 0;
+  const dk=s=> s ? +s.replace(/-/g,'') : null;
+  let lo=dk(q.from), hi=dk(q.to); if(lo!=null && hi!=null && lo>hi){ const t=lo; lo=hi; hi=t; }
+  lo=Math.max(lo==null?TX_MIN:lo, TX_MIN); hi=Math.min(hi==null?TX_MAX:hi, TX_MAX);
+  if(hi<lo) return 0;
+  const mi=x=> Math.floor(x/10000)*12+Math.floor(x/100)%100-1;
+  return mi(hi)-mi(lo)+1;
+}
+function qSummary(){
+  const parts=[qDateLabel()], t=q.types;
+  parts.push(t.length===Q_TYPES.length ? 'all types' : t.length ? t.map(x=>Q_TYPE_NAME[x]).join(', ') : 'no type');
+  [['search','Search'],['c1','Group'],['c2','Cat. 2'],['acct','Account'],['label','Label'],['detail','Detail'],['value','Value']].forEach(([k,n])=>{
+    const v=String(q[k]||'').trim(); if(v && v!=='%') parts.push(n+' '+v); });
+  return parts.join(' \u00b7 ');
+}
+const Q_INPUTS={search:'qSearch', c1:'qC1', c2:'qC2', acct:'qAcct', label:'qLabel', detail:'qDetail', value:'qValue'};
+/* put the state on the controls (a field being typed in is left alone) */
+let qBad={};
+function syncQControls(bad){
+  if(bad) qBad=bad; else bad=qBad;
+  const $=id=>document.getElementById(id), act=document.activeElement;
+  const fr=$('qFrom'), to=$('qTo');
+  if(fr && fr!==act && fr.value!==q.from) fr.value=q.from;
+  if(to && to!==act && to.value!==q.to) to.value=q.to;
+  [fr,to].forEach(el=>{ if(el) el.classList.toggle('set', !!el.value); });
+  const p=qPresetOn();
+  document.querySelectorAll('#qPresets [data-qp]').forEach(b=>b.classList.toggle('on', b.getAttribute('data-qp')===p));
+  document.querySelectorAll('#qTypes input').forEach(i=>{ i.checked=q.types.indexOf(i.value)>=0; });
+  for(const k in Q_INPUTS){ const el=$(Q_INPUTS[k]); if(!el) continue;
+    if(el!==act && el.value!==q[k]) el.value=q[k];
+    const v=String(q[k]||'').trim(); el.classList.toggle('set', !!v && v!=='%');
+    el.classList.toggle('bad', k==='value' && !!(bad && bad.value)); }
+  const tg=$('qfToggle'), body=$('qfBody'), sum=$('qfSum');
+  if(tg){ tg.setAttribute('aria-expanded', q.open?'true':'false'); tg.querySelector('.tw').textContent=q.open?'\u25BE':'\u25B8'; }
+  if(body) body.style.display=q.open?'':'none';
+  if(sum) sum.textContent=q.open ? '' : qSummary();
+  document.querySelectorAll('#qviews [data-qv]').forEach(b=>{ const on=b.getAttribute('data-qv')===q.view;
+    b.classList.toggle('on',on); b.setAttribute('aria-selected',on?'true':'false'); });
+  const so=$('qSort');
+  if(so){ const kind=q.view==='tx'?'tx':'grp', opts=Q_SORTS[kind].map(([v,l])=> v==='name' && q.view==='months' ? [v,'By date'] : [v,l]);
+    const sig=kind+q.view; if(so.dataset.sig!==sig){ so.innerHTML=opts.map(([v,l])=>`<option value="${v}">${l}</option>`).join(''); so.dataset.sig=sig; }
+    so.value = kind==='tx' ? q.sortTx : q.sortGrp; }
+  qRenderTrail();
+}
+function qRenderTrail(){
+  const el=document.getElementById('qtrail'); if(!el) return;
+  if(!qStack.length){ el.style.display='none'; el.innerHTML=''; return; }
+  const crumbs=[Q_VNAME[qStack[0].q.view]||'Start', ...qStack.map(e=>e.label)];
+  el.innerHTML=`<span class="pills"><button type="button" class="pill on" data-qback title="Back one step (Esc)">&lsaquo; Back</button></span>`+
+    crumbs.map((c,j)=> (j?'<span class="sep">\u203A</span>':'')+(j===crumbs.length-1
+      ? `<span class="crumb" aria-current="step">${qEsc(c)}</span>`
+      : `<button type="button" class="crumb" data-qcrumb="${j}" title="Back to here">${qEsc(c)}</button>`)).join('');
+  el.style.display='';
+}
+function qFillLists(lists){
+  for(const k of Q_LISTS){
+    const el=document.getElementById('qdl-'+k); if(!el) continue;
+    const vals=(lists[k]||[]).slice(0,400), s=vals.join('\u0001'); if(qDl[k]===s) continue; qDl[k]=s;
+    el.innerHTML=vals.map(v=>`<option value="${qEsc(v)}"></option>`).join('');
+  }
+}
+/* any change of the criteria: back to the first page of rows, save, redraw */
+function qChanged(){ qShown=Q_PAGE; qSave(); renderQuery(true); }
+function qScrollToResults(){
+  const c=document.getElementById('qcards'); if(!c) return;
+  const top=c.getBoundingClientRect().top+window.scrollY-stickyTop-8;
+  if(window.scrollY>top) window.scrollTo(0, Math.max(0,top));
+}
+function qDrill(key){
+  const g=qGroups.get(String(key)); if(!g) return;
+  const view=q.view, label= view==='months' ? g.name : (g.name || '\u2014');
+  qStack.push({q:JSON.parse(JSON.stringify(q)), label});
+  if(view==='months'){ const y=Math.floor(g.key/12), m=g.key%12+1; q.from=qIso(y,m,1); q.to=qIso(y,m,qDays(y,m)); }
+  else if(view==='labels') q.label=g.name;
+  else if(view==='details') q.detail=g.name;
+  else if(view==='accounts') q.acct=g.name;
+  q.view=qNextView(view);
+  qChanged(); qScrollToResults();
+}
+function qBack(j){
+  if(!qStack.length) return;
+  const i= j==null ? qStack.length-1 : Math.max(0, Math.min(qStack.length-1, j));
+  q=qStack[i].q; qStack=qStack.slice(0,i);
+  qChanged(); qScrollToResults();
+}
+function qGroupTable(list, view, n, sum){
+  const sorted=querySort(list, q.sortGrp, view);
+  const maxA=Math.max(0, ...list.map(g=>Math.abs(g.sum)));
+  let P=0, N=0; list.forEach(g=>{ if(g.sum>0) P+=g.sum; else N-=g.sum; });
+  const s=q.sortGrp, on=k=> (k==='sum' ? (s==='size'||s==='neg'||s==='pos') : s===k) ? ' on'+(k==='sum'&&s==='neg' ? ' asc' : '') : '';
+  const share=v=>{ const base=v>0?P:N; if(!base || !v) return ''; const p=Math.abs(v)/base*100; return p<1 ? '<1%' : Math.round(p)+'%'; };
+  const hint=g=> view==='details' ? (g.sub.length===1 ? g.sub[0] : g.sub.length+' labels') : view==='labels' && g.sub.length===1 ? g.sub[0] : '';
+  const nextV=qNextView(view), nextName=Q_VNAME[nextV].toLowerCase();
+  const title={months:'Month', labels:'Label', details:'Detail', accounts:'Account'}[view];
+  qGroups=new Map(list.map(g=>[String(g.key), g]));
+  let body=`<tr class="tot"><td class="rk"></td><td class="n">Total<span class="sub">${grp(n)} tx \u00b7 avg ${fmt(sum/n)}</span></td>`+
+    `<td class="c">${grp(n)}</td><td class="a">${fmt(sum/n)}</td><td class="s ${qCls(sum)}">${fmt(sum)}</td><td class="bar"></td><td class="p"></td></tr>`;
+  sorted.forEach((g,i)=>{
+    const h=hint(g), nm=g.name||'\u2014', w=maxA ? Math.abs(g.sum)/maxA*100 : 0;
+    body+=`<tr class="dr" tabindex="0" role="button" data-k="${qEsc(String(g.key))}" title="${qEsc(nm)}: open its ${nextName}">`+
+      `<td class="rk">${i+1}</td><td class="n">${qEsc(nm)}${h?`<span class="hint">${qEsc(h)}</span>`:''}`+
+      `<span class="sub">${grp(g.n)} tx \u00b7 avg ${fmt(g.avg)}${h?' \u00b7 '+qEsc(h):''}</span></td>`+
+      `<td class="c">${grp(g.n)}</td><td class="a">${fmt(g.avg)}</td><td class="s ${qCls(g.sum)}">${fmt(g.sum)}</td>`+
+      `<td class="bar"><i class="${g.sum<0?'neg':'pos'}" style="width:${w.toFixed(1)}%"></i></td><td class="p">${share(g.sum)}</td></tr>`;
+  });
+  return `<table class="q"><thead><tr><th class="rk">#</th><th class="n${on('name')}" data-qs="name">${title}</th>`+
+    `<th class="c${on('count')}" data-qs="count">Count</th><th class="a${on('avg')}" data-qs="avg">Avg</th>`+
+    `<th class="s${on('sum')}" data-qs="sum">Sum</th><th class="bar"></th><th class="p">Share</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function qTxTable(rows){
+  const sorted=querySortTx(rows, q.sortTx), show=sorted.slice(0,qShown), s=q.sortTx;
+  const on=k=> (k==='date' ? (s==='date'||s==='old') : (s==='size'||s==='neg'||s==='pos')) ? ' on'+((k==='date'&&s==='old')||(k==='value'&&s==='neg') ? ' asc' : '') : '';
+  let body='';
+  show.forEach(r=>{ const det=r.det||'\u2014', acct=r.acct||'\u2014';
+    body+=`<tr><td class="dt">${qIt(r.dk)}</td><td class="lb">${qEsc(r.lab||'\u2014')}<span class="sub">${qEsc(det)} \u00b7 ${qEsc(acct)}</span></td>`+
+      `<td class="dd">${qEsc(det)}</td><td class="ac">${qEsc(acct)}</td><td class="s ${qCls(r.v)}">${fmtE(r.v)}</td></tr>`; });
+  const left=sorted.length-show.length;
+  return `<table class="q tx"><thead><tr><th class="dt${on('date')}" data-qs="date">Date</th><th class="lb">Label</th>`+
+    `<th class="dd">Detail</th><th class="ac">Account</th><th class="s${on('value')}" data-qs="value">Value</th></tr></thead><tbody>${body}</tbody></table>`+
+    (left>0 ? `<button type="button" class="qbtn qmore" data-qmore>Show ${grp(Math.min(Q_MORE,left))} more (${grp(left)} left)</button>` : '');
+}
+/* called from every build() (returns early off the page) and on every criteria change */
+function renderQuery(force){
+  if(!pageOn('query') || !controlsReady) return;
+  const wrap=document.getElementById('qwrap'), cards=document.getElementById('qcards'); if(!wrap || !cards) return;
+  ensureTx();
+  const sig=[JSON.stringify(q), showK, txVer, qShown, txBusy?1:0, txErr||'', qStack.map(e=>e.label).join('|')].join('#');
+  if(!force && sig===qSig) return;
+  qSig=sig;
+  if(!TX){
+    syncQControls(); cards.innerHTML='';
+    document.querySelectorAll('#qviews [data-qv]').forEach(b=>{ b.innerHTML=qViewName(b.getAttribute('data-qv')); });
+    wrap.innerHTML= txErr && !txBusy
+      ? `<div class="qmsg">Could not load the transactions: ${qEsc(txErr)}<br><button type="button" class="qbtn" data-qretry>Retry</button></div>`
+      : `<div class="qmsg">Loading transactions\u2026</div>`;
+    return;
+  }
+  const R=queryRows(TX, q), rows=R.rows, n=rows.length;
+  syncQControls(R.bad); qFillLists(R.lists);
+  const G={months:queryGroup(rows,'months'), labels:queryGroup(rows,'labels'), details:queryGroup(rows,'details'), accounts:queryGroup(rows,'accounts')};
+  document.querySelectorAll('#qviews [data-qv]').forEach(b=>{ const v=b.getAttribute('data-qv');
+    b.innerHTML=`${qViewName(v)}<span class="qn">${grp(v==='tx' ? n : G[v].length)}</span>`; });
+  let sum=0, pos=0, neg=0; rows.forEach(r=>{ sum+=r.v; if(r.v>0) pos+=r.v; else neg+=r.v; });
+  const months=qMonthSpan(), col=v=> v<0 ? '#e58a8a' : v>0 ? '#7fd0a3' : 'var(--ink)', pl=(k,w)=> k+' '+w+(k===1?'':'s');
+  const cardList=[
+    ['Sum', fmt(sum), col(sum), (pos && neg) ? `in ${fmt(pos)} \u00b7 out ${fmt(neg)}` : qDateLabel()],
+    ['Transactions', grp(n), 'var(--ink)', `${pl(G.labels.length,'label')} \u00b7 ${pl(G.details.length,'detail')}`],
+    ['Average', n ? fmt(sum/n) : '\u2014', col(sum), 'per transaction'],
+    ['Per month', months ? fmt(sum/months) : '\u2014', col(sum), months ? 'over '+pl(months,'month') : '']];
+  cards.innerHTML=cardList.map(([l,v,c,s])=>`<div class="tot"><div class="lab">${l}</div><div class="val" style="color:${c}">${v}</div><div class="pct">${qEsc(s)}</div></div>`).join('');
+  if(!n){ qGroups=new Map();
+    wrap.innerHTML=`<div class="qmsg">No transactions match these filters.<br><button type="button" class="qbtn" data-qreset>Reset filters</button></div>`; return; }
+  wrap.innerHTML= q.view==='tx' ? qTxTable(rows) : qGroupTable(G[q.view], q.view, n, sum);
+}
+function qReset(){ const keep={view:q.view, sortTx:q.sortTx, sortGrp:q.sortGrp, open:q.open};
+  q=Object.assign(qDefault(), keep); qStack=[]; qChanged(); }
+function qInit(){
+  if(qReady) return; qReady=true;
+  qLoad();
+  const $=id=>document.getElementById(id);
+  $('qfToggle').addEventListener('click',()=>{ q.open=!q.open; qSave(); syncQControls(); });
+  $('qReset').addEventListener('click',qReset);
+  [['qFrom','from'],['qTo','to']].forEach(([id,k])=>$(id).addEventListener('change',e=>{ q[k]=e.target.value||''; qChanged(); }));
+  $('qPresets').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qp]'); if(!b) return;
+    const [f,t]=qPresetRange(b.getAttribute('data-qp')); q.from=f; q.to=t; qChanged(); });
+  $('qTypes').addEventListener('change',()=>{ q.types=[...document.querySelectorAll('#qTypes input')].filter(i=>i.checked).map(i=>i.value); qChanged(); });
+  /* text criteria: redraw shortly after typing stops (a datalist pick fires input too) */
+  let qT=null;
+  for(const k in Q_INPUTS){ const el=$(Q_INPUTS[k]);
+    el.addEventListener('input',()=>{ clearTimeout(qT); qT=setTimeout(()=>{ q[k]=el.value; qChanged(); },220); });
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ clearTimeout(qT); q[k]=el.value; qChanged(); } }); }
+  $('qviews').addEventListener('click',e=>{ const b=e.target.closest && e.target.closest('[data-qv]'); if(!b) return;
+    q.view=b.getAttribute('data-qv'); qChanged(); });
+  $('qSort').addEventListener('change',e=>{ if(q.view==='tx') q.sortTx=e.target.value; else q.sortGrp=e.target.value; qChanged(); });
+  $('qtrail').addEventListener('click',e=>{ const t=e.target.closest && e.target.closest('[data-qback],[data-qcrumb]'); if(!t) return;
+    qBack(t.hasAttribute('data-qcrumb') ? +t.getAttribute('data-qcrumb') : null); });
+  const wrap=$('qwrap');
+  wrap.addEventListener('click',e=>{
+    const t=e.target.closest ? e.target : null; if(!t) return;
+    const th=t.closest('th[data-qs]');
+    if(th){ const k=th.getAttribute('data-qs');
+      if(q.view==='tx'){ q.sortTx = k==='date' ? (q.sortTx==='date' ? 'old' : 'date')
+                                               : ({size:'neg', neg:'pos'}[q.sortTx] || 'size'); }
+      else q.sortGrp = k==='sum' ? ({size:'neg', neg:'pos'}[q.sortGrp] || 'size') : k;
+      qChanged(); return; }
+    if(t.closest('[data-qmore]')){ qShown+=Q_MORE; renderQuery(true); return; }
+    if(t.closest('[data-qretry]')){ txAt=0; txErr=null; refreshTx(); return; }
+    if(t.closest('[data-qreset]')){ qReset(); return; }
+    const tr=t.closest('tr.dr'); if(tr) qDrill(tr.getAttribute('data-k'));
+  });
+  wrap.addEventListener('keydown',e=>{ if(e.key!=='Enter' && e.key!==' ') return;
+    const tr=e.target.closest && e.target.closest('tr.dr'); if(!tr) return; e.preventDefault(); qDrill(tr.getAttribute('data-k')); });
+  /* Esc steps back through the drill-down (not while typing in a field, not over an overlay) */
+  document.addEventListener('keydown',e=>{
+    if(e.key!=='Escape' || !pageOn('query') || !qStack.length || panel || mdMi!=null) return;
+    const tag=e.target && e.target.tagName; if(tag==='INPUT' || tag==='SELECT' || tag==='TEXTAREA') return;
+    qBack(); });
+  ['qhead','qfilters','qcards','qbar','qwrap'].forEach(id=>{ $(id).style.display=''; });
+  syncQControls();
+}
+
 /* ---- main build ---------------------------------------------------------- */
 function build(){
   curMiF=META.minMi+loIdx; curMiT=META.minMi+hiIdx;
@@ -2851,7 +3491,7 @@ function build(){
   /* the Sankey, its cards and the detail panel live on the Cash Flow page; elsewhere only
      the chart of the page on screen redraws (the others return early) */
   if(pageOn('cashflow')) buildSankey();
-  renderCashBars(); renderCompare(); renderYlp();
+  renderCashBars(); renderCompare(); renderYlp(); renderQuery();
   renderMd();   // month detail, if open: follows K, exclusions and data refreshes (no-op when closed)
 }
 function buildSankey(){
@@ -3077,6 +3717,7 @@ function initControlsOnce(){
   document.getElementById('cmpwrap').style.display='';
   document.getElementById('ylphead').style.display='';
   document.getElementById('ylpwrap').style.display='';
+  qInit();                                     // Query page: criteria, views, drill-down (data loads when it opens)
   controlsReady=true;
   syncPageUI();                                // reveal the page on screen (pages stay hidden until data is in)
 }
@@ -3108,6 +3749,7 @@ function renderPage(){
   else if(PAGE==='savings') renderCashBars();
   else if(PAGE==='compare') renderCompare();
   else if(PAGE==='life') renderYlp();
+  else if(PAGE==='query') renderQuery(true);
 }
 function showPage(p, fromHash){
   if(PAGES.indexOf(p)<0 || p===PAGE) return;
@@ -3140,6 +3782,9 @@ function onScrollSticky(){
   if(t) t.classList.toggle('stuck', tabsSticky && y && t.getBoundingClientRect().top<=0.5);
   if(c && pageOn('cashflow') && c.style.display!=='none')
     c.classList.toggle('stuck', y && c.getBoundingClientRect().top<=stickyTop+0.5);
+  const qb=document.getElementById('qbar');   // Query page: view switch + sort stay on screen
+  if(qb && pageOn('query') && qb.style.display!=='none')
+    qb.classList.toggle('stuck', y && qb.getBoundingClientRect().top<=stickyTop+0.5);
 }
 function syncSticky(){ measureSticky(); onScrollSticky(); }
 window.addEventListener('scroll',onScrollSticky,{passive:true});
@@ -3197,6 +3842,7 @@ async function refreshDB(){
   try{
     const csv=await fetchSheet(), h=csvHash(csv), t=Date.now();
     if(h!==dbHash){
+      txAt=0;                                  // the sheet changed: the Query page re-reads its transactions
       await new Promise(res=>{ (function wait(){ if(drag) setTimeout(wait,400); else res(); })(); });
       applyData(csv); dbHash=h; SheetCache.write(h,t);
     } else {                                   // unchanged: re-stamp the snapshot twice a day
@@ -3211,6 +3857,8 @@ function autoTick(back){
   const now=Date.now();
   if(now-liveAt >= (back ? LIVE_STALE : LIVE_EVERY)) loadLive();
   if(now-dbAt >= (back ? DB_STALE : DB_EVERY)) refreshDB();
+  /* Query page transactions: same schedule, only while that page is on screen */
+  if(controlsReady && pageOn('query') && now-txAt >= (back ? DB_STALE : DB_EVERY)) refreshTx();
 }
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
@@ -3265,7 +3913,8 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash };
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash,
+    txURL, txOk, parseTx, qTextMatcher, qValueMatcher, queryRows, queryGroup, querySort, querySortTx };
 }
 </script>
 </body>

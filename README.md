@@ -8,7 +8,7 @@ browser.
 **Live:** https://stefanoamato93-wq.github.io/finance-sankey/
 
 ## Pages (one block per page, added 9 Oct 2026)
-Title (**Personal Finance**, title case; section titles too), then a tab row with five
+Title (**Personal Finance**, title case; section titles too), then a tab row with six
 pages. Only the page on screen is shown **and drawn**:
 
 | Tab | Hash | Content |
@@ -18,10 +18,12 @@ pages. Only the page on screen is shown **and drawn**:
 | **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below); clicking a month in its month view opens the **Month detail** overlay. |
 | **Compare** | `#compare` | **Period Comparison** (see below). |
 | **Years Paid** | `#life` | **Years of Life Paid** (see below). |
+| **Query** | `#query` | **Query** of past transactions, modelled on the sheet's QUERY tab (see below). |
 
 - **Navigation:** desktop = a sticky tab row under the title (the Cash Flow controls
-  stick right under it, `--tabsh`); phone (<=680px) = a fixed bottom tab bar with five
-  equal tabs, so the Cash Flow controls stick at the top as before. Tabs set the URL
+  stick right under it, `--tabsh`); phone (<=680px) = a fixed bottom tab bar with six
+  equal tabs (11px labels since the Query tab was added), so the Cash Flow controls stick
+  at the top as before. Tabs set the URL
   hash with `history.replaceState` (bookmarkable, no back-button clutter); opening a
   URL with a hash, or changing it, opens that page (`hashchange`).
 - **Last page remembered:** a bare URL reopens the page used last
@@ -42,6 +44,76 @@ pages. Only the page on screen is shown **and drawn**:
 - Code: `PAGES`, `PAGE`, `pageOn()`, `syncPageUI()`, `renderPage()`, `showPage()`,
   `measureSticky()` / `onScrollSticky()`. `build()` = range + `buildSankey()` (Cash Flow
   only) + the guarded charts. Check: `_verify_pages.py [shot]` (untracked).
+
+### Query (past transactions, filters, ranked views, drill-down)
+The **Query** page, added 10 Oct 2026, modelled on the sheet's `QUERY` tab (its criteria
+column, the Sum / Average cells, and the ALL TRANSACTIONS / GROUPED BY MONTH / LABEL /
+DETAIL / ACCOUNT / TRENDS / FIELD OCCURRENCES blocks).
+- **Data:** one row per DB transaction (date from `YEAR` / `MONTH` / `DAY`, `ACCOUNT`,
+  `LABEL`, `DETAIL`, `TYPE`, `CATEGORY1`, `CATEGORY2`, `VALUE`), read the first time the page
+  opens with a second gviz query without `group by` (`txURL()`: `select A,B,C,H,J,K,P,R,S,I`,
+  VALUE last; ~0,9 MB, ~68 KB gzipped, 12.910 rows on 10 Oct 2026). `txOk()` checks the answer
+  (every header, VALUE last, plain numbers); if it fails, the full export is read and the
+  letters re-learned into `finance-sankey-txcols-v1` (`learnCols(head, TX_COLS)`). The sheet's
+  blank formula rows (no year, `TYPE` `#N/A`, no VALUE) are skipped. `TAXES` rows with
+  `DETAIL` `ApprecTaxes` count as **Appreciation**, as in the Sankey (not cash flow).
+- **Cache and refresh:** the rows are kept in localStorage (`TxCache`,
+  `finance-sankey-tx-v1`, strings in one table + a flat number array, ~0,4M characters), so a
+  return visit draws at once; a background check follows. It refreshes on the DB schedule
+  (10 min, 2 min on return) **only while the Query page is on screen**, and straight away when
+  the DB refresh sees a new fingerprint. Same fingerprint = nothing redrawn. Nothing else is
+  sent anywhere.
+- **Filters** (collapsible panel; collapsed it shows a one-line summary):
+  - **Dates:** From / To date pickers (day precision, both included, swapped if reversed)
+    plus presets `All | This M | Last M | YTD | T12M | Last Y` (T12M = the 12 complete months,
+    like elsewhere); the matching preset lights up.
+  - **Type:** `Income | Expenses | Taxes | Transfer | Apprec.`, default the cash-flow three.
+  - **Search** (every word must appear in account, label, detail, type, group or category 2),
+    **Group** (`CATEGORY1`), **Category 2** (FOOD / NONFOOD / SAFE / NONSAFE ...), **Account**,
+    **Label**, **Detail**: the sheet's syntax. Blank or `%` = any, exact match otherwise
+    (case-insensitive), `%` or `*` wildcard (`ARG%`), comma = or (`FOOD, GROCERIES`), a
+    leading `!` = not (`!T`). Each field suggests its values (datalist) among the rows the
+    OTHER criteria leave, so the lists cascade (Label HOLIDAYS -> Detail lists the trips).
+  - **Value:** `>`, `<`, `>=`, `<=`, `=`, `!=` or a range `-500..-50`; several with `, `. A
+    term that does not parse turns the field red and is ignored.
+  - Text fields apply 220 ms after typing stops, or on Enter. A field in use is outlined green.
+  - **Reset** clears every criterion and the drill trail (types back to the cash-flow three),
+    keeping the view and the sorts.
+- **Cards:** Sum (sub-line `in X · out Y` when both signs are present, else the date range),
+  Transactions (count, with the number of labels and details), Average (per transaction)
+  and Per month (sum / calendar months of the date window, clamped to the data).
+- **Views** (pills with their row counts; on a phone "Transactions" reads "Tx"):
+  - **Transactions:** Date, Label, Detail, Account, Value (signed, green / red), newest first;
+    300 rows, then `Show 500 more`. Values are always in full euros (K would turn them to 0K).
+  - **Months / Labels / Details / Accounts:** rank, name (labels show their group, details
+    their label, as a muted hint), Count, Avg, Sum, a bar (one scale per view) and Share (of
+    the same-sign total). A **Total** row on top.
+  - **Sort** (select, or click a header): grouped views `By size` (default: `|sum|`, so with
+    expenses the most negative month / label comes first and with income the most positive),
+    `Negative first`, `Positive first`, `By count`, `By average`, `By name` (Months: `By date`,
+    newest first); Transactions `Newest first`, `Oldest first`, `By size`, `Negative first`,
+    `Positive first`. Clicking Sum / Value cycles size -> negative first -> positive first.
+- **Drill-down:** a row click (or Enter) adds its value as a criterion and opens the next
+  view: **Months -> Labels -> Details -> Transactions**, **Accounts -> Labels**. A level whose
+  field is already pinned to one exact value is skipped (Label HOLIDAYS set: a month opens its
+  Details). The previous query goes on a back stack: a `‹ Back` pill and a crumb trail
+  (`Months › Nov 2025 › HOLIDAYS › Weekend`, any crumb jumps back there), and Esc steps back
+  (not while typing in a field). The criteria, view and sorts are kept in localStorage
+  (`finance-sankey-query-v1`); the trail is not.
+- **Toggles:** K applies to the cards and every sum; Avg/m is hidden (Per month is a card).
+  The Sankey exclusions do **not** apply here: the criteria are explicit.
+- The view pills and the sort stay on screen while scrolling a long list (sticky `.qbar`).
+- **Phone:** the fields go two per row (16px text so iOS does not zoom on focus), the date
+  pickers share the width, Count / Avg move under the name (`12 tx · avg -40 · WANTS`), and the
+  transactions show `Detail · Account` under the label.
+- Reconciled 10 Oct 2026 against a Python reference built straight from the sheet CSV:
+  8.121 cash-flow transactions, sum 366.711; top expense month Nov 2025 (-5.764), top income
+  month Nov 2024 (32.669).
+- Code: pure `parseTx()`, `qTextMatcher()`, `qValueMatcher()`, `queryRows(tx, q)` (rows + the
+  cascading suggestion lists, one pass with a bit per criterion), `queryGroup(rows, by)`,
+  `querySort()`, `querySortTx()`, `txURL()`, `txOk()` (all in the test shim); `fetchTx()`,
+  `refreshTx()`, `ensureTx()`, `TxCache`, then `q` state, `qInit()`, `syncQControls()`,
+  `qDrill()`, `qBack()`, `renderQuery()`. Check: `_verify_query.py [shot]` (untracked).
 
 ### Years of Life Paid (net worth / T12M expenses)
 A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
@@ -602,6 +674,7 @@ The page keeps itself current without a reload, only while the tab is visible:
 |---|---|---|
 | DB sheet (slim query) | 10 min (`DB_EVERY`) | at once if the last check is older than 2 min (`DB_STALE`) |
 | Live ETF values + investment gains | 5 min (`LIVE_EVERY`) | at once if older than 1 min (`LIVE_STALE`) |
+| Query transactions (only while the Query page is on screen) | 10 min | at once if older than 2 min, or when the DB fingerprint changed |
 
 - One 30 s ticker (`autoTick()`) decides what is due, so a laptop waking from sleep
   catches up on the first tick. A hidden tab fetches nothing.
@@ -665,7 +738,8 @@ The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpe
 (`parseCSV`, `aggregate`, `computeLinks`, `applySelection`, `savingsPercentage`,
 `monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `isMobile`,
 `scaleReferenceFor`; the shim also exports `slimURL`, `learnCols`, `slimOk`, `csvHash`,
-and the Oct 2026 chart helpers). Note: `data-path-smoke` still expects the v1 raw-CSV
+the Oct 2026 chart helpers and the Query helpers `txURL`, `txOk`, `parseTx`,
+`qTextMatcher`, `qValueMatcher`, `queryRows`, `queryGroup`, `querySort`, `querySortTx`). Note: `data-path-smoke` still expects the v1 raw-CSV
 cache and a single fetch URL, so it predates the snapshot cache. It is **never referenced by `index.html`** — the page stays a
 single self-contained file. A tiny guarded export shim at the end of the inline
 script (`if (typeof module !== 'undefined' && module.exports) { … }`) exposes those
