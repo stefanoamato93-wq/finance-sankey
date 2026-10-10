@@ -2478,11 +2478,10 @@ function renderCompare(){
    excluded from metrics in the Sankey stay out too. Window-independent (ignores the
    range bar); K applies to the tooltip and the flag amounts, Avg/m changes nothing
    (a ratio of years). Behind the line: net worth (blue area, zero on the years zero
-   line) and T12M expenses (orange area, own scale), shapes only. Anything below
-   zero (years, net worth) is red. */
+   line) and T12M expenses (orange area, own scale), shapes only. */
 const YLP_KEY='finance-sankey-ylp-off-v1', YLP_COL='#7fd0a3';
-/* background series (net worth, T12M expenses) and the colour of anything below zero */
-const YLP_NW='#5b8fd0', YLP_EX='#d98a4a', YLP_NEG='#e58a8a', YLP_EXP_H=0.5;
+/* background series (net worth, T12M expenses); expenses peak at YLP_EXP_H of the positive height */
+const YLP_NW='#5b8fd0', YLP_EX='#d98a4a', YLP_EXP_H=0.5;
 let ylpOff=new Set(), ylpOpen=false, ylpSig=null, ylpData=null, ylpLastW=0, NW_NOW=null, YLP_LIST=new Map(), YLP_LOCK=new Set();
 function ylpLoad(){ try{ const a=JSON.parse(localStorage.getItem(YLP_KEY)||'[]'); if(Array.isArray(a)) ylpOff=new Set(a.map(String)); }catch(e){} }
 function ylpSave(){ try{ localStorage.setItem(YLP_KEY, JSON.stringify([...ylpOff].sort())); }catch(e){} }
@@ -2573,24 +2572,14 @@ function renderYlp(){
       svgEl.appendChild(el('text',{x:xOf(i),y:plotBot+15,'text-anchor':anchor,fill:'#e7ecf5','font-size':fs},String(Math.floor(pts[i].mi/12)))); };
     if(!jan.length || xOf(jan[0])-xOf(0)>34) xl(0,'start');
     jan.forEach((i,j)=>{ if(!(j%every)) xl(i,'middle'); });
-    /* everything below the zero line is drawn in red: each signed series is drawn twice,
-       clipped above the zero line in its own colour and below it in YLP_NEG */
     const z0=yOf(Math.max(yMin,Math.min(yMax,0)));
-    const defs=el('defs',{});
-    const clip=(id,y,h)=>{ const c=el('clipPath',{id}); c.appendChild(el('rect',{x:0,y,width:W,height:Math.max(0,h)})); defs.appendChild(c); };
-    clip('ylpPos',0,z0); clip('ylpNeg',z0,H-z0);
-    svgEl.appendChild(defs);
     const yC=u=> yOf(Math.max(yMin,Math.min(yMax,u)));
     /* area to the zero line + the line over the points idx; unit(i) = value in years-axis units */
     const series=(idx,unit,col,o)=>{
       const line='M'+idx.map(i=>xOf(i).toFixed(1)+','+yC(unit(i)).toFixed(1)).join('L');
       const area=line+`L${xOf(idx[idx.length-1]).toFixed(1)},${z0.toFixed(1)}L${xOf(idx[0]).toFixed(1)},${z0.toFixed(1)}Z`;
-      (o.signed ? [['ylpPos',col],['ylpNeg',YLP_NEG]] : [[null,col]]).forEach(([cp,c])=>{
-        const a={d:area,fill:c,'fill-opacity':o.fill,stroke:'none',class:o.cls+' area'},
-              l={d:line,fill:'none',stroke:c,'stroke-width':o.w,'stroke-opacity':o.line,'stroke-linejoin':'round',class:o.cls+' line'};
-        if(cp){ a['clip-path']=l['clip-path']=`url(#${cp})`; }
-        svgEl.appendChild(el('path',a)); svgEl.appendChild(el('path',l));
-      });
+      svgEl.appendChild(el('path',{d:area,fill:col,'fill-opacity':o.fill,stroke:'none',class:o.cls+' area'}));
+      svgEl.appendChild(el('path',{d:line,fill:'none',stroke:col,'stroke-width':o.w,'stroke-opacity':o.line,'stroke-linejoin':'round',class:o.cls+' line'}));
     };
     /* background, shapes only (values in the tooltip):
        net worth = area on a € scale whose zero sits on the years zero line, sized so the
@@ -2601,18 +2590,17 @@ function renderYlp(){
     const kNw=Math.max(yMax>0 ? nwMax/yMax : 0, yMin<0 ? nwMin/yMin : 0) || 1;
     const exMax=Math.max(0,...exs), posU=yMax>0 ? yMax : yMax-yMin, kEx=exMax>0 ? exMax/(posU*YLP_EXP_H) : 1;
     const uNw=i=>pts[i].nw/kNw, uEx=i=>pts[i].exp/kEx;
-    series(all, uNw, YLP_NW, {fill:.11, line:.6, w:1.3, signed:true, cls:'bgnw'});
-    series(all, uEx, YLP_EX, {fill:.045, line:.7, w:1.3, signed:true, cls:'bgex'});   // light fill: orange on navy reads brown-red
+    series(all, uNw, YLP_NW, {fill:.11, line:.6, w:1.3, cls:'bgnw'});
+    series(all, uEx, YLP_EX, {fill:.045, line:.7, w:1.3, cls:'bgex'});   // light fill: orange on navy reads brown-red
     /* foreground: years paid, one piece per run of defined points */
     const runs=[]; let cur=null;
     pts.forEach((p,i)=>{ if(p.years==null){ cur=null; return; } if(!cur){ cur=[]; runs.push(cur); } cur.push(i); });
-    runs.forEach(r=> series(r, i=>pts[i].years, YLP_COL, {fill:.16, line:1, w:2, signed:true, cls:'yrs'}));
-    const colOf=v=> v<0 ? YLP_NEG : YLP_COL;
+    runs.forEach(r=> series(r, i=>pts[i].years, YLP_COL, {fill:.16, line:1, w:2, cls:'yrs'}));
     /* last value labelled at the right end; the live point gets a ring */
     let li=N-1; while(li>=0 && pts[li].years==null) li--;
-    if(li>=0){ const p=pts[li], c=colOf(p.years);
-      svgEl.appendChild(el('circle',{cx:xOf(li),cy:yOf(p.years),r:p.now?3.6:2.8,fill:p.now?'#0f1420':c,stroke:c,'stroke-width':p.now?1.8:0}));
-      svgEl.appendChild(el('text',{x:xOf(li)+6,y:yOf(p.years)+4,fill:c,'font-size':fs+0.5,'font-weight':700},yrs(p.years)+'y')); }
+    if(li>=0){ const p=pts[li];
+      svgEl.appendChild(el('circle',{cx:xOf(li),cy:yOf(p.years),r:p.now?3.6:2.8,fill:p.now?'#0f1420':YLP_COL,stroke:YLP_COL,'stroke-width':p.now?1.8:0}));
+      svgEl.appendChild(el('text',{x:xOf(li)+6,y:yOf(p.years)+4,fill:YLP_COL,'font-size':fs+0.5,'font-weight':700},yrs(p.years)+'y')); }
     /* hover / tap: nearest month, guide line + a dot on each series + tooltip */
     const guide=el('line',{x1:0,x2:0,y1:plotTop,y2:plotBot,stroke:'rgba(231,236,245,.55)','stroke-width':1,visibility:'hidden'});
     const dNw=el('circle',{cx:0,cy:0,r:2.6,fill:YLP_NW,visibility:'hidden'}),
@@ -2622,12 +2610,11 @@ function renderYlp(){
     const mut=s=>`<span style="color:#9aa6bd">${s}</span>`;
     const nOff=leaves.length-nCnt;
     const hhmm=t=>{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
-    const red=v=> v<0 ? ` style="color:${YLP_NEG}"` : '';
     const tipHtml=i=>{ const p=pts[i];
       let h=p.now ? `<b>Now</b> <b style="color:${YLP_COL}">LIVE</b> ${mut(hhmm(NW_NOW.at))}` : `<b>${miLabel(p.mi)}</b>`;
-      h+=`<br><i class="sw" style="background:${colOf(p.years)}"></i>Years paid <b${red(p.years)}>${p.years==null?'\u2014':yrs(p.years)}</b>`+
-         `<br><i class="sw" style="background:${p.nw<0?YLP_NEG:YLP_NW}"></i>Net worth <b${red(p.nw)}>${fmt(p.nw)}</b>`+
-         `<br><i class="sw" style="background:${p.exp<0?YLP_NEG:YLP_EX}"></i>T12M expenses <b${red(p.exp)}>${fmt(p.exp)}</b> `+
+      h+=`<br><i class="sw" style="background:${YLP_COL}"></i>Years paid <b>${p.years==null?'\u2014':yrs(p.years)}</b>`+
+         `<br><i class="sw" style="background:${YLP_NW}"></i>Net worth <b>${fmt(p.nw)}</b>`+
+         `<br><i class="sw" style="background:${YLP_EX}"></i>T12M expenses <b>${fmt(p.exp)}</b> `+
          mut(`\u00b7 ${fmt(p.exp/12)}/m`+(p.now?` (${cmpShort(m1-11,m1)})`:''));
       if(nOff) h+=`<br><span style="color:#e7c14a">${nOff} expense${nOff>1?'s':''} not counted</span>`;
       return h; };
@@ -2637,8 +2624,8 @@ function renderYlp(){
     const show=e=>{ const r=svgEl.getBoundingClientRect(), x=(e.clientX-r.left)*(W/r.width);
       const i=Math.max(0,Math.min(N-1,Math.round((x-padL)/innerW*(N-1)))), p=pts[i];
       guide.setAttribute('x1',xOf(i)); guide.setAttribute('x2',xOf(i)); guide.setAttribute('visibility','visible');
-      at(dNw,i,uNw(i),p.nw<0?YLP_NEG:YLP_NW); at(dEx,i,uEx(i),p.exp<0?YLP_NEG:YLP_EX);
-      if(p.years!=null) at(dot,i,p.years,colOf(p.years)); else dot.setAttribute('visibility','hidden');
+      at(dNw,i,uNw(i),YLP_NW); at(dEx,i,uEx(i),YLP_EX);
+      if(p.years!=null) at(dot,i,p.years,YLP_COL); else dot.setAttribute('visibility','hidden');
       showTip(e,tipHtml(i)); const tw=tip.offsetWidth, th=tip.offsetHeight;
       if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
       if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
@@ -2795,9 +2782,9 @@ async function fetchGviz(url){
   if(j.status!=='ok' || !j.table) throw new Error("gviz "+j.status);
   return j.table.rows.map(r=>(r.c||[]).map(c=> c==null ? null : c.v));
 }
-let liveBusy=false;
+let liveBusy=false, liveAt=0;   // liveAt = last live check (auto refresh, see autoTick)
 async function loadLive(){
-  if(liveBusy) return; liveBusy=true;
+  if(liveBusy) return; liveBusy=true; liveAt=Date.now();
   try{
     const [list,nw]=await Promise.all([fetchGviz(gvizURL('LIST','V2:Y60')), fetchGviz(gvizURL('NETWORTH','A11:O80'))]);
     /* investment gains = the NETWORTH totals row (A = "VARIABILITY"): H/I month,
@@ -3010,21 +2997,59 @@ function showError(msg,timedOut){
 }
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
+/* ---- auto refresh -------------------------------------------------------------
+   While the tab is visible: the DB sheet every 10 min, the live ETF values every 5 min
+   (GOOGLEFINANCE itself only moves every ~20 min). Coming back to the tab or window,
+   back online, or out of the back-forward cache checks straight away when the last
+   check is older than 2 min (DB) / 1 min (live). A hidden tab fetches nothing.
+   Silent: same fingerprint = nothing redrawn; new data = applyData(), which keeps the
+   page, the window, the exclusions, the toggles and every open row; a failed check
+   keeps what is on screen and the next tick retries. Never redraws under a range-bar
+   drag (waits for it to end). */
+const DB_EVERY=10*60*1000, DB_STALE=2*60*1000, LIVE_EVERY=5*60*1000, LIVE_STALE=60*1000;
+let dbAt=0, dbBusy=false, dbHash=null;   // last DB check, in flight, fingerprint on screen
+async function refreshDB(){
+  if(dbBusy || document.hidden) return;
+  dbBusy=true; dbAt=Date.now();
+  try{
+    const csv=await fetchSheet(), h=csvHash(csv), t=Date.now();
+    if(h!==dbHash){
+      await new Promise(res=>{ (function wait(){ if(drag) setTimeout(wait,400); else res(); })(); });
+      applyData(csv); dbHash=h; SheetCache.write(h,t);
+    } else {                                   // unchanged: re-stamp the snapshot twice a day
+      const c=SheetCache.read(); if(!c.ok || t-c.entry.retrievedAt>12*60*60*1000) SheetCache.write(h,t);
+    }
+    clearBadge();
+  }catch(e){ /* keep what is on screen; the next tick retries */ }
+  finally{ dbBusy=false; }
+}
+function autoTick(back){
+  if(document.hidden) return;
+  const now=Date.now();
+  if(now-liveAt >= (back ? LIVE_STALE : LIVE_EVERY)) loadLive();
+  if(now-dbAt >= (back ? DB_STALE : DB_EVERY)) refreshDB();
+}
+
+/* ---- boot: render cached data first, refresh live in the background ------ */
 function boot(){
   syncPageUI();                                // highlight the tab of the page to open (pages show once data is in)
   loadLive();                                  // live ETF values, in parallel with the DB load
-  setInterval(()=>{ if(!document.hidden) loadLive(); }, 5*60*1000);
-  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) loadLive(); });
+  setInterval(()=>autoTick(false), 30*1000);
+  document.addEventListener('visibilitychange',()=>autoTick(true));
+  window.addEventListener('focus',()=>autoTick(true));
+  window.addEventListener('online',()=>autoTick(true));
+  window.addEventListener('pageshow',e=>{ if(e.persisted) autoTick(true); });
   SheetCache.dropOld();                        // the old raw-CSV cache (v1) is no longer read
   const cached=SheetCache.read(), now=Date.now();
   let renderedFromCache=false, settled=false;
   if(cached.ok && SheetCache.isFresh(cached.entry,now)){
-    try{ applySnapshot(cached.entry); renderedFromCache=true; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
+    try{ applySnapshot(cached.entry); renderedFromCache=true; dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
   }
   const overall=setTimeout(()=>{ if(!settled && !renderedFromCache) showError('',true); },30000);
+  dbBusy=true; dbAt=Date.now();
   fetchSheet().then(csv=>{
     settled=true; clearTimeout(overall);
-    const h=csvHash(csv), t=Date.now();
+    const h=csvHash(csv), t=Date.now(); dbHash=h;
     if(renderedFromCache){
       /* same fingerprint: nothing to redo, just re-stamp the snapshot twice a day so it
          stays inside MAX_AGE; new data: crunch it, redraw the page, replace the snapshot */
@@ -3037,9 +3062,9 @@ function boot(){
   }).catch(err=>{
     settled=true; clearTimeout(overall);
     if(renderedFromCache){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
-    if(cached.ok){ try{ applySnapshot(cached.entry); showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
+    if(cached.ok){ try{ applySnapshot(cached.entry); dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
     showError(err && err.message ? err.message : 'load failed');
-  });
+  }).finally(()=>{ dbBusy=false; });
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */

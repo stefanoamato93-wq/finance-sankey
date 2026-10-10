@@ -85,10 +85,8 @@ A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
     the peak sits at `YLP_EXP_H` = half of the positive height, so the trend reads as a
     band under the other two. Both follow the expense flags and the Sankey exclusions,
     like the years line.
-- **Negative = red:** everything below the zero line (years paid, net worth) is drawn
-  in `YLP_NEG` (#e58a8a). Each signed series is drawn twice, clipped above and below
-  the zero line (`clipPath` `ylpPos` / `ylpNeg`). The end label, the hover dots and the
-  tooltip values turn red when negative too (Dec 2018: -2,9y, net worth -16.976). Drawn at the frame's
+- **No red for negatives:** each series keeps its own colour below zero too (a red
+  below-zero variant was tried on 10 Oct 2026 and reverted at Stefano's request). Drawn at the frame's
   real pixel width, redrawn on resize. Phone: the flag list is one column.
 - Code: pure `ylpSeries(data, holds, minMi, lastMi, off, excluded)` (exported in the
   test shim) returns `[{mi, nw, exp, years}]`; `renderYlp()` draws the chart and the
@@ -97,7 +95,7 @@ A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
   reference computed straight from the sheet CSV, plus flags, groups, Select all /
   none, persistence, Sankey exclusions, K, tooltip, the live Now point, and the
   background series (one point per month, drawn behind the line, net worth on the same
-  side of zero as the years line, expenses peak at half height, red below zero).
+  side of zero as the years line, expenses peak at half height, no red anywhere).
 
 ### Period Comparison (A vs B, what went up and down)
 A diverging change chart in table form, the **Compare** page. Added Oct 2026.
@@ -518,8 +516,9 @@ export, the same access the DB load uses; the app never writes to the sheet):
   `LIVE · Vwce · 1.091 × 170,80`); the hero card's sub-line is just `LIVE HH:MM`
   (no "ETF prices" text, no 12-month change), and
   the sparkline's last point becomes the live net worth.
-- Runs in parallel with the DB load, then every **5 minutes** while the tab is
-  visible and on returning to the tab. Any failure is silent and the DB values stay.
+- Runs in parallel with the DB load, then on the auto refresh schedule (see
+  Performance / Auto refresh: every 5 minutes while visible). Any failure is silent and
+  the DB values stay.
 - Freshness is whatever Google last computed for `GOOGLEFINANCE` (usually up to
   ~20 min delayed). A LIST entry with no matching NETWORTH row (e.g. `DIRECTA|AMZN`,
   not yet in DB/NETWORTH) has no price and is ignored.
@@ -563,6 +562,25 @@ old 440-850 ms, now ~40 ms (Net Worth), ~120 ms (Cash Flow), ~175 ms (Savings).
 
 - A small **"Showing last loaded data" badge** appears while refreshing and if the
   refresh fails (the cached view stays on screen).
+
+### Auto refresh (added 10 Oct 2026)
+The page keeps itself current without a reload, only while the tab is visible:
+
+| What | Every | On return to the tab / window, back online, back-forward cache |
+|---|---|---|
+| DB sheet (slim query) | 10 min (`DB_EVERY`) | at once if the last check is older than 2 min (`DB_STALE`) |
+| Live ETF values + investment gains | 5 min (`LIVE_EVERY`) | at once if older than 1 min (`LIVE_STALE`) |
+
+- One 30 s ticker (`autoTick()`) decides what is due, so a laptop waking from sleep
+  catches up on the first tick. A hidden tab fetches nothing.
+- **Silent:** `refreshDB()` hashes the answer; same fingerprint = nothing redrawn,
+  new fingerprint = `applyData()` + a new snapshot. The open page, the range-bar window,
+  exclusions, Avg/m / K, the Compare picks, open rows and the Years Paid flags all stay.
+  A failed check keeps what is on screen; the next tick retries.
+- Never redraws under a range-bar drag: a new answer waits until the drag ends.
+- Why these intervals: the sheet changes when Stefano books something (a few times a
+  day), and `GOOGLEFINANCE` itself only updates about every 20 min, so faster polling
+  would only add requests. Each DB check is ~36 KB gzipped.
 - The live fetch **retries up to 3 times** with a **10s timeout per attempt**, and a
   **30s overall guard** shows a timeout error if a cold load never returns. On a cold
   failure with any cached copy present (even stale), the cached copy is shown instead
