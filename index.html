@@ -198,6 +198,51 @@
   #detail g.drow rect.dhit{fill:transparent;}
   #detail .dmsg{color:var(--muted); font-size:12.5px; padding:18px 10px; text-align:center;}
   #detail .dhintrow{color:var(--muted); font-size:11px; margin-top:6px;}
+  /* Month detail (Savings page): one month's income and expenses */
+  #mdetail{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40; width:min(640px,94vw);
+        max-height:88vh; overflow-y:auto; padding:12px 14px 14px; box-shadow:0 12px 40px rgba(0,0,0,.6); outline:none;}
+  #mdetail .mdhead{display:flex; align-items:flex-start; justify-content:space-between; gap:8px 10px; flex-wrap:wrap; margin-bottom:10px;}
+  #mdetail .mdtitle{font-size:15px; font-weight:700; color:#fff;}
+  #mdetail .mdsub{font-size:11.5px; color:var(--muted); margin-top:2px;}
+  #mdetail .mdsub .ex{color:#e7c14a;}
+  #mdetail .mdacts{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;}
+  #mdetail button{background:var(--panel); color:var(--muted); border:1px solid var(--grid); border-radius:8px;
+        padding:6px 11px; cursor:pointer; font-size:12.5px; min-height:34px; font-family:inherit; white-space:nowrap;}
+  #mdetail button:hover:not(:disabled){color:var(--ink);}
+  #mdetail button:disabled{opacity:.35; cursor:default;}
+  #mdetail button:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
+  #mdetail button.nav{min-width:36px; padding:4px 8px; font-size:17px; line-height:1;}
+  #mdetail .mdtot{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:10px;}
+  #mdetail .mdc{min-width:0; background:linear-gradient(180deg,#182135,#141a28); border:1px solid var(--grid);
+        border-radius:10px; padding:7px 10px;}
+  #mdetail .mdc .lab{font-size:9.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #mdetail .mdc .val{font-size:17px; font-weight:800; margin-top:2px; font-variant-numeric:tabular-nums;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #mdetail .mdc .pct{font-size:10.5px; color:var(--muted); margin-top:1px; min-height:13px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  table.md{border-collapse:collapse; width:100%; table-layout:fixed; font-size:12.5px; font-variant-numeric:tabular-nums;}
+  .md th,.md td{padding:5px 8px; border-bottom:1px solid var(--grid); text-align:right; white-space:nowrap;
+        overflow:hidden; text-overflow:ellipsis;}
+  .md th{color:var(--muted); font-weight:600; font-size:10.5px; letter-spacing:.3px;}
+  .md th.n,.md td.n{text-align:left;}
+  .md th.n{text-transform:uppercase;}
+  .md th.bar{width:30%;} .md th.v{width:88px;} .md th.p{width:58px;}
+  .md td.p{color:var(--muted); font-size:11.5px;}
+  .md td.bar i{display:block; height:8px; border-radius:2px; min-width:1px;}
+  .md tr.g td{background:#141d30; font-weight:700; padding-top:7px; padding-bottom:7px;}
+  .md tr.g td.n{border-left:3px solid var(--gc,var(--budget)); text-transform:uppercase; font-size:11.5px; letter-spacing:.4px;}
+  .md tr.g.sep td{border-top:2px solid #3a4d78;}
+  .md tr.g,.md tr.dx{cursor:pointer;}
+  .md tr.g:hover td,.md tr.dx:hover td{background:#18233a;}
+  .md tr.g:focus-visible,.md tr.dx:focus-visible{outline:2px solid var(--needs); outline-offset:-2px;}
+  .md tr.l td{background:#0e1524;} .md tr.l td.n{padding-left:22px;}
+  .md tr.d td{background:#0b111d; font-size:11.5px;} .md tr.d td.n{padding-left:38px; color:var(--muted);}
+  .md tr.dx .tw{margin-left:-13px;}
+  .md .tw{display:inline-block; width:13px; color:var(--muted); font-size:11px;}
+  .md tr.excl td{opacity:.4;}
+  .md tr.pick td{background:rgba(231,193,74,.10);} .md tr.pick td.n{color:#e7c14a;}
+  #mdetail .mdmsg{text-align:center; color:var(--muted); padding:18px 8px; font-size:12.5px;}
   /* mobile/touch parity: an enlarged transparent tap target around each selectable
      node body. The visible bar can be as thin as MINSLOT (~22u ~=18px at the mobile
      720px diagram width, 0.8px/u), so a >=55u (>=44px) overlay carries the same tap.
@@ -407,6 +452,17 @@
     .tabs a{flex:1 1 0; min-width:0; text-align:center; padding:10px 2px; font-size:11.5px;
             overflow:hidden; text-overflow:ellipsis;}
     body{padding-bottom:calc(60px + env(safe-area-inset-bottom));}
+    /* month detail on a phone: tighter cards and columns, bigger tap targets */
+    #mdetail{padding:10px 10px 12px;}
+    #mdetail .mdtot{gap:5px;}
+    #mdetail .mdc{padding:6px 6px;}
+    #mdetail .mdc .lab{font-size:8.5px; letter-spacing:.2px;}
+    #mdetail .mdc .val{font-size:13.5px;}
+    #mdetail .mdc .pct{font-size:9.5px;}
+    #mdetail button{min-height:38px;}
+    .md th,.md td{padding:7px 5px;}
+    .md th.bar{width:18%;} .md th.v{width:68px;} .md th.p{width:46px;}
+    .md tr.l td.n{padding-left:14px;} .md tr.d td.n{padding-left:24px;}
     .hdrow,.cfbhead,.ylphead{flex-wrap:wrap; gap:8px;}
     .hdtools,.cfbtools{flex-wrap:wrap; margin-left:auto; justify-content:flex-end;}
   }
@@ -602,6 +658,10 @@
   <div class="dmsg" id="dMsg" style="display:none"></div>
   <div class="dhintrow" id="dHint" style="display:none"></div>
 </div>
+
+<!-- Month detail (Savings page): one month's income and expenses, opened by clicking a
+     month in the month view of Cash Flow vs Savings; filled by renderMd() -->
+<div id="mdetail" class="framed" style="display:none" role="dialog" aria-label="Month detail" tabindex="-1"></div>
 
 <script>
 /* ---- data source --------------------------------------------------------- */
@@ -2261,7 +2321,9 @@ function renderCashBars(){
     const hit=el('rect',{class:'hit',x:padL+slot*pos(i),y:0,width:slot,height:H});
     /* year view: a short muted hint at the bottom of the tooltip (mouse: click drills;
        touch: the first tap shows the tooltip, a second tap on the same year drills) */
-    const hint=()=> drill ? '' : `<br><span style="color:#9aa6bd">${cfPT==='mouse'?'Click':'Tap again'} for months \u203a</span>`;
+    /* month view: a click (touch: a tap) opens the month detail straight away */
+    const hint=()=> drill ? (cfPT==='mouse' ? `<br><span style="color:#9aa6bd">Click for details \u203a</span>` : '')
+                          : `<br><span style="color:#9aa6bd">${cfPT==='mouse'?'Click':'Tap again'} for months \u203a</span>`;
     const show=e=>{ showTip(e,html+hint()); const tw=tip.offsetWidth;
       if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
       const th=tip.offsetHeight; if(e.clientY+12+th>window.innerHeight) tip.style.top=Math.max(4,e.clientY-12-th)+'px'; };
@@ -2270,14 +2332,124 @@ function renderCashBars(){
       if(cfPT!=='mouse' && cfTipKey==null) cfPT='mouse'; if(cfPT==='mouse') show(e); });
     hit.addEventListener('mouseleave',()=>{ hideTip(); cfTipKey=null; });
     hit.addEventListener('click',e=>{ e.stopPropagation();
-      if(!drill && (cfPT==='mouse' || cfTipKey===r.year)){ cfDrillTo(r.year); return; }
+      if(drill){ openMd(r.year); return; }           // a month: its income / expense detail
+      if(cfPT==='mouse' || cfTipKey===r.year){ cfDrillTo(r.year); return; }
       cfTipKey=r.year; show(e); });                  // touch: tap shows, tap elsewhere hides
-    if(!drill){ hit.style.cursor='zoom-in'; hit.setAttribute('role','button'); hit.setAttribute('tabindex','0');
-      hit.setAttribute('aria-label','Show the months of '+r.year);
-      hit.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); cfDrillTo(r.year); } }); }
+    hit.style.cursor = drill ? 'pointer' : 'zoom-in'; hit.setAttribute('role','button'); hit.setAttribute('tabindex','0');
+    hit.setAttribute('aria-label', drill ? 'Show the income and expenses of '+miLabel(r.year) : 'Show the months of '+r.year);
+    hit.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); if(drill) openMd(r.year); else cfDrillTo(r.year); } });
     svgEl.appendChild(hit);
   });
 }
+
+/* ---- Month detail (Savings page) ------------------------------------------------
+   In the month view of Cash Flow vs Savings, clicking / tapping / Enter on a month opens
+   an overlay with that month's income and expenses: Income / Expenses / Savings / Safe
+   savings cards, then the income groups and the expense groups (Needs, Wants,
+   Liberality, Taxes) with every label, biggest first: value, a bar (one scale for every
+   row) and the share of income. A label with more than one DETAIL opens them on tap; a
+   group header collapses its labels. ‹ › (or the arrow keys) step through the months
+   (the chart behind follows the year), "Cash Flow ›" opens the Sankey on that month.
+   Exclusions count like everywhere (out of the totals, rows greyed); K applies; Avg/m
+   does nothing (a month is one month). The entry picked in the chart select is
+   highlighted. Closes with Close, Esc, a tap outside or a page switch. Data comes from
+   the pure comparePeriods() with the same month as both periods. */
+let mdMi=null, mdClosed=new Set(), mdDetOpen=new Set();
+const mdEl=document.getElementById('mdetail');
+if(mdEl) mdEl.addEventListener('click',e=>e.stopPropagation());
+function openMd(mi){
+  mdMi=mi; cfTipKey=null; hideTip(); hideMini();
+  mdClosed=new Set(); mdDetOpen=new Set();
+  if(cfSel.slice(0,2)==='D|') mdDetOpen.add('E|'+cfSel.split('|')[1]);   // picked detail: open its label
+  renderMd();
+  const pk=mdEl.querySelector('tr.pick'); if(pk && pk.scrollIntoView) pk.scrollIntoView({block:'nearest'});
+  try{ mdEl.focus({preventScroll:true}); }catch(e){}
+}
+function closeMd(){ if(mdMi==null) return; mdMi=null; if(mdEl){ mdEl.style.display='none'; mdEl.innerHTML=''; } }
+function mdGo(d){
+  if(mdMi==null) return;
+  const mi=Math.max(META.minMi, Math.min(currentMi(), mdMi+d)); if(mi===mdMi) return;
+  mdMi=mi; if(cfDrill!==Math.floor(mi/12)) cfDrillTo(Math.floor(mi/12));   // the chart behind follows the year
+  renderMd();
+}
+function openMonthInCashFlow(mi){
+  closeMd();
+  setAnchor(mi); modeEl.value='month'; t12El.checked=false;
+  const [f,t]=presetRange(); setSlider(f-META.minMi, t-META.minMi);
+  if(PAGE==='cashflow') build(); else showPage('cashflow');
+}
+function renderMd(){
+  if(mdMi==null || !mdEl || !DATA.length) return;
+  mdMi=Math.max(META.minMi, Math.min(currentMi(), mdMi));
+  const mi=mdMi, d=new Date(), nowMi=d.getFullYear()*12+d.getMonth();
+  const R=comparePeriods(DATA, DETAIL, [mi,mi], [mi,mi], deselected);
+  const esc=s=> String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const zero=v=> /^-?0K?$/.test(fmt(Math.abs(v)));
+  const inc=R.tot.a.inc, exp=R.tot.a.exp, safe=R.tot.a.safe;
+  const pct=v=>{ if(!(inc>0)) return ''; const p=v/inc*100;
+    return (Math.abs(p)<10 ? p.toFixed(1).replace('.',',') : String(Math.round(p)))+'%'; };
+  /* rows: zero rows dropped, labels and details biggest first */
+  const groups=R.groups.map(g=>Object.assign({}, g, {leaves:g.leaves.filter(l=>!zero(l.a))
+      .map(l=>Object.assign({}, l, {details:l.details.filter(x=>!zero(x.a)).sort((x,y)=>y.a-x.a)}))
+      .sort((x,y)=>y.a-x.a || rankCmp(x.key,y.key))})).filter(g=>g.leaves.length);
+  const scale=Math.max(1, ...groups.flatMap(g=>g.leaves.filter(l=>!l.excl).map(l=>Math.abs(l.a))));
+  const col=g=> g.kind==='I' ? INCOME : (GROUPCOL[g.name] || BUDGET);
+  const bar=(v,c,op)=>`<td class="bar"><i style="width:${Math.min(100,Math.abs(v)/scale*100).toFixed(1)}%;background:${c};opacity:${v<0?op*0.45:op}"></i></td>`;
+  const row=(cls,name,v,c,op,attrs,title)=>`<tr class="${cls}"${attrs||''}><td class="n"${title?` title="${esc(title)}"`:''}>${name}</td>`+
+    (op ? bar(v,c,op) : '<td class="bar"></td>')+`<td class="v">${fmt(v)}</td><td class="p">${pct(v)}</td></tr>`;
+  let body='', firstExp=true;
+  groups.forEach(g=>{
+    const open=!mdClosed.has(g.key), c=col(g), sep=g.kind==='E' && firstExp ? ' sep' : '';
+    if(g.kind==='E') firstExp=false;
+    body+=row('g'+sep+(g.excl?' excl':'')+(cfSel===g.key?' pick':''),
+      `<span class="tw">${open?'\u25BE':'\u25B8'}</span>${esc(g.name)}`, g.a, c, 0,
+      ` data-g="${esc(g.key)}" tabindex="0" role="button" aria-expanded="${open}" style="--gc:${c}"`);
+    if(!open) return;
+    g.leaves.forEach(l=>{
+      const hasD=l.details.length>1, dOpen=hasD && mdDetOpen.has(l.key);
+      body+=row('l'+(hasD?' dx':'')+(l.excl?' excl':'')+(cfSel===l.key?' pick':''),
+        (hasD?`<span class="tw">${dOpen?'\u25BE':'\u25B8'}</span>`:'')+esc(l.name), l.a, c, .85,
+        hasD ? ` data-l="${esc(l.key)}" tabindex="0" role="button" aria-expanded="${dOpen}"` : '', l.name);
+      if(dOpen) l.details.forEach(x=>{
+        body+=row('d'+(l.excl?' excl':'')+(cfSel===x.key?' pick':''), esc(x.name), x.a, c, .5, '', x.name); });
+    });
+  });
+  /* total cards, same rules as the Cash Flow cards (negative savings in red) */
+  const sp=savingsPercentage(inc,exp), ssp=savingsPercentage(safe,exp), sav=inc-exp, ssav=safe-exp;
+  const card=(lab,v,c,sub)=>`<div class="mdc"><div class="lab">${lab}</div><div class="val" style="color:${c}">${fmt(v)}</div><div class="pct">${sub}</div></div>`;
+  const cards=card('Income',inc,INCOME,'')+card('Expenses',exp,EXPC,inc>0?pct(exp)+' of income':'')+
+    card('Savings',sav, sav<0?'#e58a8a':GROUPCOL.Savings, sp===null?'\u2014':sp.toFixed(1).replace('.',',')+'% saved')+
+    card('Safe savings',ssav, ssav<0?'#e58a8a':GROUPCOL.Savings, ssp===null?'\u2014':ssp.toFixed(1).replace('.',',')+'% of safe');
+  const sub=[mi===nowMi?'in progress':'', deselected.size?`<span class="ex">${deselected.size} excluded</span>`:'']
+    .filter(Boolean).join(' \u00b7 ');
+  const lo=META.minMi, hi=currentMi();
+  mdEl.innerHTML=`<div class="mdhead"><div><div class="mdtitle">${miLabel(mi)}</div>`+
+      (sub?`<div class="mdsub">${sub}</div>`:'')+`</div><div class="mdacts">`+
+      `<button type="button" class="nav" data-md="prev" title="Previous month (\u2190)" aria-label="Previous month"${mi<=lo?' disabled':''}>\u2039</button>`+
+      `<button type="button" class="nav" data-md="next" title="Next month (\u2192)" aria-label="Next month"${mi>=hi?' disabled':''}>\u203a</button>`+
+      `<button type="button" data-md="cf" title="Open this month in the Cash Flow Sankey">Cash Flow \u203a</button>`+
+      `<button type="button" data-md="close">Close</button></div></div>`+
+    `<div class="mdtot">${cards}</div>`+
+    (groups.length
+      ? `<table class="md"><thead><tr><th class="n">Category</th><th class="bar"></th><th class="v"></th><th class="p">% inc.</th></tr></thead><tbody>${body}</tbody></table>`
+      : `<div class="mdmsg">Nothing booked in ${miLabel(mi)}.</div>`);
+  mdEl.style.display='';
+  mdEl.querySelectorAll('button[data-md]').forEach(b=>b.addEventListener('click',()=>{ const a=b.getAttribute('data-md');
+    if(a==='prev') mdGo(-1); else if(a==='next') mdGo(1); else if(a==='cf') openMonthInCashFlow(mi); else closeMd(); }));
+  const flip=(set,k)=>{ if(set.has(k)) set.delete(k); else set.add(k); renderMd(); };
+  const bind=(sel,attr,set)=> mdEl.querySelectorAll(sel).forEach(tr=>{ const k=tr.getAttribute(attr);
+    tr.addEventListener('click',()=>flip(set,k));
+    tr.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); flip(set,k); } }); });
+  bind('tr[data-g]','data-g',mdClosed);
+  bind('tr[data-l]','data-l',mdDetOpen);
+}
+document.addEventListener('keydown',e=>{
+  if(mdMi==null) return;
+  const t=e.target, typing=t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName);
+  if(e.key==='Escape'){ closeMd(); return; }
+  if(!typing && e.key==='ArrowLeft'){ e.preventDefault(); mdGo(-1); }
+  if(!typing && e.key==='ArrowRight'){ e.preventDefault(); mdGo(1); }
+});
 
 /* ---- Period Comparison: period A vs period B, what went up and down ---------
    Each period = type + anchor (the two selects per side):
@@ -2670,6 +2842,7 @@ function build(){
      the chart of the page on screen redraws (the others return early) */
   if(pageOn('cashflow')) buildSankey();
   renderCashBars(); renderCompare(); renderYlp();
+  renderMd();   // month detail, if open: follows K, exclusions and data refreshes (no-op when closed)
 }
 function buildSankey(){
   const raw=computeLinks(curMiF,curMiT); const monthly=monthlyEl.checked; curDiv=monthly?raw.months:1;
@@ -2845,7 +3018,7 @@ function initControlsOnce(){
   document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; if(cfRoll) cfDrill=null; syncCfDrill(); hideTip(); renderCashBars(); });
   /* month drill-down: back to the years (pill or Esc; Esc closes an open panel first) */
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });
-  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && cfDrill!=null && !panel) cfDrillTo(null); },true);   // capture: sees the panel before it closes
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape' && cfDrill!=null && !panel && mdMi==null) cfDrillTo(null); },true);   // capture: sees the panels before they close
   /* period comparison: changing A's type resets both sides (B = same type, one year
      earlier; Month: the month before); changing B's type re-defaults B against A */
   {
@@ -2929,7 +3102,7 @@ function renderPage(){
 function showPage(p, fromHash){
   if(PAGES.indexOf(p)<0 || p===PAGE) return;
   pageScroll[PAGE]=window.scrollY;
-  hideMini(); hideTip(); if(panel) closePanel();
+  hideMini(); hideTip(); if(panel) closePanel(); closeMd();
   PAGE=p;
   try{ localStorage.setItem(PAGE_KEY,p); }catch(e){}
   if(!fromHash && location.hash!=='#'+p){ try{ history.replaceState(null,'','#'+p); }catch(e){} }
@@ -3068,7 +3241,10 @@ function boot(){
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */
-document.addEventListener('click',()=>{ hideMini(); hideTip(); if(panel) closePanel(); });
+document.addEventListener('click',e=>{ hideMini(); hideTip(); if(panel) closePanel();
+  /* a click outside closes the month detail, but the Avg/m / K toggles stay (they flow
+     through to the open overlay via build() -> renderMd) */
+  if(!(e.target && e.target.closest && e.target.closest('#toggles'))) closeMd(); });
 boot();
 
 /* ---- test-only export shim ------------------------------------------------

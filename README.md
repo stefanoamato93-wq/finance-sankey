@@ -15,7 +15,7 @@ pages. Only the page on screen is shown **and drawn**:
 |---|---|---|
 | **Net Worth** | `#networth` | Hero card (net worth, `LIVE HH:MM`, trend sparkline, investment gains) + **Assets & Liabilities** tables (side by side on wide screens, stacked on phones, totals on top, collapsed by category). |
 | **Cash Flow** | `#cashflow` | Period controls, range bar, Income / Expenses / Savings / Safe savings cards, the money-flow **Sankey** and its detail panel. |
-| **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below). |
+| **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below); clicking a month in its month view opens the **Month detail** overlay. |
 | **Compare** | `#compare` | **Period Comparison** (see below). |
 | **Years Paid** | `#life` | **Years of Life Paid** (see below). |
 
@@ -188,6 +188,30 @@ year is labelled `YTD` under its year; any other part year shows its month count
   that may return `null` to skip a row (`mi=> year(mi)===Y ? mi : null`).
   Check: `_verify_cfdrill.py` (untracked): months sum to the year (2024: 143.076 /
   36.891), back pill, touch double tap, Esc, R12M reset, series mode.
+- **Month detail (added 10 Oct 2026):** in the month view, clicking a month (touch: a
+  tap; keyboard: Enter) opens the **Month detail** overlay with that month's income and
+  expenses in full. Independent of the picker and R12M (those stay year-level). It holds:
+  - **Four cards** on top: Income, Expenses, Savings, Safe savings (same definitions and
+    red-when-negative rule as the Cash Flow cards; the Savings sub-line is the % saved).
+  - **A table** of every income group and expense group (Needs, Wants, Liberality, Taxes)
+    with their labels, **biggest first**: value, a bar (one shared scale, the biggest
+    non-excluded label is full width), and the **share of that month's income**. A label
+    with more than one `DETAIL` opens its sub-categories on tap (▸); a group header
+    collapses its labels. Expenses are separated from income by a heavier rule.
+  - **Navigation:** `‹` / `›` (or the ← / → arrow keys) step month by month, clamped to
+    the data; the chart behind follows the year. **`Cash Flow ›`** opens that month in the
+    Cash Flow Sankey (sets Month mode + the range window, switches to the Cash Flow page).
+    Closes with Close, Esc, a click outside (except on the Avg/m / K pills), or a page
+    switch. The entry picked in the chart `select` is highlighted (gold); if it was a
+    DETAIL, its label opens.
+  - Honours exclusions (greyed rows, out of the totals, an "N excluded" note in the
+    subtitle) and K; Avg/m does nothing (one month). Built from the pure
+    `comparePeriods()` with the same month as both periods; `renderMd()` runs from every
+    `build()` so a data refresh, an exclusion or a K toggle updates the open overlay.
+  Code: `mdMi` state, `openMd()`, `renderMd()`, `mdGo()`, `openMonthInCashFlow()`,
+  `closeMd()`, overlay `#mdetail`. Check: `_verify_mdetail.py` (untracked): cards vs a
+  Python per-month reference, label/detail expand, group collapse, prev/next + arrows,
+  K, exclusion, the Cash Flow jump, Esc and page-switch close.
 - **R12M pill (left of the picker):** swaps the yearly bars for a **rolling 12-month
   stacked area chart** with one point per month, from the first month of data to the
   **last complete month** (so the last point equals the T12M cards, e.g. Sep 2026 =
