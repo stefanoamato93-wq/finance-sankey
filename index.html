@@ -2406,7 +2406,11 @@ function renderMd(){
       ` data-g="${esc(g.key)}" tabindex="0" role="button" aria-expanded="${open}" style="--gc:${c}"`);
     if(!open) return;
     g.leaves.forEach(l=>{
-      const hasD=l.details.length>1, dOpen=hasD && mdDetOpen.has(l.key);
+      /* drill whenever the label has a DETAIL breakdown this month (comparePeriods only
+         carries details for labels with >1 distinct DETAIL all-time, so single-same-name
+         labels like Groceries never get here). A label with one named detail this month,
+         e.g. Holidays -> Weekend, still expands. */
+      const hasD=l.details.length>0, dOpen=hasD && mdDetOpen.has(l.key);
       body+=row('l'+(hasD?' dx':'')+(l.excl?' excl':'')+(cfSel===l.key?' pick':''),
         (hasD?`<span class="tw">${dOpen?'\u25BE':'\u25B8'}</span>`:'')+esc(l.name), l.a, c, .85,
         hasD ? ` data-l="${esc(l.key)}" tabindex="0" role="button" aria-expanded="${dOpen}"` : '', l.name);

@@ -196,8 +196,14 @@ year is labelled `YTD` under its year; any other part year shows its month count
   - **A table** of every income group and expense group (Needs, Wants, Liberality, Taxes)
     with their labels, **biggest first**: value, a bar (one shared scale, the biggest
     non-excluded label is full width), and the **share of that month's income**. A label
-    with more than one `DETAIL` opens its sub-categories on tap (▸); a group header
-    collapses its labels. Expenses are separated from income by a heavier rule.
+    that has a `DETAIL` breakdown opens its sub-categories on tap (▸), shown as indented
+    muted rows (same drill-down pattern as the net-worth table), biggest first with their
+    own bar and share; a group header collapses its labels. Expenses are separated from
+    income by a heavier rule. A label whose only DETAIL is itself (Groceries, Food,
+    Restaurants, ...) is not drillable; one that has distinct details still expands even
+    when a single one is non-zero that month (e.g. Holidays -> Weekend). The rule is
+    `l.details.length > 0` (comparePeriods only carries details for labels with more than
+    one distinct DETAIL all-time, so the single-same-name labels never reach it).
   - **Navigation:** `‹` / `›` (or the ← / → arrow keys) step month by month, clamped to
     the data; the chart behind follows the year. **`Cash Flow ›`** opens that month in the
     Cash Flow Sankey (sets Month mode + the range window, switches to the Cash Flow page).
