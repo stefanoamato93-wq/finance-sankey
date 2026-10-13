@@ -674,8 +674,8 @@ old 440-850 ms, now ~40 ms (Net Worth), ~120 ms (Cash Flow), ~175 ms (Savings).
    (`applySnapshot()`, ~12 ms incl. drawing the page) with no CSV parse and no
    `aggregate()`. The background refresh hashes the new CSV (~3 ms): same fingerprint
    = nothing redone (the snapshot is re-stamped at most twice a day), new fingerprint
-   = `applyData()` + new snapshot. Snapshots up to **30 days** old are shown while the
-   refresh runs. **Bump the key (v3) whenever `aggregate()` changes the shape or meaning
+   = `applyData()` + new snapshot. A snapshot is painted at **any age** while the
+   refresh runs (see "Faster first paint" below). **Bump the key (v3) whenever `aggregate()` changes the shape or meaning
    of `DATA` / `DETAIL` / `NWHOLD` / `META`**, otherwise a returning visit would paint
    the old shape until the CSV itself changes. The old v1 cache kept the raw CSV (~3M characters, ~6 MB as stored,
    over Safari's 5 MB localStorage quota) and is deleted on boot. Nothing is stored
@@ -684,6 +684,38 @@ old 440-850 ms, now ~40 ms (Net Worth), ~120 ms (Cash Flow), ~175 ms (Savings).
 3. **One page per block, drawn lazily** (see Pages): boot draws only the page on
    screen, the range bar redraws only the Sankey, and layout reads of hidden charts
    are gone.
+
+### Faster first paint (13 Oct 2026)
+
+The three changes above cut the main-thread work, but a **cold open** (no snapshot yet:
+new device, cleared storage, or a cache-shape bump) still blocked on the network, and
+that was the ~10 s people felt. Measured round-trips to the sheet, repeated:
+
+| Endpoint | Cold | Warm | Why |
+|---|---|---|---|
+| Slim group-by (`slimURL()`) | **~14 s** | 3-4 s | `group by` makes Google recompute the whole GOOGLEFINANCE-heavy sheet |
+| Full export (`CSV_URL`, no query) | ~2,5 s | ~2 s | served from a materialised snapshot, no computation |
+
+So the slim query is light on the wire (36 KB) but heavy on Google's side, and the old
+boot tried it **first** (two serial attempts) before ever reaching the full export, i.e.
+it waited on the slowest endpoint to paint.
+
+Two fixes:
+
+- **Race on first paint** (`fetchSheet(true)`): the blocking boot fetch now fires the
+  slim query **and** the full export in parallel (`firstOk()`) and renders from whichever
+  valid answer returns first. The full export almost always wins a cold open, so the first
+  paint drops from ~10-14 s to ~2-3 s. If the slim answer is unusable (`slimOk()` false,
+  columns moved) the full export is used and `learnCols()` re-learns the letters, same as
+  before. The background refresh keeps the bandwidth-light slim-first path
+  (`fetchSheet(false)`), since the page is already on screen and latency does not matter.
+- **Paint from any-age snapshot**: boot used to ignore a snapshot older than 30 days and
+  block on the network; now it installs the snapshot whenever one exists and refreshes
+  behind it (the error path already fell back to a stale snapshot, so instant stale-then-
+  fresh is strictly better than a blank wait). The badge shows the retrieval date.
+
+Net effect: a returning visit is instant at any age; a cold open is bounded by the fast
+full export (~2-3 s), not the slow slim query (~14 s).
 
 - A small **"Showing last loaded data" badge** appears while refreshing and if the
   refresh fails (the cached view stays on screen).
@@ -707,10 +739,12 @@ The page keeps itself current without a reload, only while the tab is visible:
 - Why these intervals: the sheet changes when Stefano books something (a few times a
   day), and `GOOGLEFINANCE` itself only updates about every 20 min, so faster polling
   would only add requests. Each DB check is ~36 KB gzipped.
-- The live fetch **retries up to 3 times** with a **10s timeout per attempt**, and a
-  **30s overall guard** shows a timeout error if a cold load never returns. On a cold
-  failure with any cached copy present (even stale), the cached copy is shown instead
-  of an error.
+- Each fetch has a **10s timeout per attempt** (`fetchText()`), under a **30s overall
+  guard** that shows a timeout error only if a cold load with no snapshot never returns.
+  The background refresh (`fetchSheet(false)`) **retries up to 3 times** with a short
+  backoff; the boot race (`fetchSheet(true)`) runs its two fetches in parallel and takes
+  the first valid one. On a cold failure with any cached copy present (even stale), the
+  cached copy is shown instead of an error.
 - A **skeleton placeholder** (CSS-only shimmer mirroring the controls, cards,
   Sankey and table) is in the initial markup, so it paints immediately with no JS
   and is hidden the moment real content renders (no blank/unstyled gap). It
@@ -757,7 +791,8 @@ the nodes/flows are CSS variables in `:root`.
 ## Tests (dev-only, not shipped)
 The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpers
 (`parseCSV`, `aggregate`, `computeLinks`, `applySelection`, `savingsPercentage`,
-`monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `isMobile`,
+`monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `fetchFull`, `fetchSlim`,
+`firstOk`, `isMobile`,
 `scaleReferenceFor`; the shim also exports `slimURL`, `learnCols`, `slimOk`, `csvHash`,
 the Oct 2026 chart helpers and the Query helpers `txURL`, `txOk`, `parseTx`,
 `qNum`, `qAmountFn`, `queryRows`, `queryGroup`, `querySort`, `querySortTx`). Note: `data-path-smoke` still expects the v1 raw-CSV

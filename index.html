@@ -3872,7 +3872,6 @@ function syncExclUI(){
 const SheetCache={
   KEY:"finance-sankey-cache-v2",
   OLD_KEYS:["finance-sankey-cache-v1"],
-  MAX_AGE_MS:30*24*60*60*1000,   // a snapshot up to 30 days old is shown while the refresh runs
   available(){ try{ const k="__fs_probe__"; localStorage.setItem(k,"1"); localStorage.removeItem(k); return true; }catch(e){ return false; } },
   dropOld(){ try{ this.OLD_KEYS.forEach(k=>localStorage.removeItem(k)); }catch(e){} },
   read(){ try{ const raw=localStorage.getItem(this.KEY); if(!raw) return {ok:false};
@@ -3884,7 +3883,6 @@ const SheetCache={
   /* bump KEY (and v) whenever aggregate() changes the shape or meaning of what is stored */
   write(hash,retrievedAt){ try{ localStorage.setItem(this.KEY, JSON.stringify({v:2, hash, retrievedAt,
       data:DATA, detail:DETAIL, hold:NWHOLD, meta:META})); return true; }catch(e){ return false; } },
-  isFresh(entry,now){ return !!entry && typeof entry.retrievedAt==='number' && (now-entry.retrievedAt) <= this.MAX_AGE_MS; },
   differs(entry,hash){ return !entry || entry.hash!==hash; }
 };
 
@@ -3898,18 +3896,40 @@ async function fetchText(url){
     return await resp.text();
   } finally { if(to) clearTimeout(to); }
 }
-/* slim query first (attempts 1-2); if Google answers but the answer does not look right
-   (columns moved, error page), or on the last attempt, read the full export instead and
-   re-learn the column letters from its header for next time */
-async function fetchSheet(){
+/* the full export (no server-side query, so Google serves a materialised snapshot: ~2s
+   and stable). Side effect: re-learn the slim column letters from its header for next time */
+async function fetchFull(){
+  const full=await fetchText(CSV_URL), nl=full.indexOf('\n');
+  const c=learnCols(parseCSV(nl<0?full:full.slice(0,nl))[0]);
+  if(c){ try{ localStorage.setItem(SLIM_KEY, JSON.stringify(c)); }catch(e){} }
+  return full;
+}
+/* the slim group-by (light on the wire, ~36 KB); rejects if the answer is not usable
+   (columns moved, error page) so a race falls back to the full export */
+async function fetchSlim(){
+  const t=await fetchText(slimURL(slimCols()));
+  if(!slimOk(t)) throw new Error("slim answer not usable");
+  return t;
+}
+/* resolve with the first promise to FULFIL; reject only if they all reject (last error) */
+function firstOk(ps){
+  return new Promise((resolve,reject)=>{
+    let pending=ps.length, err;
+    ps.forEach(p=>Promise.resolve(p).then(resolve, e=>{ err=e; if(--pending===0) reject(err); }));
+  });
+}
+/* race=true (first paint): the slim group-by forces Google to recompute the whole sheet
+   (slow, often 10s+ cold on this GOOGLEFINANCE-heavy sheet), while the full export is
+   pre-materialised (~2s). Fire both and take the first usable answer, so the open never
+   waits on the slow query; the loser is ignored. race=false (background refresh): slim
+   first to stay light on the wire, fall back to the full export, with a short backoff. */
+async function fetchSheet(race){
+  if(race) return await firstOk([fetchFull(), fetchSlim()]);
   let lastErr;
   for(let attempt=0; attempt<3; attempt++){
     try{
-      if(attempt<2){ const t=await fetchText(slimURL(slimCols())); if(slimOk(t)) return t; }
-      const full=await fetchText(CSV_URL), nl=full.indexOf('\n');
-      const c=learnCols(parseCSV(nl<0?full:full.slice(0,nl))[0]);
-      if(c){ try{ localStorage.setItem(SLIM_KEY, JSON.stringify(c)); }catch(e){} }
-      return full;
+      if(attempt<2) return await fetchSlim();
+      return await fetchFull();
     }catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
   }
   throw lastErr || new Error("fetch failed");
@@ -4206,12 +4226,16 @@ function boot(){
   SheetCache.dropOld();                        // the old raw-CSV cache (v1) is no longer read
   const cached=SheetCache.read(), now=Date.now();
   let renderedFromCache=false, settled=false;
-  if(cached.ok && SheetCache.isFresh(cached.entry,now)){
+  /* paint from the snapshot whenever one exists, at ANY age: the background refresh
+     (started just below) replaces it in ~2s, and the error path already falls back to a
+     stale snapshot, so an instant stale-then-fresh paint beats a blank wait on the network.
+     The badge carries the retrieval date so an old snapshot is obvious while it refreshes. */
+  if(cached.ok){
     try{ applySnapshot(cached.entry); renderedFromCache=true; dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
   }
   const overall=setTimeout(()=>{ if(!settled && !renderedFromCache) showError('',true); },30000);
   dbBusy=true; dbAt=Date.now();
-  fetchSheet().then(csv=>{
+  fetchSheet(true).then(csv=>{
     settled=true; clearTimeout(overall);
     const h=csvHash(csv), t=Date.now(); dbHash=h;
     if(renderedFromCache){
@@ -4246,7 +4270,7 @@ boot();
    helper (SheetCache, thickness, idxFromClientX, isMobile, ...) lands in a
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash,
+  module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, fetchFull, fetchSlim, firstOk, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash,
     txURL, txOk, parseTx, qNum, qAmountFn, queryRows, queryGroup, querySort, querySortTx };
 }
 </script>
