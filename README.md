@@ -233,6 +233,22 @@ A diverging change chart in table form, the **Compare** page. Added Oct 2026.
 One column per calendar year, **actuals only**: first year of data up to the
 current month (rows dated after today are ignored, no forecast years). The current
 year is labelled `YTD` under its year; any other part year shows its month count.
+- **Last Year bar (added 17 Oct 2026):** a faded reference bar sits a bit right of the
+  current year (one slot + 0.2 of a slot of extra gap, `LYG`), labelled `2025` / `YTD`:
+  January to the same month last year, i.e. the same months as this year's YTD (on
+  17 Oct 2026: Jan-Oct 2025). In the **month view of the current year** the same bar
+  follows the latest month (`Oct` / `MTD`) and shows that month one year back
+  (`Oct` / `2025`). The sheet is monthly, so the LY side always holds **whole months**
+  while the current month is still in progress. It follows the picker (series mode),
+  exclusions, Avg/m (divided by its own months) and K. Its savings-rate points are
+  hollow and **not joined** to the lines. Tooltip head `2025 YTD (Jan–Oct, last year)` /
+  `Oct 2025 (last year)`; a click drills into last year (year view) or opens that month's
+  **Month detail** (month view). A past year's month view has no LY bar.
+  Code: in `renderCashBars()` the LY row is built with `cashFlowByYear()` on a bucket
+  `lyB` (`mi in [lyFrom, lyTo] -> key`), appended to `rows` flagged `ly`, and placed by
+  `pos()` at `lyAt`; `cfSeriesByYear()` reuses `lyB` for the picker (`serOf()`).
+  Check: `_verify_cfly.py [shot]` (untracked, 23 checks: LY = DATA sums, position,
+  rate path, Avg/m, series, drill, month detail, exclusions).
 - **Bars up = income**, stacked **Safe** (Base + TFR + Food tickets, dark green),
   **Stocks** (mid green), **Other** (every other income, light green). Total on top.
 - **Bars down = expenses**, stacked **Needs / Wants / Liberality / Taxes** (dark to

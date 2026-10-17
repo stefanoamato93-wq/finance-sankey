@@ -2484,19 +2484,40 @@ function renderCashBars(){
   /* Avg/m: a year / its months; a month is already one month */
   const dv=r=> perMonth && !drill ? Math.max(1,r.months) : 1;
   const MSH=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  /* Last year, like for like (added 17 Oct 2026): one faded bar a bit right of the
+     current year. Year view: January .. the same month last year ("2025 YTD", same
+     months as this year's YTD). Month view of the current year: the latest month one
+     year back ("Oct 2025" next to "Oct MTD"). The sheet is monthly, so the LY side holds
+     whole months. The row joins `rows` flagged ly (row.year = 2025, or the LY mi), so
+     bars, labels, tooltip and click reuse the normal path; its rate points stand alone
+     (hollow, not joined to the lines). lyB = its bucket, reused for the series picker. */
+  const cY=d.getFullYear(), lastRow=rows[rows.length-1];
+  let lyB=null;
+  if(lastRow && (drill ? cfDrill===cY && lastRow.year===lastMi : lastRow.year===cY)){
+    const lyFrom=drill ? lastMi-12 : (cY-1)*12, lyTo=lastMi-12, key=drill ? lastMi-12 : cY-1;
+    lyB=mi=> mi>=lyFrom && mi<=lyTo ? key : null;
+    const ly=cashFlowByYear(DATA, lastMi, deselected, lyB)[0];
+    if(ly) rows=rows.concat([Object.assign(ly,{ly:true, lyFrom, lyTo})]); else lyB=null;
+  }
   const keyLab=r=> drill ? MSH[r.year%12] : String(r.year);
-  const subLab=r=> drill ? (r.year===nowMi ? 'MTD' : '')
-                         : (r.months<12 ? (r.year===d.getFullYear() ? 'YTD' : r.months+'m') : '');
+  const subLab=r=> r.ly ? (drill ? String(Math.floor(r.year/12)) : 'YTD')
+                 : drill ? (r.year===nowMi ? 'MTD' : '')
+                         : (r.months<12 ? (r.year===cY ? 'YTD' : r.months+'m') : '');
   const narrow=W<560, n=rows.length;
   if(!n){ svgEl.innerHTML=''; return; }
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
   const ser=info ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
-  const sv=ser ? rows.map(r=>(ser[r.year]||0)/dv(r)) : null;
+  const serLY=info && lyB ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected, lyB) : {};
+  const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
+  const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
   /* geometry (CSS px, viewBox = real width) */
   /* month view keeps 12 fixed slots (Jan..Dec), so a part year leaves its missing
-     months blank instead of widening the bars */
-  const pos=i=> drill ? rows[i].year%12 : i, nSlots=drill ? 12 : n;
+     months blank instead of widening the bars. The LY bar takes the slot after the
+     current year / latest month plus LYG of a slot as extra gap ("a bit more right"). */
+  const LYG=0.2, lyAt=drill ? lastMi%12+1+LYG : n-1+LYG;
+  const pos=i=> rows[i].ly ? lyAt : drill ? rows[i].year%12 : i;
+  const nSlots=drill ? Math.max(12, lyB ? lyAt+1 : 12) : (lyB ? lyAt+1 : n);
   const padL=4, padR=4, slot=(W-padL-padR)/nSlots, barW=Math.min(58, slot*0.62);
   const cx=i=> padL+slot*pos(i)+slot/2;
   const vals=ser ? sv.map(v=>({inc:Math.max(0,v), exp:Math.max(0,-v)}))
@@ -2521,14 +2542,16 @@ function renderCashBars(){
     const sub=subLab(r);
     if(sub){ const ts=el('tspan',{x:cx(i),dy:12,fill:'#9aa6bd','font-size':9},sub); yt.appendChild(ts); }
     svgEl.appendChild(yt); };
+  /* the LY bar is a reference: faded fill, slightly dimmed value labels */
+  const lyOp=r=> r.ly ? .5 : 1, lyTx=r=> r.ly ? .75 : 1;
   if(ser) rows.forEach((r,i)=>{
     /* one bar: up when positive, down when negative (a savings loss, a net refund) */
     const x=cx(i)-barW/2, v=sv[i], h=Math.abs(v)*sc, neg=v<0, isSav=/^T\|(safe)?sav$/.test(cfSel);
     /* negative savings = red; any other negative (net refund) = its own colour, faded */
     if(h>0) svgEl.appendChild(el('rect',{x,y:neg?baseY:baseY-h,width:barW,height:h,
-      fill: neg && isSav ? '#e58a8a' : info.color, 'fill-opacity': neg && !isSav ? .5 : 1}));
+      fill: neg && isSav ? '#e58a8a' : info.color, 'fill-opacity': (neg && !isSav ? .5 : 1)*lyOp(r)}));
     if(!/^-?0K?$/.test(fmt(v))) svgEl.appendChild(el('text',{x:cx(i),y:neg?baseY+h+fsV+3:baseY-h-5,'text-anchor':'middle',
-      fill:neg?'#e58a8a':'#e7ecf5','font-size':fsV,'font-weight':700},fmt(v)));
+      fill:neg?'#e58a8a':'#e7ecf5','fill-opacity':lyTx(r),'font-size':fsV,'font-weight':700},fmt(v)));
     yearLabel(r,i);
   });
   else rows.forEach((r,i)=>{
@@ -2536,13 +2559,13 @@ function renderCashBars(){
     /* income stack, upwards from the zero line */
     let y=baseY;
     CF_INC.forEach(([k,,c])=>{ const h=Math.max(0,r.inc[k]/dv(r))*sc; if(h<=0) return;
-      y-=h; svgEl.appendChild(el('rect',{x,y,width:barW,height:h,fill:c})); });
-    svgEl.appendChild(el('text',{x:cx(i),y:y-5,'text-anchor':'middle',fill:'#e7ecf5','font-size':fsV,'font-weight':700},fmt(v.inc)));
+      y-=h; svgEl.appendChild(el('rect',{x,y,width:barW,height:h,fill:c,'fill-opacity':lyOp(r)})); });
+    svgEl.appendChild(el('text',{x:cx(i),y:y-5,'text-anchor':'middle',fill:'#e7ecf5','fill-opacity':lyTx(r),'font-size':fsV,'font-weight':700},fmt(v.inc)));
     /* expense stack, downwards */
     let yn=baseY;
     CF_EXP.forEach(([g,,c])=>{ const h=Math.max(0,(r.exp[g]||0)/dv(r))*sc; if(h<=0) return;
-      svgEl.appendChild(el('rect',{x,y:yn,width:barW,height:h,fill:c})); yn+=h; });
-    if(v.exp>0) svgEl.appendChild(el('text',{x:cx(i),y:yn+fsV+3,'text-anchor':'middle',fill:'#e58a8a','font-size':fsV,'font-weight':600},fmt(-v.exp)));
+      svgEl.appendChild(el('rect',{x,y:yn,width:barW,height:h,fill:c,'fill-opacity':lyOp(r)})); yn+=h; });
+    if(v.exp>0) svgEl.appendChild(el('text',{x:cx(i),y:yn+fsV+3,'text-anchor':'middle',fill:'#e58a8a','fill-opacity':lyTx(r),'font-size':fsV,'font-weight':600},fmt(-v.exp)));
     yearLabel(r,i);   // year axis label (+ YTD / months on a second line for a part year)
   });
   /* savings-rate lines: own % scale in the band above the bars (overview only) */
@@ -2557,14 +2580,17 @@ function renderCashBars(){
     const ry=v=> lineTop+(rMax-Math.max(rMin,v))/(rMax-rMin)*lineH;
     const line=(key,color,dash,above)=>{
       let dd='', pen=false;
-      rows.forEach((r,i)=>{ const v=rateOf(r,key); if(v==null){ pen=false; return; }
+      /* the LY point is not part of the timeline: left out of the path */
+      rows.forEach((r,i)=>{ const v=r.ly ? null : rateOf(r,key); if(v==null){ pen=false; return; }
         dd+=(pen?'L':'M')+cx(i).toFixed(1)+','+ry(v).toFixed(1); pen=true; });
       const p=el('path',{d:dd,fill:'none',stroke:color,'stroke-width':above?2:1.6,'stroke-linejoin':'round'});
       if(dash) p.setAttribute('stroke-dasharray','5 3');
       svgEl.appendChild(p);
       rows.forEach((r,i)=>{ const v=rateOf(r,key); if(v==null) return;
-        svgEl.appendChild(el('circle',{cx:cx(i),cy:ry(v),r:2.6,fill:color}));
-        svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,
+        /* LY: hollow dot, dimmed label */
+        svgEl.appendChild(el('circle',r.ly ? {cx:cx(i),cy:ry(v),r:2.6,fill:'none',stroke:color,'stroke-width':1.3}
+                                           : {cx:cx(i),cy:ry(v),r:2.6,fill:color}));
+        svgEl.appendChild(el('text',{x:cx(i),y:above?ry(v)-6:ry(v)+fsP+3,'text-anchor':'middle',fill:color,'fill-opacity':lyTx(r),
           'font-size':fsP,'font-weight':above?700:500},Math.round(v)+'%')); });
     };
     line('rateSafe',CF_LINE_SAFE,true,false);
@@ -2578,9 +2604,13 @@ function renderCashBars(){
         .map(([key,lab,c])=>`<i class="sw" style="background:${c}"></i>${lab} ${fmt(src[key]/k)}`), out=[];
       for(let j=0;j<it.length;j+=2) out.push(it.slice(j,j+2).join(' \u00b7 '));
       return out.map(s=>`<br><span style="color:#9aa6bd">&nbsp;&nbsp;${s}</span>`).join(''); };
+    /* LY bar: "2025 YTD (Jan-Oct, last year)" / "Oct 2025 (last year)" */
+    const lyRange=r=> MSH[r.lyFrom%12]+(r.lyTo>r.lyFrom ? '\u2013'+MSH[r.lyTo%12] : '');
     const head=(drill
-      ? `<b>${miLabel(r.year)}</b>${r.year===nowMi?' <span style="color:#9aa6bd">(in progress)</span>':''}`
-      : `<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`+
+      ? `<b>${miLabel(r.year)}</b>${r.ly?' <span style="color:#9aa6bd">(last year)</span>'
+          : r.year===nowMi?' <span style="color:#9aa6bd">(in progress)</span>':''}`
+      : (r.ly ? `<b>${r.year} YTD</b> <span style="color:#9aa6bd">(${lyRange(r)}, last year)</span>`
+          : `<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`)+
         `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`) +
       `${deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:''}`;
     /* series mode: the picked entry, its value and its share of that year's (month's)
@@ -2588,7 +2618,7 @@ function renderCashBars(){
     const baseV=info && info.base==='safe' ? r.safe : r.income;
     const html= ser ? head+
       `<br><i class="sw" style="background:${info.color}"></i>${info.label} <b>${fmt(sv[i])}</b>`+
-      (info.base && baseV>0 ? `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc((ser[r.year]||0)/baseV*100)} of ${info.base==='safe'?'safe income':'income'}</span>` : '')
+      (info.base && baseV>0 ? `<br><span style="color:#9aa6bd">&nbsp;&nbsp;${pc(serOf(r)/baseV*100)} of ${info.base==='safe'?'safe income':'income'}</span>` : '')
     : head+
       `<br>Income <b>${fmt(r.income/k)}</b>${part(CF_INC,r.inc)}`+
       `<br>Expenses <b>${fmt(r.expenses/k)}</b>${part(CF_EXP,r.exp)}`+
@@ -2608,10 +2638,12 @@ function renderCashBars(){
     hit.addEventListener('mousemove',e=>{ if(e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
       if(cfPT!=='mouse' && cfTipKey==null) cfPT='mouse'; if(cfPT==='mouse') show(e); });
     hit.addEventListener('mouseleave',()=>{ hideTip(); cfTipKey=null; });
+    /* the LY bar drills into last year (year view) / opens that month (month view) */
+    const tk=r.ly ? 'ly' : r.year;
     hit.addEventListener('click',e=>{ e.stopPropagation();
       if(drill){ openMd(r.year); return; }           // a month: its income / expense detail
-      if(cfPT==='mouse' || cfTipKey===r.year){ cfDrillTo(r.year); return; }
-      cfTipKey=r.year; show(e); });                  // touch: tap shows, tap elsewhere hides
+      if(cfPT==='mouse' || cfTipKey===tk){ cfDrillTo(r.year); return; }
+      cfTipKey=tk; show(e); });                      // touch: tap shows, tap elsewhere hides
     hit.style.cursor = drill ? 'pointer' : 'zoom-in'; hit.setAttribute('role','button'); hit.setAttribute('tabindex','0');
     hit.setAttribute('aria-label', drill ? 'Show the income and expenses of '+miLabel(r.year) : 'Show the months of '+r.year);
     hit.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); if(drill) openMd(r.year); else cfDrillTo(r.year); } });
