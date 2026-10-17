@@ -85,11 +85,21 @@
   .tip i.sw{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px;}
   .tip i.ln{display:inline-block; width:13px; height:0; border-top:2px solid; vertical-align:middle; margin-right:4px;}
   .tip i.ln.dash{border-top-style:dashed;}
-  .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .cfbhead{display:flex; align-items:center; justify-content:space-between; gap:6px 10px; flex-wrap:wrap;}
   .cfbtools{display:flex; align-items:center; gap:6px; min-width:0; flex:0 1 auto;}
-  #cfSel{height:30px; padding:0 6px; font-size:12px; font-family:inherit; width:220px; max-width:100%; min-width:0; flex:0 1 auto;}
-  @media (max-width:680px){ #cfSel{width:150px;} .cfbhead h2{white-space:nowrap;} }
-  #cfSel.on{border-color:#25603f; color:#fff; background:#1b3a2b;}
+  /* drill-down path under the title: Overview › macro category › label › detail.
+     One short select per level; the next level only appears once its parent is picked,
+     and the detail level stays a dashed "+ Detail" until a detail is asked for. */
+  .cfpath{flex:1 0 100%; display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; min-width:0;}
+  .cfpath select{height:30px; padding:0 6px; font-size:12px; font-family:inherit; width:auto; max-width:210px; min-width:0;}
+  .cfpath select.on{border-color:#25603f; color:#fff; background:#1b3a2b;}
+  .cfpath select.ask{border-style:dashed; color:var(--muted); background:transparent;}
+  .cfpath .cfsep{color:var(--muted); font-size:13px;}
+  .cfpath [hidden]{display:none !important;}
+  /* phone: the path stays on one row; the selects shrink to share it (long names clip in
+     the closed select, the open list still shows them in full) */
+  @media (max-width:680px){ .cfpath{flex-wrap:nowrap; gap:4px;}
+    .cfpath select{flex:0 1 auto; max-width:none; padding:0 4px;} .cfbhead h2{white-space:nowrap;} }
   #cfbars text{font-variant-numeric:tabular-nums;}
   #cfbars .hit{fill:transparent; cursor:pointer;}
   #cfbars .hit:hover{fill:rgba(255,255,255,.035);}
@@ -788,9 +798,16 @@
     <span class="tgslot"></span>
     <!-- R12M: rolling 12-month stacked areas instead of the yearly bars -->
     <span class="pills"><label class="pill" title="Rolling 12 months, one point per month"><input type="checkbox" id="cfRoll">R12M</label></span>
-    <!-- Overview (stacks + savings %) or one category / label / detail -->
-    <select id="cfSel" aria-label="Plot one category" title="Plot one category, label or detail"></select>
   </div>
+  <!-- what to plot, drilled one level at a time: Overview (stacks + savings %) ›
+       macro category › label › detail (only when asked for) -->
+  <nav class="cfpath" id="cfpath" aria-label="What to plot">
+    <select id="cfSel1" aria-label="Category" title="Overview, or one macro category"></select>
+    <span class="cfsep" id="cfSep2" aria-hidden="true" hidden>&rsaquo;</span>
+    <select id="cfSel2" aria-label="Label" title="The whole category, or one of its labels" hidden></select>
+    <span class="cfsep" id="cfSep3" aria-hidden="true" hidden>&rsaquo;</span>
+    <select id="cfSel3" aria-label="Detail" title="Drill into one detail of this label" hidden></select>
+  </nav>
 </div>
 <div class="cfbwrap framed" id="cfbwrap" style="display:none">
   <svg id="cfbars" viewBox="0 0 900 360"></svg>
@@ -2201,7 +2218,7 @@ function cfDayData(tx, loDk, hiDk){
 }
 
 /* ---- single-series mode: plot one category / label / detail per year -------
-   Selection keys (the #cfSel <select>):
+   Selection keys (cfSel, picked through the #cfpath drill-down selects):
      T|inc  T|safe  T|exp  T|sav  T|safesav     totals
      IG|<income group>   EG|<expense macro group>
      I|<income leaf>     E|<expense leaf>        D|<expense leaf>|<detail>
@@ -2234,45 +2251,73 @@ function cfSeriesByYear(sel, data, detail, lastMi, excluded, bucket){
   });
   return out;
 }
-/* option list for #cfSel, rebuilt once per data load. CF_OPTS maps key -> {label,
-   color, base} where base = what the tooltip share is taken of ('income' | 'safe' | null). */
-let cfSel='', CF_OPTS=new Map(), cfOptData=null;
+/* the drill-down picker (#cfpath), rebuilt once per data load:
+     level 1  Overview, the totals and the macro categories (Work / Non-work income,
+              Needs, Wants, Liberality, Taxes)
+     level 2  a macro category's labels (shown once a category is picked)
+     level 3  a label's DETAIL sub-categories, only when it has more than one, behind a
+              dashed "+ Detail" select (details only when asked for)
+   CF_OPTS maps key -> {label, color, base} where base = what the tooltip share is taken
+   of ('income' | 'safe' | null); CF_L1 = level-1 entries per optgroup, CF_KIDS = key ->
+   child keys (Stable_Order), CF_UP = child key -> parent key. cfSel stays the one picked
+   key (the deepest level), so the chart code reads it as before. */
+let cfSel='', CF_OPTS=new Map(), CF_L1=[], CF_KIDS=new Map(), CF_UP=new Map(), cfOptData=null;
 function buildCfOptions(){
-  const sel=document.getElementById('cfSel'); if(!sel) return;
-  CF_OPTS=new Map(); cfOptData=DATA;
-  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-  const IND='\u00a0\u00a0\u00a0', IND2=IND+IND;
+  CF_OPTS=new Map(); CF_L1=[]; CF_KIDS=new Map(); CF_UP=new Map(); cfOptData=DATA;
   const expCol=g=>(CF_EXP.find(x=>x[0]===g)||[0,0,'#dc5b55'])[2];
-  const opt=(key,label,indent,color,base)=>{ CF_OPTS.set(key,{label,color,base});
-    return `<option value="${esc(key)}">${indent}${esc(label)}</option>`; };
+  const add=(key,label,color,base,parent)=>{ CF_OPTS.set(key,{label,color,base});
+    if(parent){ CF_UP.set(key,parent); if(!CF_KIDS.has(parent)) CF_KIDS.set(parent,[]); CF_KIDS.get(parent).push(key); } };
   /* structure straight from DATA / DETAIL */
   const incLeaves={}, expLeaves={}, dets={};
   DATA.forEach(([mi,k,grp,leaf])=>{ const m=(k==='I'?incLeaves:expLeaves); (m[grp]=m[grp]||new Set()).add(leaf); });
   DETAIL.forEach(([mi,lf,dn])=>{ (dets[lf]=dets[lf]||new Set()).add(dn); });
   const byOrder=(a,b)=>{ const ia=ORDER.indexOf(a), ib=ORDER.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib) || (a<b?-1:1); };
-  let h=`<option value="">Overview</option><optgroup label="Income">`+
-    opt('T|inc','Total income','',CF_INC[0][2],null)+opt('T|safe','Safe income','',CF_INC[0][2],'income');
+  const inc=['T|inc','T|safe'], exp=['T|exp'];
+  add('T|inc','Total income',CF_INC[0][2],null); add('T|safe','Safe income',CF_INC[0][2],'income');
   Object.keys(incLeaves).sort(byOrder).forEach(g=>{
-    h+=opt('IG|'+g,g,'','#3aa86a','income');
-    [...incLeaves[g]].sort((a,b)=>rankCmp('I|'+a,'I|'+b)).forEach(lf=> h+=opt('I|'+lf,lf,IND,'#63c28b','income'));
+    add('IG|'+g,g,'#3aa86a','income'); inc.push('IG|'+g);
+    [...incLeaves[g]].sort((a,b)=>rankCmp('I|'+a,'I|'+b)).forEach(lf=> add('I|'+lf,lf,'#63c28b','income','IG|'+g));
   });
-  h+=`</optgroup><optgroup label="Savings">`+opt('T|sav','Savings','','#e7c14a','income')+
-     opt('T|safesav','Safe savings','','#e7c14a','safe')+`</optgroup>`+
-     `<optgroup label="Expenses">`+opt('T|exp','Total expenses','','#dc5b55','income')+`</optgroup>`;
+  add('T|sav','Savings','#e7c14a','income'); add('T|safesav','Safe savings','#e7c14a','safe');
+  add('T|exp','Total expenses','#dc5b55','income');
   Object.keys(expLeaves).sort(byOrder).forEach(g=>{
-    const c=expCol(g);
-    h+=`<optgroup label="${esc(g)}">`+opt('EG|'+g,'All '+g.toLowerCase(),'',c,'income');
+    const c=expCol(g); add('EG|'+g,g,c,'income'); exp.push('EG|'+g);
     [...expLeaves[g]].sort((a,b)=>rankCmp('E|'+a,'E|'+b)).forEach(lf=>{
-      h+=opt('E|'+lf,lf,IND,c,'income');
+      add('E|'+lf,lf,c,'income','EG|'+g);
       const ds=[...(dets[lf]||[])];
       if(ds.length>1) ds.sort((a,b)=>rankCmp('D|'+lf+'|'+a,'D|'+lf+'|'+b))
-        .forEach(dn=> h+=opt('D|'+lf+'|'+dn,dn,IND2,c,'income'));
+        .forEach(dn=> add('D|'+lf+'|'+dn,dn,c,'income','E|'+lf));
     });
-    h+=`</optgroup>`;
   });
-  sel.innerHTML=h;
+  CF_L1=[['Income',inc],['Savings',['T|sav','T|safesav']],['Expenses',exp]];
   if(cfSel && !CF_OPTS.has(cfSel)) cfSel='';      // the picked entry vanished on a data refresh
-  sel.value=cfSel; sel.classList.toggle('on',!!cfSel);
+  renderCfPath();
+}
+/* the path of the picked key, top level first: 'D|HOUSING|Rent' -> [EG|Needs, E|HOUSING, D|HOUSING|Rent] */
+function cfPathOf(key){ const p=[]; for(let k=key; k; k=CF_UP.get(k)) p.unshift(k); return p; }
+/* draw the three selects from cfSel: each level lists only the children of the level above */
+function renderCfPath(){
+  const $=id=>document.getElementById(id), s1=$('cfSel1'); if(!s1) return;
+  const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const o=(key,txt)=>`<option value="${esc(key)}">${esc(txt)}</option>`, nm=k=>(CF_OPTS.get(k)||{label:''}).label;
+  const path=cfPathOf(cfSel);
+  s1.innerHTML=o('','Overview')+CF_L1.map(([g,ks])=>`<optgroup label="${esc(g)}">`+ks.map(k=>o(k,nm(k))).join('')+'</optgroup>').join('');
+  s1.value=path[0]||''; s1.classList.toggle('on',!!path[0]);
+  /* level 2 / 3: "All <parent>" (= the parent itself) first, then the children */
+  const level=(s,sep,parent,cur,first,ask)=>{
+    const kids=parent ? CF_KIDS.get(parent) : null;
+    s.hidden=sep.hidden=!kids;
+    if(!kids){ s.innerHTML=''; s.classList.remove('on','ask'); return; }
+    s.innerHTML=o(parent,first)+kids.map(k=>o(k,nm(k))).join('');
+    s.value=cur||parent; s.classList.toggle('on',!!cur); s.classList.toggle('ask',ask && !cur);
+  };
+  level($('cfSel2'),$('cfSep2'),path[0],path[1],'All '+nm(path[0]).toLowerCase(),false);
+  level($('cfSel3'),$('cfSep3'),path[1],path[2],path[2] ? 'All '+nm(path[1]).toLowerCase() : '+ Detail',true);
+}
+/* pick what the chart plots ('' = Overview); used by the three selects */
+function cfPick(key){
+  cfSel=CF_OPTS.has(key) ? key : '';
+  renderCfPath(); hideTip(); renderCashBars();
 }
 /* ---- R12M mode: rolling 12-month stacked areas, one point per month ---------
    The R12M pill next to the picker swaps the yearly bars for a monthly x axis where
@@ -4096,9 +4141,9 @@ function initControlsOnce(){
   document.getElementById('lastMonth').addEventListener('click',()=>oneMonth(lastCompleteMi()));
   monthlyEl.addEventListener('change',()=>{ build(); renderCashBars(); });
   document.getElementById('tK').addEventListener('change',e=>{ showK=e.target.checked; build(); buildNetWorth(); renderCashBars(); });
-  /* chart picker: Overview, or one category / label / detail per year */
-  const cfSelEl=document.getElementById('cfSel');
-  cfSelEl.addEventListener('change',()=>{ cfSel=cfSelEl.value; cfSelEl.classList.toggle('on',!!cfSel); hideTip(); renderCashBars(); });
+  /* chart picker, drilled one level at a time: Overview › category › label › detail */
+  document.getElementById('cfpath').addEventListener('change',e=>{
+    if(e.target && e.target.tagName==='SELECT') cfPick(e.target.value); });
   document.getElementById('cfRoll').addEventListener('change',e=>{ cfRoll=e.target.checked; if(cfRoll) cfDrill=null; syncCfDrill(); hideTip(); renderCashBars(); });
   /* month drill-down: back to the years (pill or Esc; Esc closes an open panel first) */
   document.getElementById('cfBack').addEventListener('click',e=>{ e.stopPropagation(); cfDrillTo(null); });

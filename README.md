@@ -281,23 +281,41 @@ year is labelled `YTD` under its year; any other part year shows its month count
   rates; "Include all" restores it. `renderCashBars()` runs from every `build()` but
   only redraws when data, exclusions, Avg/m, K or the width changed (signature
   check), so dragging the range bar does not rebuild it.
-- **Picker (`#cfSel`, right of the chart title):** `Overview` (the stacks + savings
-  % lines) or any single entry plotted as one bar per year, in which case **the
-  savings % lines disappear**. Options, in Sankey order: Income (Total income, Safe
-  income, each income group and its leaves), Savings (Savings, Safe savings, which
-  can go negative and then draw downwards in red), Expenses (Total expenses), then
-  one group per macro group (Needs, Wants, ...) with "All needs", each label and,
-  indented under it, its DETAIL sub-categories (only when a label has more than
-  one). Leaves and details use the Stable_Order rank. The select turns green while
-  an entry is picked. Avg/m and K apply; the tooltip shows the value and its share of
-  that year's income (Safe savings: of safe income).
+- **Drill-down picker (`#cfpath`, a row under the chart title, 17 Oct 2026):** replaces
+  the old single 117-entry select. One short select per level, `›` between them, and
+  each level lists only the children of the level above:
+  1. **Category** (`#cfSel1`, 12 entries): `Overview` (the stacks + savings % lines),
+     then Income (Total income, Safe income, Work income, Non-work income), Savings
+     (Savings, Safe savings, which can go negative and then draw downwards in red),
+     Expenses (Total expenses, Needs, Wants, Liberality, Taxes).
+  2. **Label** (`#cfSel2`): appears once a macro category is picked. `All needs` (= the
+     category itself) first, then its labels. Totals have no level 2.
+  3. **Detail** (`#cfSel3`): **only on demand.** Appears for a label with more than one
+     DETAIL sub-category as a dashed, muted `+ Detail` select; it only lists the details
+     when opened. Once a detail is picked it turns green and its first entry becomes
+     `All housing` to step back. Income leaves never have a level 3.
+  Any entry other than Overview plots one bar per year, and **the savings % lines
+  disappear**. Changing a higher level drops the levels below it (Needs › HOUSING › Rent,
+  then Wants on level 1 = all wants). Picked levels turn green. Labels and details use the
+  Stable_Order rank. On phones the path stays on one row (the selects shrink, the open list
+  still shows full names). Avg/m and K apply; the tooltip shows the value and its share of
+  that year's income (Safe savings: of safe income); a macro group is named plainly
+  (`Needs`, was `All needs`).
   - Exclusions in series mode: totals honour every exclusion, a group honours the
     exclusions of its own leaves (not of itself, since you picked it), a label or a
     detail ignores exclusions. Avg/m month counts never change with exclusions.
   - Code: pure `cfSeriesByYear(sel, DATA, DETAIL, lastMi, excluded)` (exported in
-    the test shim) returns `{year: value}`; `buildCfOptions()` rebuilds the list
-    once per data load (`CF_OPTS` = key -> label / colour / share base) and keeps the
-    pick across refreshes when it still exists.
+    the test shim) returns `{year: value}`; `buildCfOptions()` rebuilds the tree
+    once per data load (`CF_OPTS` = key -> label / colour / share base, `CF_L1` = the
+    level-1 entries per optgroup, `CF_KIDS` = key -> child keys, `CF_UP` = child ->
+    parent) and keeps the pick across refreshes when it still exists. `cfSel` is still
+    the one picked key (the deepest level), so the chart, R12M and Month detail code
+    read it unchanged. `cfPathOf(key)` walks `CF_UP` to the top, `renderCfPath()` draws
+    the three selects from `cfSel`, `cfPick(key)` is the single entry point (one
+    `change` listener on `#cfpath`). Check: `_verify_cfpath.py [shot]` (untracked, 40
+    checks: level contents, show/hide per level, the `+ Detail` ask state, step back,
+    sibling switch, category = sum of labels and label = sum of details every year,
+    refresh keeps the path, Month detail opens the picked detail's label, R12M, phone fit).
 - **Month drill-down (added 5 Oct 2026):** click a year (touch: tap shows the
   tooltip, a second tap on the same year drills; keyboard: Enter) to see that year's
   months as the same bars, Jan..Dec in 12 fixed slots (missing months stay blank,
@@ -334,7 +352,7 @@ year is labelled `YTD` under its year; any other part year shows its month count
     the data; the chart behind follows the year. **`Cash Flow ›`** opens that month in the
     Cash Flow Sankey (sets Month mode + the range window, switches to the Cash Flow page).
     Closes with Close, Esc, a click outside (except on the Avg/m / K pills), or a page
-    switch. The entry picked in the chart `select` is highlighted (gold); if it was a
+    switch. The entry picked in the chart's drill-down path is highlighted (gold); if it was a
     DETAIL, its label opens.
   - Honours exclusions (greyed rows, out of the totals, an "N excluded" note in the
     subtitle) and K; Avg/m does nothing (one month). Built from the pure
@@ -344,7 +362,7 @@ year is labelled `YTD` under its year; any other part year shows its month count
   `closeMd()`, overlay `#mdetail`. Check: `_verify_mdetail.py` (untracked): cards vs a
   Python per-month reference, label/detail expand, group collapse, prev/next + arrows,
   K, exclusion, the Cash Flow jump, Esc and page-switch close.
-- **R12M pill (left of the picker):** swaps the yearly bars for a **rolling 12-month
+- **R12M pill (right of the chart title):** swaps the yearly bars for a **rolling 12-month
   stacked area chart** with one point per month, from the first month of data to the
   **last complete month** (so the last point equals the T12M cards, e.g. Sep 2026 =
   101.468 income / 52.960 expenses). Each point = sum of the last 12 months, so 2018
