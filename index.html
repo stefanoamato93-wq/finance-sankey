@@ -2177,6 +2177,29 @@ function cashFlowByYear(data, lastMi, excluded, bucket){
   }).filter(r=>r.nz);                             // drops blank-date rows (Dec 1899)
 }
 
+/* pure: the transactions dated loDk..hiDk (yyyymmdd, both included) -> {data, detail}
+   shaped like DATA / DETAIL, with the same cash-flow rules as aggregate() (INCOME leaf =
+   DETAIL, EXPENSES / TAXES leaf = LABEL, groups from CATEGORY1, ApprecTaxes and every
+   other type left out; parseTx already typed ApprecTaxes as APPRECIATION), summed per
+   key and rounded like aggregate(). Feeds cashFlowByYear() / cfSeriesByYear() for the
+   to-the-day comparison bar of Cash Flow vs Savings. */
+function cfDayData(tx, loDk, hiDk){
+  const agg=new Map(), det=new Map();
+  (tx||[]).forEach(r=>{
+    if(r.dk<loDk || r.dk>hiDk) return;
+    let kind, group, leaf;
+    if(r.typ==='INCOME'){ kind='I'; group=INCGRP[r.c1]||'Other income'; leaf=r.detU; }
+    else if(r.typ==='EXPENSES'){ kind='E'; group=EXPGRP[r.c1]||'Other'; leaf=r.lab; }
+    else if(r.typ==='TAXES'){ kind='E'; group='Taxes'; leaf=r.lab; }
+    else return;
+    if(!leaf) return;
+    const k=r.mi+'|'+kind+'|'+group+'|'+leaf; agg.set(k,(agg.get(k)||0)+r.v);
+    if(kind==='E'){ const dn=r.det!=='' ? r.det : leaf, dk=r.mi+'|'+leaf+'|'+dn; det.set(dk,(det.get(dk)||0)-r.v); }
+  });
+  return {data:[...agg.entries()].map(([k,v])=>{ const [mi,kind,group,leaf]=k.split('|'); return [+mi,kind,group,leaf,Math.round(v)]; }),
+          detail:[...det.entries()].map(([k,v])=>{ const [mi,leaf,dn]=k.split('|'); return [+mi,leaf,dn,Math.round(v)]; })};
+}
+
 /* ---- single-series mode: plot one category / label / detail per year -------
    Selection keys (the #cfSel <select>):
      T|inc  T|safe  T|exp  T|sav  T|safesav     totals
@@ -2470,11 +2493,15 @@ function renderCashBars(){
   const perMonth=monthlyEl.checked;
   const W=Math.max(300, Math.round(svgEl.getBoundingClientRect().width || 900));
   if(DATA!==cfOptData) buildCfOptions();
-  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(',')].join('#');
+  /* the comparison bar is cut to the day from the transactions (Query page data):
+     cached copy now, a background check that redraws when it lands (txVer / txSnapAt) */
+  const d=new Date(), todayDk=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
+  if(!cfRoll) ensureTx();
+  const sig=[W,perMonth,showK,cfSel,cfRoll,cfDrill,[...deselected].sort().join(','),todayDk,txVer,txSnapAt].join('#');
   if(sig===cfSig && DATA===cfData) return;
   cfSig=sig; cfData=DATA; cfLastW=W;
   if(cfRoll){ renderRolling(svgEl, W, W<560, perMonth); return; }
-  const d=new Date(), nowMi=d.getFullYear()*12+d.getMonth(), lastMi=Math.min(META.maxMi, nowMi);
+  const nowMi=d.getFullYear()*12+d.getMonth(), lastMi=Math.min(META.maxMi, nowMi);
   /* month view: one row per month of the drilled year (row.year holds the mi) */
   const mBucket=y=> mi=> Math.floor(mi/12)===y ? mi : null;
   let rows=cfDrill!=null ? cashFlowByYear(DATA, lastMi, deselected, mBucket(cfDrill)) : null;
@@ -2484,23 +2511,37 @@ function renderCashBars(){
   /* Avg/m: a year / its months; a month is already one month */
   const dv=r=> perMonth && !drill ? Math.max(1,r.months) : 1;
   const MSH=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  /* Last year, like for like (added 17 Oct 2026): one faded bar a bit right of the
-     current year. Year view: January .. the same month last year ("2025 YTD", same
-     months as this year's YTD). Month view of the current year: the latest month one
-     year back ("Oct 2025" next to "Oct MTD"). The sheet is monthly, so the LY side holds
-     whole months. The row joins `rows` flagged ly (row.year = 2025, or the LY mi), so
-     bars, labels, tooltip and click reuse the normal path; its rate points stand alone
-     (hollow, not joined to the lines). lyB = its bucket, reused for the series picker. */
+  /* Comparison bar, to the day (17 Oct 2026): one faded bar a bit right of the
+     current period, same days one period back.
+       Year view:  last year 1 Jan .. today's date  ("2025 / YTD" next to "2026 / YTD")
+       Month view of the current year, current month on screen: last month 1 .. today's
+                   day (capped at its length)  ("Sep / 1–17" next to "Oct / MTD")
+     The sheet totals are monthly, so the window is summed from the transactions
+     (cfDayData() on TX) and only drawn once TX was confirmed after the window's end
+     (txSnapAt). The row joins `rows` flagged ly (row.year = 2025, or Sep's mi) and
+     reuses the normal bar / label / tooltip path. Year view: hollow rate points, not
+     joined to the lines, a click drills into last year. Month view: no rate point (as
+     for MTD) and no click (the month detail is a whole month). */
   const cY=d.getFullYear(), lastRow=rows[rows.length-1];
-  let lyB=null;
-  if(lastRow && (drill ? cfDrill===cY && lastRow.year===lastMi : lastRow.year===cY)){
-    const lyFrom=drill ? lastMi-12 : (cY-1)*12, lyTo=lastMi-12, key=drill ? lastMi-12 : cY-1;
-    lyB=mi=> mi>=lyFrom && mi<=lyTo ? key : null;
-    const ly=cashFlowByYear(DATA, lastMi, deselected, lyB)[0];
-    if(ly) rows=rows.concat([Object.assign(ly,{ly:true, lyFrom, lyTo})]); else lyB=null;
+  const dim=(y,m)=> new Date(y,m,0).getDate(), dD=d.getDate();
+  let lyPart=null, lyKey=null;
+  if(lastRow && (drill ? cfDrill===cY && lastRow.year===nowMi : lastRow.year===cY)){
+    let lo, hi;
+    if(drill){ const p=nowMi-1, py=Math.floor(p/12), pm=p%12+1;
+      lo=py*10000+pm*100+1; hi=py*10000+pm*100+Math.min(dD, dim(py,pm)); lyKey=p; }
+    else { const cm=d.getMonth()+1;
+      lo=(cY-1)*10000+101; hi=(cY-1)*10000+cm*100+Math.min(dD, dim(cY-1,cm)); lyKey=cY-1; }
+    const endAt=new Date(Math.floor(hi/10000), Math.floor(hi/100)%100-1, hi%100+1).getTime();
+    if(TX && txSnapAt>=endAt){
+      lyPart=cfDayData(TX, lo, hi);
+      const ly=cashFlowByYear(lyPart.data, lastMi, deselected, ()=>lyKey)[0];
+      if(ly) rows=rows.concat([Object.assign(ly,{ly:true, lo, hi})]); else lyPart=null;
+    }
   }
+  const lyB=lyPart ? ()=>lyKey : null;
+  const dkDay=dk=> dk%100, dkMon=dk=> MSH[Math.floor(dk/100)%100-1];
   const keyLab=r=> drill ? MSH[r.year%12] : String(r.year);
-  const subLab=r=> r.ly ? (drill ? String(Math.floor(r.year/12)) : 'YTD')
+  const subLab=r=> r.ly ? (drill ? dkDay(r.lo)+'\u2013'+dkDay(r.hi) : 'YTD')
                  : drill ? (r.year===nowMi ? 'MTD' : '')
                          : (r.months<12 ? (r.year===cY ? 'YTD' : r.months+'m') : '');
   const narrow=W<560, n=rows.length;
@@ -2508,7 +2549,7 @@ function renderCashBars(){
   /* single-series mode: one bar per year (or month) for the picked entry, no savings % lines */
   const info=cfSel ? CF_OPTS.get(cfSel) : null;
   const ser=info ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected, drill ? mBucket(cfDrill) : null) : null;
-  const serLY=info && lyB ? cfSeriesByYear(cfSel, DATA, DETAIL, lastMi, deselected, lyB) : {};
+  const serLY=info && lyB ? cfSeriesByYear(cfSel, lyPart.data, lyPart.detail, lastMi, deselected, lyB) : {};
   const serOf=r=> ((r.ly ? serLY : ser)[r.year]||0);
   const sv=ser ? rows.map(r=>serOf(r)/dv(r)) : null;
   /* geometry (CSS px, viewBox = real width) */
@@ -2571,7 +2612,8 @@ function renderCashBars(){
   /* savings-rate lines: own % scale in the band above the bars (overview only) */
   /* month view: the in-progress month has little income yet, so its rate is noise
      (e.g. -23250%): no point on the lines; the tooltip still shows it */
-  const rateOf=(r,key)=> drill && r.year===nowMi ? null : r[key];
+  /* (the month-view comparison bar is part of a month too: no point either) */
+  const rateOf=(r,key)=> drill && (r.year===nowMi || r.ly) ? null : r[key];
   const rates=ser ? [] : rows.flatMap(r=>[rateOf(r,'rateTot'),rateOf(r,'rateSafe')]).filter(x=>x!=null);
   if(rates.length){
     /* a single month can lose far more than it earns (-900%): the scale stops at -100%
@@ -2604,12 +2646,11 @@ function renderCashBars(){
         .map(([key,lab,c])=>`<i class="sw" style="background:${c}"></i>${lab} ${fmt(src[key]/k)}`), out=[];
       for(let j=0;j<it.length;j+=2) out.push(it.slice(j,j+2).join(' \u00b7 '));
       return out.map(s=>`<br><span style="color:#9aa6bd">&nbsp;&nbsp;${s}</span>`).join(''); };
-    /* LY bar: "2025 YTD (Jan-Oct, last year)" / "Oct 2025 (last year)" */
-    const lyRange=r=> MSH[r.lyFrom%12]+(r.lyTo>r.lyFrom ? '\u2013'+MSH[r.lyTo%12] : '');
+    /* comparison bar: "2025 YTD (1 Jan–17 Oct, last year)" / "Sep 2026 1–17 (last month, same days)" */
     const head=(drill
-      ? `<b>${miLabel(r.year)}</b>${r.ly?' <span style="color:#9aa6bd">(last year)</span>'
-          : r.year===nowMi?' <span style="color:#9aa6bd">(in progress)</span>':''}`
-      : (r.ly ? `<b>${r.year} YTD</b> <span style="color:#9aa6bd">(${lyRange(r)}, last year)</span>`
+      ? (r.ly ? `<b>${miLabel(r.year)} ${dkDay(r.lo)}\u2013${dkDay(r.hi)}</b> <span style="color:#9aa6bd">(last month, same days)</span>`
+          : `<b>${miLabel(r.year)}</b>${r.year===nowMi?' <span style="color:#9aa6bd">(in progress)</span>':''}`)
+      : (r.ly ? `<b>${r.year} YTD</b> <span style="color:#9aa6bd">(${dkDay(r.lo)} ${dkMon(r.lo)}\u2013${dkDay(r.hi)} ${dkMon(r.hi)}, last year)</span>`
           : `<b>${r.year}</b>${r.months<12?` <span style="color:#9aa6bd">(${r.months} months)</span>`:''}`)+
         `${perMonth?' <span style="color:#9aa6bd">avg/m</span>':''}`) +
       `${deselected.size?` <span style="color:#e7c14a">${deselected.size} excluded</span>`:''}`;
@@ -2629,7 +2670,9 @@ function renderCashBars(){
     /* year view: a short muted hint at the bottom of the tooltip (mouse: click drills;
        touch: the first tap shows the tooltip, a second tap on the same year drills) */
     /* month view: a click (touch: a tap) opens the month detail straight away */
-    const hint=()=> drill ? (cfPT==='mouse' ? `<br><span style="color:#9aa6bd">Click for details \u203a</span>` : '')
+    /* month-view comparison bar (part of a month): tooltip only, nothing to open */
+    const still=drill && r.ly;
+    const hint=()=> still ? '' : drill ? (cfPT==='mouse' ? `<br><span style="color:#9aa6bd">Click for details \u203a</span>` : '')
                           : `<br><span style="color:#9aa6bd">${cfPT==='mouse'?'Click':'Tap again'} for months \u203a</span>`;
     const show=e=>{ showTip(e,html+hint()); const tw=tip.offsetWidth;
       if(e.clientX+12+tw>window.innerWidth) tip.style.left=Math.max(4,e.clientX-12-tw)+'px';
@@ -2638,12 +2681,14 @@ function renderCashBars(){
     hit.addEventListener('mousemove',e=>{ if(e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
       if(cfPT!=='mouse' && cfTipKey==null) cfPT='mouse'; if(cfPT==='mouse') show(e); });
     hit.addEventListener('mouseleave',()=>{ hideTip(); cfTipKey=null; });
-    /* the LY bar drills into last year (year view) / opens that month (month view) */
+    /* the year-view comparison bar drills into last year like the 2025 bar */
     const tk=r.ly ? 'ly' : r.year;
     hit.addEventListener('click',e=>{ e.stopPropagation();
+      if(still){ show(e); return; }                  // touch: a tap shows its tooltip
       if(drill){ openMd(r.year); return; }           // a month: its income / expense detail
       if(cfPT==='mouse' || cfTipKey===tk){ cfDrillTo(r.year); return; }
       cfTipKey=tk; show(e); });                      // touch: tap shows, tap elsewhere hides
+    if(still){ svgEl.appendChild(hit); return; }
     hit.style.cursor = drill ? 'pointer' : 'zoom-in'; hit.setAttribute('role','button'); hit.setAttribute('tabindex','0');
     hit.setAttribute('aria-label', drill ? 'Show the income and expenses of '+miLabel(r.year) : 'Show the months of '+r.year);
     hit.addEventListener('keydown',e=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); if(drill) openMd(r.year); else cfDrillTo(r.year); } });
@@ -3224,7 +3269,7 @@ const TxCache={
       if(!e || e.v!==1 || typeof e.hash!=='string' || !Array.isArray(e.s) || !Array.isArray(e.r)) return null;
       const S=e.s, R=e.r, out=[];
       for(let i=0;i+7<R.length;i+=8) out.push(txMake(R[i],R[i+1],S[R[i+2]],S[R[i+3]],S[R[i+4]],S[R[i+5]],S[R[i+6]],S[R[i+7]]));
-      return out.length ? {rows:out, hash:e.hash} : null; }catch(e){ return null; } },
+      return out.length ? {rows:out, hash:e.hash, at:+e.at||0} : null; }catch(e){ return null; } },
   write(rows,hash){ try{
       const S=[], ix=new Map(), R=[], id=s=>{ let i=ix.get(s); if(i===undefined){ i=S.length; S.push(s); ix.set(s,i); } return i; };
       rows.forEach(r=>R.push(r.dk, r.v, id(r.acct), id(r.lab), id(r.det), id(r.typ), id(r.c1), id(r.c2)));
@@ -3244,7 +3289,10 @@ async function fetchTx(){
   }
   throw lastErr || new Error("fetch failed");
 }
-let TX=null, txHash=null, txAt=0, txBusy=false, txErr=null, txVer=0, TX_MIN=0, TX_MAX=0;
+/* txSnapAt = when the transactions on hand were last confirmed against the sheet (cache
+   stamp, then the time of each successful check); the to-the-day comparison bar on Cash
+   Flow vs Savings only uses TX once it is newer than the end of its window */
+let TX=null, txHash=null, txAt=0, txBusy=false, txErr=null, txVer=0, TX_MIN=0, TX_MAX=0, txSnapAt=0;
 function installTx(rows){
   TX=rows; txVer++;
   TX_MIN=Infinity; TX_MAX=-Infinity; rows.forEach(r=>{ if(r.dk<TX_MIN) TX_MIN=r.dk; if(r.dk>TX_MAX) TX_MAX=r.dk; });
@@ -3256,13 +3304,14 @@ async function refreshTx(){
     const csv=await fetchTx(), h=csvHash(csv);
     if(h!==txHash){ const rows=parseTx(parseCSV(csv)); if(!rows.length) throw new Error('no transactions in the answer');
       installTx(rows); txHash=h; TxCache.write(rows,h); }
-    txErr=null;
+    txErr=null; txSnapAt=Date.now();
   }catch(e){ txErr=(e && e.message) || 'load failed'; }
-  finally{ txBusy=false; renderQuery(); }
+  finally{ txBusy=false; renderQuery(); renderCashBars(); }
 }
-/* the Query page needs the transactions: cached copy first, then a background check */
+/* the Query page (and the comparison bar of Cash Flow vs Savings) need the transactions:
+   cached copy first, then a background check */
 function ensureTx(){
-  if(!TX){ const c=TxCache.read(); if(c){ installTx(c.rows); txHash=c.hash; } }
+  if(!TX){ const c=TxCache.read(); if(c){ installTx(c.rows); txHash=c.hash; txSnapAt=c.at; } }
   if(!txBusy && Date.now()-txAt >= DB_STALE) refreshTx();
 }
 
@@ -4242,8 +4291,9 @@ function autoTick(back){
   const now=Date.now();
   if(now-liveAt >= (back ? LIVE_STALE : LIVE_EVERY)) loadLive();
   if(now-dbAt >= (back ? DB_STALE : DB_EVERY)) refreshDB();
-  /* Query page transactions: same schedule, only while that page is on screen */
-  if(controlsReady && pageOn('query') && now-txAt >= (back ? DB_STALE : DB_EVERY)) refreshTx();
+  /* transactions: same schedule, only while the Query page or the Savings page (its
+     to-the-day comparison bar) is on screen */
+  if(controlsReady && (pageOn('query') || pageOn('savings')) && now-txAt >= (back ? DB_STALE : DB_EVERY)) refreshTx();
 }
 
 /* ---- boot: render cached data first, refresh live in the background ------ */

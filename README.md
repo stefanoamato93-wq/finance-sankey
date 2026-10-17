@@ -60,7 +60,8 @@ DETAIL / ACCOUNT / TRENDS / FIELD OCCURRENCES blocks).
 - **Cache and refresh:** the rows are kept in localStorage (`TxCache`,
   `finance-sankey-tx-v1`, strings in one table + a flat number array, ~0,4M characters), so a
   return visit draws at once; a background check follows. It refreshes on the DB schedule
-  (10 min, 2 min on return) **only while the Query page is on screen**, and straight away when
+  (10 min, 2 min on return) **only while the Query page or the Savings page is on screen**
+  (Savings uses them for its to-the-day comparison bar, 17 Oct 2026), and straight away when
   the DB refresh sees a new fingerprint. Same fingerprint = nothing redrawn. Nothing else is
   sent anywhere.
 - **Filters** (collapsible panel; collapsed it shows a one-line summary). No instruction
@@ -233,22 +234,36 @@ A diverging change chart in table form, the **Compare** page. Added Oct 2026.
 One column per calendar year, **actuals only**: first year of data up to the
 current month (rows dated after today are ignored, no forecast years). The current
 year is labelled `YTD` under its year; any other part year shows its month count.
-- **Last Year bar (added 17 Oct 2026):** a faded reference bar sits a bit right of the
-  current year (one slot + 0.2 of a slot of extra gap, `LYG`), labelled `2025` / `YTD`:
-  January to the same month last year, i.e. the same months as this year's YTD (on
-  17 Oct 2026: Jan-Oct 2025). In the **month view of the current year** the same bar
-  follows the latest month (`Oct` / `MTD`) and shows that month one year back
-  (`Oct` / `2025`). The sheet is monthly, so the LY side always holds **whole months**
-  while the current month is still in progress. It follows the picker (series mode),
-  exclusions, Avg/m (divided by its own months) and K. Its savings-rate points are
-  hollow and **not joined** to the lines. Tooltip head `2025 YTD (Jan–Oct, last year)` /
-  `Oct 2025 (last year)`; a click drills into last year (year view) or opens that month's
-  **Month detail** (month view). A past year's month view has no LY bar.
-  Code: in `renderCashBars()` the LY row is built with `cashFlowByYear()` on a bucket
-  `lyB` (`mi in [lyFrom, lyTo] -> key`), appended to `rows` flagged `ly`, and placed by
-  `pos()` at `lyAt`; `cfSeriesByYear()` reuses `lyB` for the picker (`serOf()`).
-  Check: `_verify_cfly.py [shot]` (untracked, 23 checks: LY = DATA sums, position,
-  rate path, Avg/m, series, drill, month detail, exclusions).
+- **Comparison bar, to the day (added 17 Oct 2026):** a faded reference bar sits a bit
+  right of the current period (one slot + 0.2 of a slot of extra gap, `LYG`) and covers
+  the **same days one period back**, cut at today's date:
+  - **Year view:** last year 1 Jan to today's date, `2025` / `YTD` next to `2026` / `YTD`
+    (on 17 Oct 2026: 1 Jan - 17 Oct 2025). Its savings-rate points are hollow and **not
+    joined** to the lines; a click drills into last year.
+  - **Month view of the current year** (when the current month is on screen): last month
+    from the 1st to today's day, capped at its length, `Sep` / `1–17` next to `Oct` / `MTD`
+    (on 31 Mar the February bar is 1-28). No rate point (same rule as MTD) and no click,
+    since the Month detail shows whole months; hover / tap shows the tooltip.
+  - Tooltip heads `2025 YTD (1 Jan–17 Oct, last year)` / `Sep 2026 1–17 (last month,
+    same days)`. Follows the picker (series mode), exclusions, Avg/m (divided by its own
+    months) and K. A past year's month view has no comparison bar.
+  - **Data:** the sheet totals (`DATA`) are monthly, so the window is summed from the
+    **transactions** (the Query page's `TX`, which carries the day): pure
+    `cfDayData(TX, loDk, hiDk)` returns DATA / DETAIL-shaped rows with the same cash-flow
+    rules as `aggregate()` (checked key by key against a whole month). The Savings page now
+    loads TX too (`ensureTx()` from `renderCashBars()`, cached copy first, and the auto
+    refresh runs while Query **or** Savings is on screen). The bar is only drawn once TX was
+    confirmed after the window's end (`txSnapAt`: the cache stamp, then each successful
+    check), so an old cached copy never shows a short window; it appears when the background
+    check lands (`refreshTx()` redraws the chart, `txVer` / `txSnapAt` / today are in the
+    chart signature).
+  - Code: in `renderCashBars()` the row is built with `cashFlowByYear()` on the
+    `cfDayData()` rows, appended to `rows` flagged `ly` (with `lo` / `hi` as yyyymmdd) and
+    placed by `pos()` at `lyAt`; `cfSeriesByYear()` reads the same rows for the picker
+    (`serOf()`). The current bars (YTD / MTD) still come from `DATA`.
+  - Check: `_verify_cfly.py [shot]` (untracked, 30 checks: sums vs TX to the day,
+    position, rate points, Avg/m, series, drill, no click in month view, exclusions,
+    stale-TX gate, `cfDayData` vs `DATA`).
 - **Bars up = income**, stacked **Safe** (Base + TFR + Food tickets, dark green),
   **Stocks** (mid green), **Other** (every other income, light green). Total on top.
 - **Bars down = expenses**, stacked **Needs / Wants / Liberality / Taxes** (dark to
