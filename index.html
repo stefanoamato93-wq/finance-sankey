@@ -3314,11 +3314,12 @@ const TxCache={
       if(!e || e.v!==1 || typeof e.hash!=='string' || !Array.isArray(e.s) || !Array.isArray(e.r)) return null;
       const S=e.s, R=e.r, out=[];
       for(let i=0;i+7<R.length;i+=8) out.push(txMake(R[i],R[i+1],S[R[i+2]],S[R[i+3]],S[R[i+4]],S[R[i+5]],S[R[i+6]],S[R[i+7]]));
-      return out.length ? {rows:out, hash:e.hash, at:+e.at||0} : null; }catch(e){ return null; } },
-  write(rows,hash){ try{
+      return out.length ? {rows:out, hash:e.hash, db:typeof e.db==='string' ? e.db : null, at:+e.at||0} : null; }catch(e){ return null; } },
+  /* db = the DB fingerprint (dbFp) the rows are at least as new as */
+  write(rows,hash,db){ try{
       const S=[], ix=new Map(), R=[], id=s=>{ let i=ix.get(s); if(i===undefined){ i=S.length; S.push(s); ix.set(s,i); } return i; };
       rows.forEach(r=>R.push(r.dk, r.v, id(r.acct), id(r.lab), id(r.det), id(r.typ), id(r.c1), id(r.c2)));
-      localStorage.setItem(this.KEY, JSON.stringify({v:1, hash, at:Date.now(), s:S, r:R})); return true; }catch(e){ return false; } }
+      localStorage.setItem(this.KEY, JSON.stringify({v:1, hash, db:db||null, at:Date.now(), s:S, r:R})); return true; }catch(e){ return false; } }
 };
 /* tx query first (attempts 1-2), else the full export (columns re-learned for next time) */
 async function fetchTx(){
@@ -3335,9 +3336,12 @@ async function fetchTx(){
   throw lastErr || new Error("fetch failed");
 }
 /* txSnapAt = when the transactions on hand were last confirmed against the sheet (cache
-   stamp, then the time of each successful check); the to-the-day comparison bar on Cash
-   Flow vs Savings only uses TX once it is newer than the end of its window */
-let TX=null, txHash=null, txAt=0, txBusy=false, txErr=null, txVer=0, TX_MIN=0, TX_MAX=0, txSnapAt=0;
+   stamp, each successful read, and each DB check that finds the same sheet state); the
+   to-the-day comparison bar on Cash Flow vs Savings only uses TX once it is newer than the
+   end of its window. txDb = the DB fingerprint the rows are at least as new as: while it
+   matches the data on screen (sameFp) the ~1 MB read is skipped (18 Oct 2026; it used to
+   run on every open of Query / Savings and every 10 min while they were on screen). */
+let TX=null, txHash=null, txAt=0, txBusy=false, txErr=null, txVer=0, TX_MIN=0, TX_MAX=0, txSnapAt=0, txDb=null;
 function installTx(rows){
   TX=rows; txVer++;
   TX_MIN=Infinity; TX_MAX=-Infinity; rows.forEach(r=>{ if(r.dk<TX_MIN) TX_MIN=r.dk; if(r.dk>TX_MAX) TX_MAX=r.dk; });
@@ -3345,19 +3349,33 @@ function installTx(rows){
 async function refreshTx(){
   if(txBusy || document.hidden) return;
   txBusy=true; txAt=Date.now(); renderQuery();
+  const db=dbHash;                             // read after this DB state, so at least as new
   try{
-    const csv=await fetchTx(), h=csvHash(csv);
+    const csv=await fetchTx(), h=csvHash(maskLive(csv));
     if(h!==txHash){ const rows=parseTx(parseCSV(csv)); if(!rows.length) throw new Error('no transactions in the answer');
-      installTx(rows); txHash=h; TxCache.write(rows,h); }
+      installTx(rows); txHash=h; txDb=db; TxCache.write(rows,h,db); }
+    else if(db && db!==txDb){ txDb=db; TxCache.write(TX,h,db); }
     txErr=null; txSnapAt=Date.now();
   }catch(e){ txErr=(e && e.message) || 'load failed'; }
   finally{ txBusy=false; renderQuery(); renderCashBars(); }
 }
+/* the rows on hand belong to the sheet state on screen */
+function txCurrent(){ return !!(TX && txDb && sameFp(txDb, dbHash)); }
 /* the Query page (and the comparison bar of Cash Flow vs Savings) need the transactions:
-   cached copy first, then a background check */
+   cached copy first; a read only when they do not match the DB state on screen. While a
+   DB check is in flight it decides (syncTx runs when it lands), so the two never race. */
 function ensureTx(){
-  if(!TX){ const c=TxCache.read(); if(c){ installTx(c.rows); txHash=c.hash; txSnapAt=c.at; } }
-  if(!txBusy && Date.now()-txAt >= DB_STALE) refreshTx();
+  if(!TX){ const c=TxCache.read(); if(c){ installTx(c.rows); txHash=c.hash; txSnapAt=c.at; txDb=c.db; } }
+  if(txBusy || dbBusy) return;
+  if(txCurrent()){ if(dbOkAt>txSnapAt) txSnapAt=dbOkAt; return; }
+  if(Date.now()-txAt >= DB_STALE) refreshTx();
+}
+/* after every DB check: confirm or re-read the transactions if a page that shows them is open */
+function syncTx(){
+  if(!controlsReady || !(pageOn('query') || pageOn('savings'))) return;
+  const v=txVer, s=txSnapAt;
+  ensureTx();
+  if(txVer!==v || txSnapAt!==s){ renderQuery(); renderCashBars(); }
 }
 
 const Q_TYPES=['INCOME','EXPENSES','TAXES','TRANSFER','APPRECIATION'];
@@ -4013,9 +4031,10 @@ const SheetCache={
 };
 
 /* ---- fetch with bounded retry (<=3) + 10s per-attempt timeout ------------ */
-async function fetchText(url){
+async function fetchText(url, ext){            // ext = optional AbortSignal (the boot race cancels its loser)
   let signal, to;
-  if(typeof AbortController==='function'){ const ctrl=new AbortController(); signal=ctrl.signal; to=setTimeout(()=>ctrl.abort(),10000); }
+  if(typeof AbortController==='function'){ const ctrl=new AbortController(); signal=ctrl.signal; to=setTimeout(()=>ctrl.abort(),10000);
+    if(ext){ if(ext.aborted) ctrl.abort(); else ext.addEventListener('abort',()=>ctrl.abort(),{once:true}); } }
   try{
     const resp=await fetch(url, signal?{cache:"no-store",signal}:{cache:"no-store"});
     if(!resp.ok) throw new Error("HTTP "+resp.status);
@@ -4024,8 +4043,8 @@ async function fetchText(url){
 }
 /* the full export (no server-side query, so Google serves a materialised snapshot: ~2s
    and stable). Side effect: re-learn the slim column letters from its header for next time */
-async function fetchFull(){
-  const full=await fetchText(CSV_URL), nl=full.indexOf('\n');
+async function fetchFull(ext){
+  const full=await fetchText(CSV_URL, ext), nl=full.indexOf('\n');
   const c=learnCols(parseCSV(nl<0?full:full.slice(0,nl))[0]);
   if(c){ try{ localStorage.setItem(SLIM_KEY, JSON.stringify(c)); }catch(e){} }
   return full;
@@ -4048,7 +4067,9 @@ function firstOk(ps){
    (slow, often 10s+ cold on this GOOGLEFINANCE-heavy sheet), while the full export is
    pre-materialised (~2s). Fire both and take the first usable answer, so the open never
    waits on the slow query; the loser is ignored. race=false (background refresh): slim
-   first to stay light on the wire, fall back to the full export, with a short backoff. */
+   first to stay light on the wire, fall back to the full export, with a short backoff.
+   Since 18 Oct 2026 the page itself uses bootCheck() / fetchDB(), which also say WHICH
+   answer came back (for the fingerprint); this untagged version stays for the test shim. */
 async function fetchSheet(race){
   if(race) return await firstOk([fetchFull(), fetchSlim()]);
   let lastErr;
@@ -4057,6 +4078,54 @@ async function fetchSheet(race){
       if(attempt<2) return await fetchSlim();
       return await fetchFull();
     }catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
+  }
+  throw lastErr || new Error("fetch failed");
+}
+
+/* ---- DB fingerprints (18 Oct 2026) ---------------------------------------------
+   Two things made "same data = nothing redone" almost never fire:
+   1. The full export and the slim group-by never hash alike (different columns, rounded vs
+      raw values). Boot often took the full export and the background refresh the slim, so
+      every open re-crunched the 2,2 MB export and the first refresh crunched again (and
+      re-read the transactions). Now every fingerprint carries its source (S: slim, F: full)
+      and FpPair remembers the S/F pair seen for the same sheet state, so either answer can
+      be matched against what is on screen (sameFp).
+   2. One DB row moves with the market: CAPGAIN / ApprecTaxes is DB!I2 = CAPITALGAIN!M2
+      (GOOGLEFINANCE). It changed the CSV on every check during market hours. maskLive()
+      leaves that row out of the hash; its live value reaches the screen through loadLive()
+      (NETWORTH), and the DB copy is refreshed with the next real change. */
+function maskLive(csv){
+  let i=csv.indexOf('"ApprecTaxes"'); if(i<0) return csv;
+  const parts=[]; let from=0;
+  while(i>=0){
+    const a=csv.lastIndexOf('\n', i)+1, e=csv.indexOf('\n', i), b=e<0?csv.length:e+1;
+    if(csv.slice(a,b).indexOf('"CAPGAIN"')>=0){ parts.push(csv.slice(from,a)); from=b; }
+    i=csv.indexOf('"ApprecTaxes"', b);
+  }
+  if(!from) return csv;
+  parts.push(csv.slice(from)); return parts.join('');
+}
+/* pure: fingerprint of a DB answer, src = 'S' (slim) or 'F' (full export) */
+function dbFp(csv, src){ return src+':'+csvHash(maskLive(csv)); }
+/* the slim and full fingerprints last seen for one sheet state (localStorage, ~80 bytes) */
+const FpPair={
+  KEY:'finance-sankey-fp-v1', p:null,
+  get(){ if(!this.p){ try{ this.p=JSON.parse(localStorage.getItem(this.KEY)||'null')||{}; }catch(e){ this.p={}; } } return this.p; },
+  set(s,f){ this.p={s,f}; try{ localStorage.setItem(this.KEY, JSON.stringify(this.p)); }catch(e){} }
+};
+/* pure: do fingerprints a and b describe the same sheet state? (pair = {s, f}) */
+function sameFp(a, b, pair){
+  if(!a || !b) return false; if(a===b) return true;
+  const p=pair||FpPair.get(); return !!p && ((p.s===a && p.f===b) || (p.f===a && p.s===b));
+}
+/* tagged answers {csv, src, h} */
+const tagged=(src,csv)=>({csv, src, h:dbFp(csv, src)});
+/* background check: slim first (light on the wire), the full export as the last resort */
+async function fetchDB(){
+  let lastErr;
+  for(let attempt=0; attempt<3; attempt++){
+    try{ return attempt<2 ? tagged('S', await fetchSlim()) : tagged('F', await fetchFull()); }
+    catch(e){ lastErr=e; if(attempt<2) await new Promise(r=>setTimeout(r,400*(attempt+1))); }
   }
   throw lastErr || new Error("fetch failed");
 }
@@ -4314,31 +4383,68 @@ function showError(msg,timedOut){
    keeps what is on screen and the next tick retries. Never redraws under a range-bar
    drag (waits for it to end). */
 const DB_EVERY=10*60*1000, DB_STALE=2*60*1000, LIVE_EVERY=5*60*1000, LIVE_STALE=60*1000;
-let dbAt=0, dbBusy=false, dbHash=null;   // last DB check, in flight, fingerprint on screen
+/* dbHash = fingerprint of the data on screen (dbFp: 'S:' slim-built, 'F:' full-built);
+   dbOkAt = when the sheet last confirmed it; snapAt = when the snapshot was last written */
+let dbAt=0, dbBusy=false, dbHash=null, dbOkAt=0, snapAt=0;
+const waitDrag=()=>new Promise(res=>{ (function w(){ if(drag) setTimeout(w,400); else res(); })(); });
+/* one DB answer: same sheet state as the screen = nothing redone (the snapshot is only
+   re-stamped twice a day); new data, or exact slim sums replacing a full-export stand-in
+   (rounded values), = crunch, redraw (never under a range-bar drag), new snapshot.
+   Returns true when it redrew. */
+async function takeDB(ans){
+  const t=Date.now(); dbOkAt=t;
+  const upgrade = ans.src==='S' && !(dbHash && dbHash[0]==='S');
+  if(sameFp(ans.h, dbHash) && !upgrade){
+    if(t-snapAt > 12*60*60*1000){ SheetCache.write(dbHash,t); snapAt=t; }
+    return false;
+  }
+  await waitDrag();
+  applyData(ans.csv); dbHash=ans.h; SheetCache.write(ans.h,t); snapAt=t;
+  txAt=0;                                      // the transactions follow the new sheet state
+  return true;
+}
 async function refreshDB(){
   if(dbBusy || document.hidden) return;
   dbBusy=true; dbAt=Date.now();
-  try{
-    const csv=await fetchSheet(), h=csvHash(csv), t=Date.now();
-    if(h!==dbHash){
-      txAt=0;                                  // the sheet changed: the Query page re-reads its transactions
-      await new Promise(res=>{ (function wait(){ if(drag) setTimeout(wait,400); else res(); })(); });
-      applyData(csv); dbHash=h; SheetCache.write(h,t);
-    } else {                                   // unchanged: re-stamp the snapshot twice a day
-      const c=SheetCache.read(); if(!c.ok || t-c.entry.retrievedAt>12*60*60*1000) SheetCache.write(h,t);
-    }
-    clearBadge();
-  }catch(e){ /* keep what is on screen; the next tick retries */ }
-  finally{ dbBusy=false; }
+  try{ await takeDB(await fetchDB()); clearBadge(); }
+  catch(e){ /* keep what is on screen; the next tick retries */ }
+  finally{ dbBusy=false; syncTx(); }
 }
 function autoTick(back){
   if(document.hidden) return;
   const now=Date.now();
   if(now-liveAt >= (back ? LIVE_STALE : LIVE_EVERY)) loadLive();
   if(now-dbAt >= (back ? DB_STALE : DB_EVERY)) refreshDB();
-  /* transactions: same schedule, only while the Query page or the Savings page (its
-     to-the-day comparison bar) is on screen */
-  if(controlsReady && (pageOn('query') || pageOn('savings')) && now-txAt >= (back ? DB_STALE : DB_EVERY)) refreshTx();
+  /* transactions: they follow the DB fingerprint (syncTx after every DB check), so this
+     only retries a failed read while the Query or Savings page is on screen */
+  if(controlsReady && (pageOn('query') || pageOn('savings')) && !dbBusy && !txCurrent() && now-txAt >= (back ? DB_STALE : DB_EVERY)) refreshTx();
+}
+
+/* ---- boot check: race the full export against the slim group-by -----------------
+   The full export is materialised (fast) but rounded and 2,2 MB to parse; the slim one has
+   the exact sums and is ~5x lighter, but Google computes it (slow when the sheet is cold).
+   - slim first: take it and cancel the full export.
+   - full first, same sheet state as the snapshot on screen: nothing to do; the slim, when
+     it lands, only replaces a full-built snapshot.
+   - full first, new data: give the slim BOOT_GRACE (longer when a snapshot is already on
+     screen, nothing is blank) and take it if it comes, so the 2,2 MB parse is skipped;
+     otherwise paint the full export now and the slim when it lands. */
+const BOOT_GRACE_SHOWN=4000, BOOT_GRACE_BLANK=700;
+async function bootCheck(shown){
+  const ctl=typeof AbortController==='function' ? new AbortController() : null;
+  const full=fetchFull(ctl && ctl.signal).then(csv=>tagged('F', csv));
+  const slim=fetchSlim().then(csv=>tagged('S', csv));
+  full.catch(()=>{}); slim.catch(()=>{});      // the loser may fail quietly
+  const first=await firstOk([full, slim]);     // rejects only when both fail
+  if(first.src==='S'){ if(ctl) ctl.abort(); await takeDB(first); return; }
+  const late=slim.then(s=>{ FpPair.set(s.h, first.h); return s; });   // same moment, same sheet state
+  late.catch(()=>{});
+  if(!sameFp(first.h, dbHash)){
+    const s=await Promise.race([late.catch(()=>null), new Promise(r=>setTimeout(()=>r(null), shown ? BOOT_GRACE_SHOWN : BOOT_GRACE_BLANK))]);
+    if(s){ await takeDB(s); return; }
+    await takeDB(first);                       // paint the stand-in now
+  } else dbOkAt=Date.now();
+  late.then(async s=>{ if(await takeDB(s)) syncTx(); }).catch(()=>{});
 }
 
 /* ---- boot: render cached data first, refresh live in the background ------ */
@@ -4351,35 +4457,25 @@ function boot(){
   window.addEventListener('online',()=>autoTick(true));
   window.addEventListener('pageshow',e=>{ if(e.persisted) autoTick(true); });
   SheetCache.dropOld();                        // the old raw-CSV cache (v1) is no longer read
-  const cached=SheetCache.read(), now=Date.now();
-  let renderedFromCache=false, settled=false;
-  /* paint from the snapshot whenever one exists, at ANY age: the background refresh
-     (started just below) replaces it in ~2s, and the error path already falls back to a
-     stale snapshot, so an instant stale-then-fresh paint beats a blank wait on the network.
-     The badge carries the retrieval date so an old snapshot is obvious while it refreshes. */
+  const cached=SheetCache.read();
+  let shown=false, settled=false;
+  dbBusy=true; dbAt=Date.now();                // before the snapshot paints: the boot check decides about the transactions
+  /* paint from the snapshot whenever one exists, at ANY age: the boot check (started just
+     below) replaces it if the sheet moved on, and the error path keeps it on screen, so an
+     instant stale-then-fresh paint beats a blank wait on the network. The badge carries
+     the retrieval date so an old snapshot is obvious while it refreshes. */
   if(cached.ok){
-    try{ applySnapshot(cached.entry); renderedFromCache=true; dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,true); }catch(e){ renderedFromCache=false; }
+    try{ dbHash=cached.entry.hash; snapAt=cached.entry.retrievedAt; applySnapshot(cached.entry); shown=true; showBadge(cached.entry.retrievedAt,true); }catch(e){ shown=false; dbHash=null; }
   }
-  const overall=setTimeout(()=>{ if(!settled && !renderedFromCache) showError('',true); },30000);
-  dbBusy=true; dbAt=Date.now();
-  fetchSheet(true).then(csv=>{
-    settled=true; clearTimeout(overall);
-    const h=csvHash(csv), t=Date.now(); dbHash=h;
-    if(renderedFromCache){
-      /* same fingerprint: nothing to redo, just re-stamp the snapshot twice a day so it
-         stays inside MAX_AGE; new data: crunch it, redraw the page, replace the snapshot */
-      if(SheetCache.differs(cached.entry,h)){ applyData(csv); SheetCache.write(h,t); }
-      else if(t-cached.entry.retrievedAt > 12*60*60*1000) SheetCache.write(h,t);
-      clearBadge();                            // live data confirmed current
-    }else{
-      applyData(csv); SheetCache.write(h,Date.now()); clearBadge();
-    }
+  const overall=setTimeout(()=>{ if(!settled && !shown) showError('',true); },30000);
+  bootCheck(shown).then(()=>{
+    settled=true; clearTimeout(overall); clearBadge();   // live data confirmed current
   }).catch(err=>{
     settled=true; clearTimeout(overall);
-    if(renderedFromCache){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
+    if(shown){ showBadge(cached.entry.retrievedAt,false); return; }        // keep cached data on screen
     if(cached.ok){ try{ applySnapshot(cached.entry); dbHash=cached.entry.hash; showBadge(cached.entry.retrievedAt,false); return; }catch(e){} }  // fall back to stale cache
     showError(err && err.message ? err.message : 'load failed');
-  }).finally(()=>{ dbBusy=false; });
+  }).finally(()=>{ dbBusy=false; syncTx(); });
 }
 /* tap/click away closes the hover preview and the detail panel (the panel itself
    stops propagation, and node clicks do too, so neither closes on its own click) */
@@ -4398,7 +4494,7 @@ boot();
    later task; only helpers that already exist are referenced here. */
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { parseCSV, aggregate, computeLinks, applySelection, detailFor, SheetCache, fetchSheet, fetchFull, fetchSlim, firstOk, isMobile, MOBILE_BP, scaleReferenceFor, savingsPercentage, monthlySeries, cashFlowByYear, cfSeriesByYear, cfRollLayers, rolling12, periodSums, comparePeriods, ylpSeries, slimURL, learnCols, slimOk, csvHash,
-    txURL, txOk, parseTx, qNum, qAmountFn, queryRows, queryGroup, querySort, querySortTx };
+    maskLive, dbFp, sameFp, txURL, txOk, parseTx, qNum, qAmountFn, queryRows, queryGroup, querySort, querySortTx };
 }
 </script>
 </body>

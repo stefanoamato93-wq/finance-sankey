@@ -59,11 +59,14 @@ DETAIL / ACCOUNT / TRENDS / FIELD OCCURRENCES blocks).
   `DETAIL` `ApprecTaxes` count as **Appreciation**, as in the Sankey (not cash flow).
 - **Cache and refresh:** the rows are kept in localStorage (`TxCache`,
   `finance-sankey-tx-v1`, strings in one table + a flat number array, ~0,4M characters), so a
-  return visit draws at once; a background check follows. It refreshes on the DB schedule
-  (10 min, 2 min on return) **only while the Query page or the Savings page is on screen**
-  (Savings uses them for its to-the-day comparison bar, 17 Oct 2026), and straight away when
-  the DB refresh sees a new fingerprint. Same fingerprint = nothing redrawn. Nothing else is
-  sent anywhere.
+  return visit draws at once. **Since 18 Oct 2026 the rows follow the DB fingerprint**
+  instead of their own 10-minute poll: the cache records the DB state they were read after
+  (`txDb`), and while that matches the data on screen (`txCurrent()`, `sameFp()`) the ~1 MB
+  read is skipped. They are re-read only when a DB check finds new data (and the Query or
+  Savings page is on screen, Savings uses them for its to-the-day comparison bar), or when
+  the cached copy has no match yet. A DB check that confirms the same state also confirms the
+  rows (`txSnapAt`), via `syncTx()`. While a DB check is in flight the rows wait for it, so
+  the two reads never race. Same content = nothing redrawn. Nothing else is sent anywhere.
 - **Filters** (collapsible panel; collapsed it shows a one-line summary). No instruction
   text on the page (removed 10 Oct 2026, the controls explain themselves):
   - **Dates:** From / To date pickers (day precision, both included, swapped if reversed)
@@ -251,12 +254,13 @@ year is labelled `YTD` under its year; any other part year shows its month count
     **transactions** (the Query page's `TX`, which carries the day): pure
     `cfDayData(TX, loDk, hiDk)` returns DATA / DETAIL-shaped rows with the same cash-flow
     rules as `aggregate()` (checked key by key against a whole month). The Savings page now
-    loads TX too (`ensureTx()` from `renderCashBars()`, cached copy first, and the auto
-    refresh runs while Query **or** Savings is on screen). The bar is only drawn once TX was
-    confirmed after the window's end (`txSnapAt`: the cache stamp, then each successful
-    check), so an old cached copy never shows a short window; it appears when the background
-    check lands (`refreshTx()` redraws the chart, `txVer` / `txSnapAt` / today are in the
-    chart signature).
+    loads TX too (`ensureTx()` from `renderCashBars()`, cached copy first; since 18 Oct 2026
+    it is only re-read when the DB fingerprint moves, see the Query page "Cache and refresh").
+    The bar is only drawn once TX was confirmed after the window's end (`txSnapAt`: the cache
+    stamp, each successful read, and each DB check that finds the same sheet state as the
+    rows), so an old cached copy never shows a short window; it appears when the background
+    check lands (`refreshTx()` / `syncTx()` redraw the chart, `txVer` / `txSnapAt` / today are
+    in the chart signature).
   - Code: in `renderCashBars()` the row is built with `cashFlowByYear()` on the
     `cfDayData()` rows, appended to `rows` flagged `ly` (with `lo` / `hi` as yyyymmdd) and
     placed by `pos()` at `lyAt`; `cfSeriesByYear()` reads the same rows for the picker
@@ -766,6 +770,46 @@ Two fixes:
 Net effect: a returning visit is instant at any age; a cold open is bounded by the fast
 full export (~2-3 s), not the slow slim query (~14 s).
 
+### Fingerprints that match (18 Oct 2026)
+
+"Same fingerprint = nothing redone" almost never fired, for two reasons, so most opens
+re-crunched the data and re-read the transactions even when nothing had been booked:
+
+1. **Two answer formats, one hash.** The boot race often took the full export, the background
+   refresh always the slim query, and the two never hash alike (different columns, rounded vs
+   raw values). So every open where the full export won re-parsed the 2,2 MB export and redrew,
+   and the first refresh crunched again and re-read the ~1 MB transactions.
+2. **A live value inside DB.** The CAPGAIN / ApprecTaxes row is `DB!I2 = CAPITALGAIN!M2`
+   (GOOGLEFINANCE), so during market hours the CSV changed on every check.
+
+Fixes:
+- **Tagged fingerprints:** `dbFp(csv, src)` = `S:` (slim) or `F:` (full) + `csvHash()` of the
+  answer **without the live CAPGAIN / ApprecTaxes row** (`maskLive()`). That row's live value
+  reaches the screen through `loadLive()` (NETWORTH), and the DB copy refreshes with the next
+  real change. `FpPair` (`finance-sankey-fp-v1`, ~80 bytes) remembers the slim / full pair seen
+  for one sheet state, and `sameFp(a, b)` matches across the two formats.
+- **Boot check** (`bootCheck()`, replaces `fetchSheet(true)` in the page; `fetchSheet()` stays
+  for the test shim): races the full export (`fetchFull(signal)`) against the slim query.
+  - Slim first: take it and **cancel the full download** (`AbortController`).
+  - Full first and the same state as the snapshot on screen: nothing redone.
+  - Full first with new data: wait up to `BOOT_GRACE_SHOWN` (4 s, a snapshot is on screen) or
+    `BOOT_GRACE_BLANK` (0,7 s, cold open) for the slim and take it if it comes, skipping the
+    2,2 MB parse. Otherwise paint the full export now and the slim when it lands.
+  - **Slim answers are canonical:** when the screen was built from the full export (rounded
+    values), the next slim answer replaces it even at the same state (`takeDB()` "upgrade"),
+    so the snapshot always ends up holding the exact sums.
+- **Background refresh** (`refreshDB()` -> `fetchDB()`, slim first, full export last) goes
+  through the same `takeDB()`; the snapshot re-stamp uses an in-memory `snapAt` instead of
+  re-reading the 0,18 MB snapshot every 10 minutes.
+- Measured with `_verify_fp.py` (untracked, headless Edge, six visits sharing one profile,
+  stubbed fetch with per-answer delays): re-crunches 7 -> 3 and transaction reads 8 -> 2
+  against the 17 Oct version. Same data with the full export first, a slim slower than the
+  grace, a capgain-only move and a plain background refresh now redraw nothing and read no
+  transactions; a real booking change paints the full export, then the exact slim sums, with
+  one transaction read.
+- The snapshot key stays `finance-sankey-cache-v2` (same shape); the first visit after this
+  change re-crunches once because the old hashes have no `S:` / `F:` prefix.
+
 - A small **"Showing last loaded data" badge** appears while refreshing and if the
   refresh fails (the cached view stays on screen).
 
@@ -776,12 +820,12 @@ The page keeps itself current without a reload, only while the tab is visible:
 |---|---|---|
 | DB sheet (slim query) | 10 min (`DB_EVERY`) | at once if the last check is older than 2 min (`DB_STALE`) |
 | Live ETF values + investment gains | 5 min (`LIVE_EVERY`) | at once if older than 1 min (`LIVE_STALE`) |
-| Query transactions (only while the Query page is on screen) | 10 min | at once if older than 2 min, or when the DB fingerprint changed |
+| Transactions (only while the Query or Savings page is on screen) | no own poll since 18 Oct 2026: re-read when a DB check finds new data (`syncTx()`); a failed read retries on the 10 min / 2 min schedule | same |
 
 - One 30 s ticker (`autoTick()`) decides what is due, so a laptop waking from sleep
   catches up on the first tick. A hidden tab fetches nothing.
-- **Silent:** `refreshDB()` hashes the answer; same fingerprint = nothing redrawn,
-  new fingerprint = `applyData()` + a new snapshot. The open page, the range-bar window,
+- **Silent:** `refreshDB()` fingerprints the answer (`dbFp()`, see "Fingerprints that
+  match"); same sheet state = nothing redrawn, new state = `applyData()` + a new snapshot. The open page, the range-bar window,
   exclusions, Avg/m / K, the Compare picks, open rows and the Years Paid flags all stay.
   A failed check keeps what is on screen; the next tick retries.
 - Never redraws under a range-bar drag: a new answer waits until the drag ends.
@@ -790,9 +834,9 @@ The page keeps itself current without a reload, only while the tab is visible:
   would only add requests. Each DB check is ~36 KB gzipped.
 - Each fetch has a **10s timeout per attempt** (`fetchText()`), under a **30s overall
   guard** that shows a timeout error only if a cold load with no snapshot never returns.
-  The background refresh (`fetchSheet(false)`) **retries up to 3 times** with a short
-  backoff; the boot race (`fetchSheet(true)`) runs its two fetches in parallel and takes
-  the first valid one. On a cold failure with any cached copy present (even stale), the
+  The background refresh (`fetchDB()`) **retries up to 3 times** with a short
+  backoff; the boot race (`bootCheck()`) runs its two fetches in parallel and takes
+  the first valid one (cancelling the full export when the slim wins). On a cold failure with any cached copy present (even stale), the
   cached copy is shown instead of an error.
 - A **skeleton placeholder** (CSS-only shimmer mirroring the controls, cards,
   Sankey and table) is in the initial markup, so it paints immediately with no JS
@@ -843,6 +887,7 @@ The `test/` folder holds a Node (vitest) / fast-check harness for the pure helpe
 `monthlySeries`, `detailFor`, `SheetCache`, `fetchSheet`, `fetchFull`, `fetchSlim`,
 `firstOk`, `isMobile`,
 `scaleReferenceFor`; the shim also exports `slimURL`, `learnCols`, `slimOk`, `csvHash`,
+the fingerprint helpers `maskLive`, `dbFp`, `sameFp` (18 Oct 2026),
 the Oct 2026 chart helpers and the Query helpers `txURL`, `txOk`, `parseTx`,
 `qNum`, `qAmountFn`, `queryRows`, `queryGroup`, `querySort`, `querySortTx`). Note: `data-path-smoke` still expects the v1 raw-CSV
 cache and a single fetch URL, so it predates the snapshot cache. It is **never referenced by `index.html`** — the page stays a
