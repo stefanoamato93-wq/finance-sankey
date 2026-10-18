@@ -4426,10 +4426,13 @@ function autoTick(back){
    - slim first: take it and cancel the full export.
    - full first, same sheet state as the snapshot on screen: nothing to do; the slim, when
      it lands, only replaces a full-built snapshot.
-   - full first, new data: give the slim BOOT_GRACE (longer when a snapshot is already on
-     screen, nothing is blank) and take it if it comes, so the 2,2 MB parse is skipped;
-     otherwise paint the full export now and the slim when it lands. */
-const BOOT_GRACE_SHOWN=4000, BOOT_GRACE_BLANK=700;
+   - full first, new data, snapshot on screen: give the slim BOOT_GRACE_SHOWN and take it if
+     it comes, so the 2,2 MB parse is skipped (nothing is blank, waiting costs nothing);
+     otherwise paint the full export now and the slim when it lands.
+   - full first on a blank screen (cold open): paint it at once (BOOT_GRACE_BLANK = 0).
+     Measured 18 Oct 2026: the full parse + draw is ~110 ms on desktop, so waiting for the
+     slim only pays off if it lands within ~70 ms, and a cold slim can take 10 s+. */
+const BOOT_GRACE_SHOWN=4000, BOOT_GRACE_BLANK=0;
 async function bootCheck(shown){
   const ctl=typeof AbortController==='function' ? new AbortController() : null;
   const full=fetchFull(ctl && ctl.signal).then(csv=>tagged('F', csv));

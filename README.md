@@ -792,9 +792,16 @@ Fixes:
   for the test shim): races the full export (`fetchFull(signal)`) against the slim query.
   - Slim first: take it and **cancel the full download** (`AbortController`).
   - Full first and the same state as the snapshot on screen: nothing redone.
-  - Full first with new data: wait up to `BOOT_GRACE_SHOWN` (4 s, a snapshot is on screen) or
-    `BOOT_GRACE_BLANK` (0,7 s, cold open) for the slim and take it if it comes, skipping the
-    2,2 MB parse. Otherwise paint the full export now and the slim when it lands.
+  - Full first with new data and a snapshot on screen: wait up to `BOOT_GRACE_SHOWN` (4 s,
+    nothing is blank) for the slim and take it if it comes, skipping the 2,2 MB parse.
+    Otherwise paint the full export now and the slim when it lands.
+  - Full first on a blank screen (cold open): paint it at once (`BOOT_GRACE_BLANK` = 0). The
+    full parse + draw is ~110 ms on desktop, so waiting only pays off if the slim lands within
+    ~70 ms, and a cold slim can take 10 s+ (first set to 0,7 s, lowered the same day).
+- **Measured cost of each step** (18 Oct 2026, desktop headless Edge, median ms; a phone is
+  roughly 4x): full export parse + draw 108-123, slim 36-46, snapshot install 2-6, snapshot
+  write 6, fingerprint 12 (full) / 3 (slim), transactions parse 45 + cache write 7. Network
+  (warm): full 1,2-1,7 s / 131 KB, slim 1,2 s / 35 KB, transactions 1,1-1,3 s / 71 KB.
   - **Slim answers are canonical:** when the screen was built from the full export (rounded
     values), the next slim answer replaces it even at the same state (`takeDB()` "upgrade"),
     so the snapshot always ends up holding the exact sums.
