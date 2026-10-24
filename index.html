@@ -120,7 +120,12 @@
   .wfcrumb button:hover{text-decoration:underline;}
   .wfcrumb b{color:var(--ink); text-transform:uppercase; font-weight:700;}
   .wfcrumb .wfhint{margin-left:auto; font-size:11px;}
-  #cmpwfsvg{display:block; width:100%;}
+  .wfview{display:inline-flex; border:1px solid var(--grid); border-radius:6px; overflow:hidden; margin-right:8px;}
+  .wfcrumb .wfview button{color:var(--muted); padding:3px 8px; text-transform:none; font-size:11.5px;}
+  .wfcrumb .wfview button:hover{text-decoration:none; color:var(--ink);}
+  .wfcrumb .wfview button.on{background:#2a5a3e; color:#fff; font-weight:700;}
+  #cmpwfsvg{display:block; max-width:none; width:auto; height:auto;}   /* own pixel width: overrides the global svg{width:100%} so it scrolls, not shrinks */
+  .wfscroll{overflow-x:auto; -webkit-overflow-scrolling:touch;}
   #cmpwfsvg text{fill:var(--muted); font-size:10.5px; font-variant-numeric:tabular-nums;}
   #cmpwfsvg text.dv{fill:var(--ink); font-weight:600;}
   #cmpwfsvg g.wd{cursor:pointer;} #cmpwfsvg g.wd:hover rect.b{filter:brightness(1.25);}
@@ -2886,6 +2891,7 @@ const CMP_MODES=[['trailing','T12M'],['ytd','YTD'],['year','Year'],['month','Mon
 let cmp=null, cmpOptData=null, cmpSig=null, cmpData=null, cmpSort=true;
 let cmpOpen=new Set(), cmpDetOpen=new Set();   // open group keys / labels whose details are open
 let cmpWf={g:null, l:null};                     // waterfall drill path: group key, then label key
+let cmpWfTop='sav';                             // waterfall top level: 'sav' Savings, 'exp' Expenses, 'inc' Income
 /* pure: waterfall steps from a start to an end value. items {key, name, d, good, drill};
    zero steps dropped, sorted by |d| when bySize, anything past `cap` folded into one
    "Other" step, and a residual step added when the steps do not add up to end - start
@@ -2996,7 +3002,7 @@ function renderCompare(){
   if(DATA!==cmpOptData) cmpInit();
   const perMonth=monthlyEl.checked;
   const sig=[cmp.modeA,cmp.a,cmp.modeB,cmp.b,perMonth,showK,cmpSort,[...deselected].sort().join(','),
-             [...cmpOpen].sort().join(','),[...cmpDetOpen].sort().join(','),cmpWf.g,cmpWf.l,
+             [...cmpOpen].sort().join(','),[...cmpDetOpen].sort().join(','),cmpWf.g,cmpWf.l,cmpWfTop,
              Math.round(wrap.clientWidth)].join('#');
   if(sig===cmpSig && DATA===cmpData) return;
   cmpSig=sig; cmpData=DATA;
@@ -3065,8 +3071,9 @@ function renderCompare(){
   const gSel=cmpWf.g ? groups.find(g=>g.key===cmpWf.g && !g.excl) : null;
   const lSel=gSel && cmpWf.l ? gSel.leaves.find(l=>l.key===cmpWf.l && !l.excl && l.details.length>1) : null;
   if(!gSel) cmpWf={g:null, l:null}; else if(!lSel) cmpWf.l=null;
-  const WCAP=12;
-  let wf, crumbs=[['top','Savings']];
+  const WCAP=12, TOPN={sav:'Savings', exp:'Expenses', inc:'Income'};
+  if(gSel && cmpWfTop!=='sav' && (gSel.kind==='I')!==(cmpWfTop==='inc')) cmpWfTop='sav';   // keep the group reachable
+  let wf, crumbs=[['top',TOPN[cmpWfTop]]];
   if(lSel){
     const items=order(lSel.details.slice(), x=>x.key).map(x=>({key:x.key, name:x.name, d:x.a-x.b, good:-1, drill:null}));
     wf=wfSteps(lSel.b, lSel.a, items, cmpSort, WCAP, zero);
@@ -3077,6 +3084,12 @@ function renderCompare(){
       drill: l.details.length>1 ? 'l' : null}));
     wf=wfSteps(gSel.b, gSel.a, items, cmpSort, WCAP, zero);
     crumbs.push(['',gSel.name]);
+  } else if(cmpWfTop!=='sav'){
+    /* Expenses / Income view: total B -> one step per group of that kind -> total A */
+    const isI=cmpWfTop==='inc', good=isI?1:-1;
+    const items=groups.filter(g=>!g.excl && (g.kind==='I')===isI).map(g=>({key:g.key, name:g.name, d:g.a-g.b, good, drill:'g'}));
+    wf=isI ? wfSteps(tb.inc, ta.inc, items, cmpSort, WCAP, zero) : wfSteps(tb.exp, ta.exp, items, cmpSort, WCAP, zero);
+    crumbs[0]=['',TOPN[cmpWfTop]];
   } else {
     const items=groups.filter(g=>!g.excl).map(g=>({key:g.key, name:g.name, d:(g.a-g.b)*(g.kind==='I'?1:-1), good:1,
       drill:'g', spend:g.kind!=='I', ga:g.a, gb:g.b}));
@@ -3084,8 +3097,11 @@ function renderCompare(){
     crumbs[0]=['','Savings'];
   }
   const wfHtml=(()=>{
-    const W=Math.max(280, Math.round(wrap.clientWidth)-24), n=wf.steps.length+2;
-    const rot=(W-16)/n<56, L=rot?44:8, R=8, T=20, slot=(W-L-R)/n, B=rot?64:34, H=200+B, bw=Math.max(6, slot*0.62);
+    /* every bar keeps a readable slot (>= 46px) so its value label always shows; when that
+       does not fit the card the chart scrolls sideways instead of hiding values */
+    const n=wf.steps.length+2, avail=Math.max(280, Math.round(wrap.clientWidth)-24);
+    const rot=(avail-16)/n<56, L=rot?44:8, R=8, W=Math.max(avail, Math.ceil(L+R+n*46));
+    const T=20, slot=(W-L-R)/n, B=rot?64:34, H=200+B, bw=Math.max(6, slot*0.62);
     let run=wf.start; const lv=[0, wf.start];
     wf.steps.forEach(s=>{ run+=s.d; lv.push(run); }); lv.push(wf.end);
     const lo=Math.min(...lv), hi=Math.max(...lv), span=(hi-lo)||1, ph=H-T-B;
@@ -3120,9 +3136,12 @@ function renderCompare(){
     const crumb=crumbs.map(([k,t],i)=> i===crumbs.length-1 ? `<b>${esc(t)}</b>`
       : `<button type="button" data-wfup="${k}">${esc(t)}</button><span>\u203A</span>`).join('');
     const hint=wf.steps.some(s=>s.drill) ? 'Tap a bar to drill down' : '';
-    return `<div class="cmpwf"><div class="wfcrumb">${crumb}<span class="wfhint">${hint}</span></div>`+
+    const view=`<span class="wfview" role="group" aria-label="Waterfall of">`+
+      ['sav','inc','exp'].map(k=>`<button type="button" data-wftop="${k}" aria-pressed="${cmpWfTop===k && !gSel}"`+
+        `${cmpWfTop===k && !gSel?' class="on"':''}>${TOPN[k]}</button>`).join('')+`</span>`;
+    return `<div class="cmpwf"><div class="wfcrumb">${view}${crumb}<span class="wfhint">${hint}</span></div>`+
       (wf.steps.length ? '' : `<div class="wfcrumb">No change between the two periods.</div>`)+
-      `<svg id="cmpwfsvg" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Waterfall from ${esc(sB)} to ${esc(sA)}">${out}</svg></div>`;
+      `<div class="wfscroll"><svg id="cmpwfsvg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Waterfall from ${esc(sB)} to ${esc(sA)}">${out}</svg></div></div>`;
   })();
   wrap.innerHTML=`<div class="nwtools">`+
     (deselected.size ? `<span class="cmpexcl">${deselected.size} excluded</span>` : '')+
@@ -3149,6 +3168,8 @@ function renderCompare(){
   wrap.querySelectorAll('button[data-wfup]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation();
     if(b.getAttribute('data-wfup')==='top') cmpWf={g:null, l:null}; else cmpWf.l=null;
     renderCompare(); }));
+  wrap.querySelectorAll('button[data-wftop]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation();
+    cmpWfTop=b.getAttribute('data-wftop'); cmpWf={g:null, l:null}; renderCompare(); }));
   wrap.querySelectorAll('button[data-cmpall]').forEach(b=>b.addEventListener('click',e=>{ e.stopPropagation();
     if(b.getAttribute('data-cmpall')==='open') cmpOpen=new Set(groups.map(g=>g.key));
     else { cmpOpen=new Set(); cmpDetOpen=new Set(); }

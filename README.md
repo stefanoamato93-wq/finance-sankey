@@ -245,7 +245,14 @@ A diverging change chart in table form, the **Compare** page, with a waterfall o
     Avg/m, K and exclusions (excluded entries are left out, like the totals). Zero
     steps are hidden; past 12 steps the rest fold into `Other (n)`; if DETAIL does not
     add up to its label, an `Unsplit` step closes the gap.
-  - Narrow screens: labels slant, values shorten to `96,7K`.
+  - **View switch (24 Oct 2026):** `Savings | Income | Expenses` pills left of the
+    breadcrumb (`cmpWfTop`). Expenses = total expenses B -> one step per expense group
+    (spend up = red step up) -> total expenses A; Income likewise with income groups.
+    Drilling works the same from any view; the breadcrumb root names the view.
+  - **Values always shown:** each bar keeps a slot of at least 46px; when the bars do not
+    fit, the chart scrolls sideways (`.wfscroll`) instead of shrinking or hiding values.
+    `#cmpwfsvg` sets `width:auto` to beat the global `svg{width:100%}`.
+  - Narrow slots: labels slant, values shorten to `96,7K`.
   - Code: pure `wfSteps(start, end, items, bySize, cap, isZero)`, state `cmpWf = {g, l}`,
     built inside `renderCompare()` (`wfHtml`, `#cmpwfsvg`); width is in the signature and
     the resize handler calls `renderCompare()`. Check: `_verify_wf.py [html] [shot]`
