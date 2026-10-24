@@ -16,7 +16,7 @@ pages. Only the page on screen is shown **and drawn**:
 | **Net Worth** | `#networth` | Hero card (net worth, `LIVE HH:MM`, trend sparkline, investment gains) + **Assets & Liabilities** tables (side by side on wide screens, stacked on phones, totals on top, collapsed by category). |
 | **Cash Flow** | `#cashflow` | Period controls, range bar, Income / Expenses / Savings / Safe savings cards, the money-flow **Sankey** and its detail panel. |
 | **Savings** | `#savings` | **Cash Flow vs Savings** chart (see below); clicking a month in its month view opens the **Month detail** overlay. |
-| **Compare** | `#compare` | **Period Comparison** (see below). |
+| **Compare** | `#compare` | **Period Comparison** with a drill-down **waterfall** of the changes (see below). |
 | **Years Paid** | `#life` | **Years of Life Paid** (see below). |
 | **Query** | `#query` | **Query** of past transactions, modelled on the sheet's QUERY tab (see below). |
 
@@ -195,7 +195,7 @@ A monthly line chart, the **Years Paid** page. Added 9 Oct 2026.
   side of zero as the years line, expenses peak at half height, no red anywhere).
 
 ### Period Comparison (A vs B, what went up and down)
-A diverging change chart in table form, the **Compare** page. Added Oct 2026.
+A diverging change chart in table form, the **Compare** page, with a waterfall on top. Added Oct 2026.
 - **Two periods**, each picked with a type + anchor select in the section header
   (`#cmpModeA` / `#cmpA` vs `#cmpModeB` / `#cmpB`):
   `T12M` = 12 months ending on the anchor month, `YTD` = January to the anchor month,
@@ -232,6 +232,25 @@ A diverging change chart in table form, the **Compare** page. Added Oct 2026.
   from every `build()` but only redraws when its inputs change (signature check), so
   dragging the range bar does not rebuild it.
 - Reconciled 5 Oct 2026: A = 101.468 income / 52.960 expenses, equal to the T12M cards.
+- **Waterfall (added 24 Oct 2026):** above the table, a waterfall shows how period B
+  became period A. Top level: **Savings B** (blue) -> one floating step per Sankey group,
+  sized by its **effect on savings** (income up or spend down = step up, green; the
+  opposite = step down, red) -> **Savings A** (blue). Dashed lines join the steps.
+  - **Drill down:** tap a group step (blue label) for its labels (group B -> label
+    changes -> group A, green / red = good / bad for savings as in the table); tap a
+    label that has DETAIL sub-categories for those. A breadcrumb (`SAVINGS › WANTS ›
+    HOLIDAYS`) goes back up. Drilling also opens the same rows in the table. Keyboard:
+    steps are focusable, Enter / Space drills. Hover shows `A vs B -> effect`.
+  - Follows the period picks, `By Δ` (on: steps by size of change; off: Sankey order),
+    Avg/m, K and exclusions (excluded entries are left out, like the totals). Zero
+    steps are hidden; past 12 steps the rest fold into `Other (n)`; if DETAIL does not
+    add up to its label, an `Unsplit` step closes the gap.
+  - Narrow screens: labels slant, values shorten to `96,7K`.
+  - Code: pure `wfSteps(start, end, items, bySize, cap, isZero)`, state `cmpWf = {g, l}`,
+    built inside `renderCompare()` (`wfHtml`, `#cmpwfsvg`); width is in the signature and
+    the resize handler calls `renderCompare()`. Check: `_verify_wf.py [html] [shot]`
+    (untracked; start + steps = end at every level, ends equal the table, drill + crumbs,
+    Avg/m, K, range bar has no effect).
 
 ### Cash Flow vs Savings (yearly bars + savings-rate lines)
 One column per calendar year, **actuals only**: first year of data up to the
